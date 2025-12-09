@@ -1,0 +1,42 @@
+spring:
+  application:
+    name: backend
+
+  profiles:
+    active: dev
+  
+  session:
+    cookie:
+      sameSite: none
+      secure: false
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/mealgen
+    username: meal_user
+    password: 236810
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: "446392270628-r2vjchlfn4u43aphqg3veke1ktvbe7q7.apps.googleusercontent.com"
+            client-secret: "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"
+            scope:
+              - openid
+              - profile
+              - email
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+        provider:
+          google:
+            issuer-uri: https://accounts.google.com
+
+server:
+  port: 8080
+
