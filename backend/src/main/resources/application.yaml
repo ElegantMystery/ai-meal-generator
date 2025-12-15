@@ -18,8 +18,18 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none  # Flyway handles all schema management. Use 'validate' if you want Hibernate to check schema matches entities.
     show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true  # Creates baseline if schema history table doesn't exist
+    validate-on-migrate: true  # Validates migrations before applying
 
   security:
     oauth2:
