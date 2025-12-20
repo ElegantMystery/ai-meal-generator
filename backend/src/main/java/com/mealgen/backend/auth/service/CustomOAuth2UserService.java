@@ -12,8 +12,6 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Map;
-
 @Service
 @RequiredArgsConstructor
 public class CustomOAuth2UserService extends OidcUserService {
@@ -29,7 +27,6 @@ public class CustomOAuth2UserService extends OidcUserService {
             OidcUser oidcUser = super.loadUser(userRequest);
 
             String registrationId = userRequest.getClientRegistration().getRegistrationId(); // "google"
-            Map<String, Object> attributes = oidcUser.getAttributes();
 
             // Standard Google OIDC claims
             String sub = oidcUser.getSubject();
