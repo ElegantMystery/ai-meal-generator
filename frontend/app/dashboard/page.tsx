@@ -44,6 +44,7 @@ export default function DashboardPage() {
   const [loadingPlans, setLoadingPlans] = useState(true);
 
   const [creating, setCreating] = useState(false);
+  const [creatingAi, setCreatingAi] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [store, setStore] = useState<StoreOption>("TRADER_JOES");
@@ -104,6 +105,25 @@ export default function DashboardPage() {
       setCreating(false);
     }
   };
+
+  const generateMealPlanAi = async () => {
+    setCreatingAi(true);
+    setError(null);
+  
+    try {
+      const res = await api.post<MealPlan>("/api/mealplans/generate-ai", null, {
+        params: { store, days },
+      });
+  
+      setMealplans((prev) => [res.data, ...prev]);
+    } catch (err) {
+      console.error("Failed to generate AI meal plan:", err);
+      setError("Failed to generate AI meal plan.");
+    } finally {
+      setCreatingAi(false);
+    }
+  };
+  
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -192,13 +212,23 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <button
-              onClick={generateMealPlan}
-              disabled={creating}
-              className="mt-4 w-full inline-flex justify-center items-center px-4 py-2 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
-            >
-              {creating ? "Creating..." : "Generate Meal Plan"}
-            </button>
+            <div className="mt-4 grid grid-cols-1 gap-2">
+              <button
+                onClick={generateMealPlan}
+                disabled={creating || creatingAi}
+                className="w-full inline-flex justify-center items-center px-4 py-2 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                {creating ? "Generating..." : "Generate (Rule-based)"}
+              </button>
+
+              <button
+                onClick={generateMealPlanAi}
+                disabled={creatingAi || creating}
+                className="w-full inline-flex justify-center items-center px-4 py-2 rounded-md text-sm font-medium text-white bg-black hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                {creatingAi ? "Generating AI..." : "Generate (AI RAG)"}
+              </button>
+            </div>
 
             <p className="mt-3 text-xs text-gray-500">
               Next: replace this with a real “Generate” endpoint using Trader Joe’s items + preferences.
