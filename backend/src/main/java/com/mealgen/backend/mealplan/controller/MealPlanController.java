@@ -62,6 +62,16 @@ public class MealPlanController {
         return mealPlanGenerateService.generate(getEmail(principal), store, days);
     }
 
+    @PostMapping("/generate-ai")
+    public MealPlanResponse generateAi(
+            @AuthenticationPrincipal OAuth2User principal,
+            @RequestParam(defaultValue = "TRADER_JOES") String store,
+            @RequestParam(defaultValue = "7") int days
+    ) {
+        return mealPlanService.generateAi(getEmail(principal), store, days);
+    }
+
+
     private String getEmail(OAuth2User principal) {
         if (principal == null) throw new IllegalStateException("Not authenticated");
         Object email = principal.getAttributes().get("email");
