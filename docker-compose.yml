@@ -1,0 +1,73 @@
+services:
+  mealgen-db:
+    image: pgvector/pgvector:pg18
+    container_name: postgres-mealgen
+    environment:
+      POSTGRES_DB: mealgen
+      POSTGRES_USER: meal_user
+      POSTGRES_PASSWORD: 236810
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-mealgen-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meal_user -d mealgen"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  python-rag:
+    build:
+      context: ./rag
+    container_name: python-rag
+    environment:
+      # Use service name "mealgen-db" for networking inside compose
+      DATABASE_URL: postgresql://meal_user:236810@mealgen-db:5432/mealgen
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      RAG_SHARED_SECRET: dev-secret
+    ports:
+      - "8000:8000"
+    depends_on:
+      mealgen-db:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ./backend
+    container_name: mealgen-backend
+    environment:
+      # Your Spring datasource (adjust if your app expects different env var names)
+      SPRING_DATASOURCE_URL: jdbc:postgresql://mealgen-db:5432/mealgen
+      SPRING_DATASOURCE_USERNAME: meal_user
+      SPRING_DATASOURCE_PASSWORD: 236810
+
+      # Spring calling python-rag internally
+      MEALGEN_RAG_BASEURL: http://python-rag:8000
+      MEALGEN_RAG_SECRET: dev-secret
+
+      # If you use Google OAuth in backend, you'll likely need these too:
+      # SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      # SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+    ports:
+      - "8080:8080"
+    depends_on:
+      mealgen-db:
+        condition: service_healthy
+      python-rag:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: mealgen-frontend
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_started
+
+
+volumes:
+  postgres-mealgen-data:
