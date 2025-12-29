@@ -2,8 +2,10 @@ package com.mealgen.backend.mealplan.controller;
 
 import com.mealgen.backend.mealplan.dto.MealPlanCreateRequest;
 import com.mealgen.backend.mealplan.dto.MealPlanResponse;
+import com.mealgen.backend.mealplan.dto.ShoppingListResponse;
 import com.mealgen.backend.mealplan.service.MealPlanGenerateService;
 import com.mealgen.backend.mealplan.service.MealPlanService;
+import com.mealgen.backend.mealplan.service.ShoppingListService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -19,6 +21,7 @@ public class MealPlanController {
 
     private final MealPlanService mealPlanService;
     private final MealPlanGenerateService mealPlanGenerateService;
+    private final ShoppingListService shoppingListService;
 
     @GetMapping
     public List<MealPlanResponse> listMine(@AuthenticationPrincipal OAuth2User principal) {
@@ -69,6 +72,14 @@ public class MealPlanController {
             @RequestParam(defaultValue = "7") int days
     ) {
         return mealPlanService.generateAi(getEmail(principal), store, days);
+    }
+
+    @GetMapping("/{id}/shopping-list")
+    public ShoppingListResponse shoppingList(
+            @AuthenticationPrincipal OAuth2User principal,
+            @PathVariable("id") Long id
+    ) {
+        return shoppingListService.getShoppingList(getEmail(principal), id);
     }
 
 

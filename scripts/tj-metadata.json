@@ -1,11 +1,11 @@
 {
-  "totalProducts": 1200,
+  "totalProducts": 1282,
   "endReason": "load_more_disabled",
-  "scrollIterations": 89,
-  "loadMoreClickedCount": 88,
+  "scrollIterations": 86,
+  "loadMoreClickedCount": 85,
   "noNewProductsCount": 0,
   "startUrl": "https://www.traderjoes.com/home/products/category/food-8",
-  "timestamp": "2025-12-12T06:14:47.785Z",
-  "networkRequests": 2777,
-  "jsonResponses": 99
+  "timestamp": "2025-12-27T08:53:08.643Z",
+  "networkRequests": 2765,
+  "jsonResponses": 96
 }
