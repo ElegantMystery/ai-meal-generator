@@ -8,4 +8,7 @@ import java.util.List;
 public interface ItemRepository extends JpaRepository<Item, Long> {
 
     List<Item> findByStoreIgnoreCase(String store);
+
+    List<Item> findByIdIn(List<Long> ids);
 }
+

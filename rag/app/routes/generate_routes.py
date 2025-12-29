@@ -55,6 +55,11 @@ def generate(req: GenerateRequest, x_rag_secret: Optional[str] = Header(default=
         "items": candidates
     }
 
+    # Log OpenAI API input
+    logger.info("OpenAI API input - System: %s", system)
+    logger.info("OpenAI API input - Payload: %s", json.dumps(payload, indent=2, ensure_ascii=False))
+    logger.info("OpenAI API input - Number of candidates: %d", len(candidates))
+
     content = call_mealplan_llm(system, payload, temperature=0.4)
     if not content:
         raise HTTPException(status_code=500, detail="LLM returned empty response")
