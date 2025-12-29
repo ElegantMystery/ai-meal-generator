@@ -103,11 +103,156 @@ function extractProductsFromGraphqlPayload(payload) {
         price: price == null ? null : Number(price),
         weight: weight == null ? null : String(weight),
         categories,
+        nutrition: null, // will be populated later from product detail page
+        ingredients: null, // will be populated later from product detail page
         raw: node, // keep raw for debugging/mapping later
       });
     }
   });
   return products;
+}
+
+// Function to extract nutrition and ingredients from product detail page HTML/JSON
+async function extractNutritionAndIngredients(page) {
+  try {
+    // Wait for page to load
+    await page.waitForTimeout(3000);
+    
+    // Extract from embedded JSON data in script tags and DOM
+    const domData = await page.evaluate(() => {
+      // Look for nutrition facts in script tags with JSON data
+      const scripts = Array.from(document.querySelectorAll('script[type="application/json"], script'));
+      let nutritionFromScripts = null;
+      let ingredientsFromScripts = null;
+      
+      for (const script of scripts) {
+        try {
+          const data = JSON.parse(script.textContent || '{}');
+          
+          // Recursively search for nutrition data
+          function findInObject(obj, keys, depth = 0) {
+            if (depth > 15) return null;
+            if (!obj || typeof obj !== 'object') return null;
+            
+            for (const key of keys) {
+              if (obj[key]) {
+                return obj[key];
+              }
+            }
+            
+            // Recursively search
+            for (const value of Object.values(obj)) {
+              if (typeof value === 'object' && value !== null) {
+                const result = findInObject(value, keys, depth + 1);
+                if (result) return result;
+              }
+            }
+            return null;
+          }
+          
+          const nutritionKeys = ['nutritionFacts', 'nutrition', 'nutritionalInfo', 'nutritionFactsText', 'nutritionData'];
+          const ingredientsKeys = ['ingredients', 'ingredientList', 'ingredientsText', 'ingredient'];
+          
+          if (!nutritionFromScripts) {
+            const foundNutrition = findInObject(data, nutritionKeys);
+            if (foundNutrition) {
+              nutritionFromScripts = typeof foundNutrition === 'string' 
+                ? foundNutrition 
+                : JSON.stringify(foundNutrition);
+            }
+          }
+          
+          if (!ingredientsFromScripts) {
+            const foundIngredients = findInObject(data, ingredientsKeys);
+            if (foundIngredients) {
+              ingredientsFromScripts = typeof foundIngredients === 'string' 
+                ? foundIngredients 
+                : JSON.stringify(foundIngredients);
+            }
+          }
+        } catch (e) {
+          // Not valid JSON, continue
+        }
+      }
+      
+      // Try to extract from DOM elements
+      // Nutrition selectors
+      const nutritionSection = document.querySelector('[class*="nutrition"], [id*="nutrition"], [data-nutrition], .nutrition-facts, [class*="NutritionFacts"]');
+      
+      // Ingredients selectors - Trader Joe's specific structure
+      // Structure: <div class="IngredientsSummary_ingredientsSummary__..."><ul class="IngredientsList_ingredientsList__..."><li class="IngredientsList_ingredientsList__item__...">...</li></ul></div>
+      // Use partial class matching since class names have hash suffixes (e.g., __1WMGh)
+      let ingredientsSection = document.querySelector('[class*="IngredientsSummary"], [class*="ingredientsSummary"]');
+      
+      // Fallback to other ingredient selectors
+      if (!ingredientsSection) {
+        ingredientsSection = document.querySelector('[class*="ingredient"], [id*="ingredient"], [data-ingredient], .ingredients, [class*="Ingredients"]');
+      }
+      
+      let nutrition = nutritionFromScripts;
+      let ingredients = ingredientsFromScripts;
+      
+      if (nutritionSection && !nutrition) {
+        const nutritionText = nutritionSection.textContent || nutritionSection.innerText;
+        nutrition = nutritionText.trim();
+      }
+      
+      // Extract ingredients from Trader Joe's specific structure
+      if (ingredientsSection && !ingredients) {
+        // Try to get the ul list directly (class contains "IngredientsList" or "ingredientsList")
+        const ingredientsList = ingredientsSection.querySelector('ul[class*="IngredientsList"], ul[class*="ingredientsList"]');
+        
+        if (ingredientsList) {
+          // Get all li items (class contains "item" or just any li in the list)
+          const items = Array.from(ingredientsList.querySelectorAll('li[class*="item"], li'));
+          if (items.length > 0) {
+            // Join all list items with commas
+            ingredients = items.map(li => li.textContent.trim()).filter(text => text.length > 0).join(', ');
+          }
+        }
+        
+        // If we didn't get ingredients from the list, try getting all text from the section
+        if (!ingredients) {
+          const ingredientsText = ingredientsSection.textContent || ingredientsSection.innerText;
+          // Clean up the text - remove "Ingredients" label if present
+          ingredients = ingredientsText.replace(/^ingredients?\s*:?\s*/i, '').trim();
+        }
+      }
+      
+      // Try to find ingredients in common patterns in page text (fallback)
+      if (!ingredients) {
+        const ingredientsPatterns = [
+          /ingredients?:[\s\S]{0,200}?([A-Z][^.!?]{20,500})/i,
+          /contains:[\s\S]{0,200}?([A-Z][^.!?]{20,500})/i,
+        ];
+        
+        const pageText = document.body.innerText || document.body.textContent || '';
+        for (const pattern of ingredientsPatterns) {
+          const match = pageText.match(pattern);
+          if (match && match[1]) {
+            ingredients = match[1].trim().split(/\n|\./)[0].substring(0, 2000);
+            break;
+          }
+        }
+      }
+      
+      // Try to find nutrition facts table
+      if (!nutrition) {
+        const nutritionTable = document.querySelector('table[class*="nutrition"], .nutrition-facts, [id*="nutrition"], table.nutrition');
+        if (nutritionTable) {
+          nutrition = nutritionTable.innerText || nutritionTable.textContent || '';
+        }
+      }
+      
+      return { nutrition: nutrition || null, ingredients: ingredients || null };
+    });
+    
+    return domData;
+    
+  } catch (err) {
+    console.error('Error extracting nutrition/ingredients from page:', err.message);
+    return { nutrition: null, ingredients: null };
+  }
 }
 
 (async () => {
@@ -434,9 +579,118 @@ function extractProductsFromGraphqlPayload(payload) {
   const finalCount = bySku.size;
   console.log(`\n✅ Finished pagination. Total products captured: ${finalCount}`);
 
+  // Now scrape nutrition data and ingredients from product detail pages
+  console.log("\n=== Scraping nutrition data and ingredients from product detail pages ===");
+  const itemsArray = [...bySku.values()];
+  let nutritionScrapedCount = 0;
+  let nutritionSuccessCount = 0;
+  
+  // Create a new page for product detail scraping to avoid interfering with main page
+  const detailPage = await context.newPage();
+  
+  for (let i = 0; i < itemsArray.length; i++) {
+    const item = itemsArray[i];
+    
+    // Skip if already has nutrition data
+    if (item.nutrition !== null || item.ingredients !== null) {
+      continue;
+    }
+    
+    nutritionScrapedCount++;
+    
+    try {
+      // Try to find product URL from raw data
+      let productUrl = null;
+      const raw = item.raw || {};
+      
+      // Check for common URL patterns in raw data
+      if (raw.url) {
+        productUrl = raw.url.startsWith('http') ? raw.url : `https://www.traderjoes.com${raw.url}`;
+      } else if (raw.slug) {
+        // If slug already includes SKU, use it directly; otherwise append SKU
+        productUrl = raw.slug.includes(item.sku) 
+          ? `https://www.traderjoes.com/home/products/pdp/${raw.slug}`
+          : `https://www.traderjoes.com/home/products/pdp/${raw.slug}-${item.sku}`;
+      } else if (raw.item_url) {
+        productUrl = raw.item_url.startsWith('http') ? raw.item_url : `https://www.traderjoes.com${raw.item_url}`;
+      } else {
+        // Construct URL from product name (slugified) + SKU
+        // Pattern: https://www.traderjoes.com/home/products/pdp/{slugified-name}-{sku}
+        // Example: "Shredded Swiss Cheese & Gruyère Cheese" -> "shredded-swiss-cheese-gruyere-cheese-093847"
+        const slug = item.name
+          .toLowerCase()
+          .normalize('NFD')  // Decompose accented characters (è -> e + ̀)
+          .replace(/[\u0300-\u036f]/g, '')  // Remove accent marks
+          .replace(/[&]/g, '')  // Remove ampersands
+          .replace(/[^a-z0-9\s]+/g, '')  // Remove other special chars except spaces
+          .trim()
+          .replace(/\s+/g, '-')  // Replace spaces with hyphens
+          .replace(/^-+|-+$/g, '');  // Remove leading/trailing hyphens
+        productUrl = `https://www.traderjoes.com/home/products/pdp/${slug}-${item.sku}`;
+      }
+      
+      if (!productUrl) {
+        console.log(`⚠️  Skipping ${item.sku} (${item.name}): No product URL found`);
+        continue;
+      }
+      
+      if (i % 10 === 0) {
+        console.log(`Progress: ${i + 1}/${itemsArray.length} products processed...`);
+      }
+      
+      // Navigate to product detail page
+      try {
+        await detailPage.goto(productUrl, { 
+          waitUntil: "domcontentloaded", 
+          timeout: 15000 
+        });
+        
+        // Extract nutrition and ingredients
+        const { nutrition, ingredients } = await extractNutritionAndIngredients(detailPage);
+        
+        if (nutrition || ingredients) {
+          // Update the item in the map
+          item.nutrition = nutrition;
+          item.ingredients = ingredients;
+          bySku.set(item.sku, item);
+          nutritionSuccessCount++;
+          
+          if (nutrition || ingredients) {
+            console.log(`✓ ${item.sku}: ${nutrition ? 'nutrition' : ''} ${ingredients ? 'ingredients' : ''} found`);
+          }
+        }
+        
+        // Random delay to avoid rate limiting
+        await detailPage.waitForTimeout(1000 + Math.random() * 1000);
+        
+      } catch (navErr) {
+        // Page might not exist or URL format might be wrong, continue
+        if (navErr.message.includes('404') || navErr.message.includes('net::ERR')) {
+          // Skip silently for 404s
+        } else {
+          console.log(`⚠️  Error navigating to ${item.sku}: ${navErr.message}`);
+        }
+      }
+      
+    } catch (err) {
+      console.error(`Error processing ${item.sku}:`, err.message);
+    }
+    
+    // Save progress every 50 products
+    if (nutritionScrapedCount % 50 === 0) {
+      saveItems(null, bySku);
+      console.log(`💾 Progress saved: ${nutritionSuccessCount}/${nutritionScrapedCount} products with nutrition data`);
+    }
+  }
+  
+  await detailPage.close();
+  
+  console.log(`\n✅ Finished nutrition scraping: ${nutritionSuccessCount}/${nutritionScrapedCount} products processed successfully`);
+
   const items = [...bySku.values()];
   console.log("\n=== Summary ===");
   console.log("Captured items:", items.length);
+  console.log("Products with nutrition data:", items.filter(i => i.nutrition || i.ingredients).length);
   console.log("Total network requests logged:", allRequests.length);
   console.log("Scroll iterations:", scrollIterations);
   console.log("Load More button clicked:", loadMoreClickedCount, "times");
