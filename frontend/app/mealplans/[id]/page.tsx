@@ -37,6 +37,44 @@ type ShoppingListResponse = {
   sugarPerDay?: number | null;
 };
 
+type PlanItem = { id: number; name: string };
+type PlanMeal = { name: string; items: PlanItem[] };
+type PlanDay = { date: string; meals: PlanMeal[] };
+type PlanDoc = {
+  title?: string;
+  startDate?: string;
+  endDate?: string;
+  plan: PlanDay[];
+};
+
+function safeParsePlanJson(planJson: string | null): { doc: PlanDoc | null; error?: string } {
+  if (!planJson) return { doc: null };
+  try {
+    const parsed = JSON.parse(planJson);
+    if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.plan)) {
+      return { doc: null, error: "Plan JSON has unexpected shape." };
+    }
+    return { doc: parsed as PlanDoc };
+  } catch {
+    return { doc: null, error: "Plan JSON is not valid JSON." };
+  }
+}
+
+function formatDayLabel(dateStr: string) {
+  // dateStr is like "2025-12-25"
+  const d = new Date(dateStr + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
+function normalizeMealName(name: string) {
+  const n = (name || "").toLowerCase();
+  if (n.includes("break")) return "Breakfast";
+  if (n.includes("lunch")) return "Lunch";
+  if (n.includes("dinner")) return "Dinner";
+  return name || "Meal";
+}
+
 
 function formatDateRange(start: string | null, end: string | null) {
   if (!start && !end) return "No date range";
@@ -61,6 +99,7 @@ export default function MealPlanDetailPage() {
   const [shopping, setShopping] = useState<ShoppingListResponse | null>(null);
   const [shoppingLoading, setShoppingLoading] = useState(false);
   const [shoppingError, setShoppingError] = useState<string | null>(null);
+  const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
 
   const id = params?.id;
 
@@ -111,6 +150,11 @@ export default function MealPlanDetailPage() {
     if (id) fetchShopping();
   }, [id]);
 
+  const findShoppingItem = (itemId: number) => {
+    return shopping?.items?.find((x) => x.id === itemId) ?? null;
+  };
+  
+
   const copyShoppingList = async () => {
     if (!shopping) return;
     const lines = shopping.items.map((it) => {
@@ -147,15 +191,17 @@ export default function MealPlanDetailPage() {
     }
   };
 
-  const prettyPlanJson = useMemo(() => {
-    if (!plan?.planJson) return null;
-    try {
-      const parsed = JSON.parse(plan.planJson);
-      return JSON.stringify(parsed, null, 2);
-    } catch {
-      return plan.planJson; // not valid JSON, display raw
-    }
+  const { doc: planDoc, error: planDocError } = useMemo(() => {
+    return safeParsePlanJson(plan?.planJson ?? null);
   }, [plan?.planJson]);
+
+  useEffect(() => {
+    // Default expand first 2 days
+    if (!planDoc?.plan) return;
+    const init: Record<string, boolean> = {};
+    planDoc.plan.forEach((d, idx) => (init[d.date] = idx < 2));
+    setExpandedDays(init);
+  }, [planDoc?.plan]);
 
   const handlePrint = () => {
     window.print();
@@ -378,16 +424,129 @@ export default function MealPlanDetailPage() {
           )}
         </section>
 
-        <section className="bg-white rounded-xl shadow-sm border p-6">
-          <h2 className="text-lg font-medium text-gray-900">Plan JSON</h2>
-          <p className="text-sm text-gray-600 mt-1">
-            MVP view (raw JSON). We’ll render this into a calendar/grid next.
-          </p>
+        <section className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-medium text-gray-900">Meal Plan</h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Click a day to expand meals. (JSON view removed from UI.)
+              </p>
+            </div>
 
-          <pre className="mt-4 whitespace-pre-wrap break-words rounded-md bg-gray-50 border p-4 text-xs text-gray-800 overflow-auto">
-            {prettyPlanJson ?? "(No plan data)"}
-          </pre>
+            {planDoc?.plan?.length ? (
+              <div className="flex items-center gap-2">
+                <button
+                  className="px-3 py-2 text-sm rounded-md border bg-white hover:bg-gray-50"
+                  onClick={() => {
+                    const all: Record<string, boolean> = {};
+                    planDoc.plan.forEach((d) => (all[d.date] = true));
+                    setExpandedDays(all);
+                  }}
+                >
+                  Expand all
+                </button>
+                <button
+                  className="px-3 py-2 text-sm rounded-md border bg-white hover:bg-gray-50"
+                  onClick={() => {
+                    const none: Record<string, boolean> = {};
+                    planDoc.plan.forEach((d) => (none[d.date] = false));
+                    setExpandedDays(none);
+                  }}
+                >
+                  Collapse all
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          {planDocError && (
+            <div className="rounded-md border bg-red-50 p-3 text-sm text-red-700">
+              {planDocError}
+            </div>
+          )}
+
+          {!planDoc?.plan?.length ? (
+            <div className="rounded-md border bg-gray-50 p-4 text-sm text-gray-700">
+              No plan data available.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {planDoc.plan.map((day) => {
+                const isOpen = !!expandedDays[day.date];
+
+                // Group meals in a stable order: Breakfast, Lunch, Dinner, then anything else
+                const meals = [...(day.meals ?? [])].map((m) => ({
+                  ...m,
+                  name: normalizeMealName(m.name),
+                }));
+                const mealOrder = ["Breakfast", "Lunch", "Dinner"];
+                meals.sort((a, b) => {
+                  const ai = mealOrder.indexOf(a.name);
+                  const bi = mealOrder.indexOf(b.name);
+                  if (ai === -1 && bi === -1) return a.name.localeCompare(b.name);
+                  if (ai === -1) return 1;
+                  if (bi === -1) return -1;
+                  return ai - bi;
+                });
+
+                return (
+                  <div key={day.date} className="rounded-xl border overflow-hidden">
+                    <button
+                      className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-gray-50 transition"
+                      onClick={() =>
+                        setExpandedDays((prev) => ({ ...prev, [day.date]: !prev[day.date] }))
+                      }
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="text-sm font-semibold text-gray-900">
+                          {formatDayLabel(day.date)}
+                        </div>
+                        <div className="text-xs text-gray-500">{day.date}</div>
+                      </div>
+                      <div className="text-sm text-gray-600">{isOpen ? "▾" : "▸"}</div>
+                    </button>
+
+                    {isOpen && (
+                      <div className="bg-gray-50 px-4 py-4 space-y-4">
+                        {meals.map((meal, idx) => (
+                          <div key={`${day.date}-${meal.name}-${idx}`} className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <h3 className="text-sm font-semibold text-gray-900">{meal.name}</h3>
+                              <span className="text-xs text-gray-500">
+                                {meal.items?.length ?? 0} items
+                              </span>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              {(meal.items ?? []).map((it) => {
+                                const s = findShoppingItem(it.id);
+                                const price = s?.price;
+
+                                return (
+                                  <div
+                                    key={it.id}
+                                    className="inline-flex items-center gap-2 rounded-full border bg-white px-3 py-1.5 text-sm"
+                                    title={s?.unitSize ? `${s.unitSize}` : undefined}
+                                  >
+                                    <span className="font-medium text-gray-900">{it.name}</span>
+                                    {price != null && (
+                                      <span className="text-xs text-gray-500">${price.toFixed(2)}</span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
+
       </div>
     </main>
   );
