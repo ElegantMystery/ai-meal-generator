@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 class Preferences(BaseModel):
     dietaryRestrictions: Optional[str] = None
-    dislikedIngredients: Optional[str] = None
+    allergies: Optional[str] = None
     targetCaloriesPerDay: Optional[int] = None
 
 class GenerateRequest(BaseModel):
