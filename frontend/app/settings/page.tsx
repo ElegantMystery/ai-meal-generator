@@ -4,11 +4,12 @@ import { useAuthStore } from "@/lib/authStore";
 import { api } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import AllergyTagInput from "@/components/AllergyTagInput";
 
 
 type PreferencesDto = {
   dietaryRestrictions: string | null;
-  dislikedIngredients: string | null;
+  allergies: string | null;
   targetCaloriesPerDay: number | null;
 }
 
@@ -19,8 +20,8 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const [dietaryRestrictions, setDietaryRestrictions] = useState<string>("");
-  const [dislikedIngredients, setDislikedIngredients] = useState<string>("");
+  const [dietaryStyle, setDietaryStyle] = useState<string>("");
+  const [allergies, setAllergies] = useState<string[]>([]);
   const [targetCaloriesPerDay, setTargetCaloriesPerDay] = useState<string>("");
 
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -31,8 +32,12 @@ export default function SettingsPage() {
         const res = await api.get<PreferencesDto | null>("/api/preferences/me");
         const prefs = res.data;
 
-        setDietaryRestrictions(prefs?.dietaryRestrictions ?? "");
-        setDislikedIngredients(prefs?.dislikedIngredients ?? "");
+        setDietaryStyle(prefs?.dietaryRestrictions ?? "");
+        // Convert semicolon-separated string to array
+        const allergiesArray = prefs?.allergies
+          ? prefs.allergies.split(";").map((a) => a.trim()).filter((a) => a.length > 0)
+          : [];
+        setAllergies(allergiesArray);
         setTargetCaloriesPerDay(
           prefs?.targetCaloriesPerDay != null ? String(prefs.targetCaloriesPerDay) : ""
         );
@@ -55,9 +60,12 @@ export default function SettingsPage() {
     setMessage(null);
 
     // Normalize input
+    // Convert allergies array to semicolon-separated string
+    const allergiesString = allergies.length > 0 ? allergies.join(";") : null;
+    
     const payload: PreferencesDto = {
-      dietaryRestrictions: dietaryRestrictions.trim() ? dietaryRestrictions.trim() : null,
-      dislikedIngredients: dislikedIngredients.trim() ? dislikedIngredients.trim() : null,
+      dietaryRestrictions: dietaryStyle.trim() ? dietaryStyle.trim() : null,
+      allergies: allergiesString,
       targetCaloriesPerDay: targetCaloriesPerDay.trim()
         ? Number(targetCaloriesPerDay.trim())
         : null,
@@ -151,7 +159,7 @@ export default function SettingsPage() {
           <div>
             <h2 className="text-lg font-medium text-gray-800">Preferences</h2>
             <p className="text-sm text-gray-600">
-              Use semicolons or commas (e.g. <span className="font-medium">no pork; high-protein</span>).
+              Select your dietary style and add any allergies.
             </p>
           </div>
 
@@ -161,25 +169,32 @@ export default function SettingsPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  Dietary Restrictions
+                  Dietary Style
                 </label>
-                <input
-                  value={dietaryRestrictions}
-                  onChange={(e) => setDietaryRestrictions(e.target.value)}
-                  placeholder="e.g. vegetarian; no pork; high-protein"
+                <select
+                  value={dietaryStyle}
+                  onChange={(e) => setDietaryStyle(e.target.value)}
                   className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                >
+                  <option value="">None / No restrictions</option>
+                  <option value="vegetarian">Vegetarian</option>
+                  <option value="vegan">Vegan</option>
+                  <option value="keto">Keto / Ketogenic</option>
+                  <option value="low-carb">Low-carb</option>
+                  <option value="high-protein">High-protein</option>
+                  <option value="gluten-free">Gluten-free</option>
+                  <option value="dairy-free">Dairy-free</option>
+                </select>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  Disliked Ingredients
+                  Allergies
                 </label>
-                <input
-                  value={dislikedIngredients}
-                  onChange={(e) => setDislikedIngredients(e.target.value)}
-                  placeholder="e.g. cilantro; blue cheese"
-                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <AllergyTagInput
+                  value={allergies}
+                  onChange={setAllergies}
+                  placeholder="e.g. gluten, peanut, banana"
                 />
               </div>
 

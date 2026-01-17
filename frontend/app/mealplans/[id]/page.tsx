@@ -508,36 +508,42 @@ export default function MealPlanDetailPage() {
 
                     {isOpen && (
                       <div className="bg-gray-50 px-4 py-4 space-y-4">
-                        {meals.map((meal, idx) => (
-                          <div key={`${day.date}-${meal.name}-${idx}`} className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <h3 className="text-sm font-semibold text-gray-900">{meal.name}</h3>
-                              <span className="text-xs text-gray-500">
-                                {meal.items?.length ?? 0} items
-                              </span>
-                            </div>
-
-                            <div className="flex flex-wrap gap-2">
-                              {(meal.items ?? []).map((it) => {
-                                const s = findShoppingItem(it.id);
-                                const price = s?.price;
-
-                                return (
-                                  <div
-                                    key={it.id}
-                                    className="inline-flex items-center gap-2 rounded-full border bg-white px-3 py-1.5 text-sm"
-                                    title={s?.unitSize ? `${s.unitSize}` : undefined}
-                                  >
-                                    <span className="font-medium text-gray-900">{it.name}</span>
-                                    {price != null && (
-                                      <span className="text-xs text-gray-500">${price.toFixed(2)}</span>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
+                        {meals.length === 0 ? (
+                          <div className="text-sm text-gray-500 italic">
+                            No meals planned for this day.
                           </div>
-                        ))}
+                        ) : (
+                          meals.map((meal, idx) => (
+                            <div key={`${day.date}-${meal.name}-${idx}`} className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <h3 className="text-sm font-semibold text-gray-900">{meal.name}</h3>
+                                <span className="text-xs text-gray-500">
+                                  {meal.items?.length ?? 0} items
+                                </span>
+                              </div>
+
+                              <div className="flex flex-wrap gap-2">
+                                {(meal.items ?? []).map((it) => {
+                                  const s = findShoppingItem(it.id);
+                                  const price = s?.price;
+
+                                  return (
+                                    <div
+                                      key={it.id}
+                                      className="inline-flex items-center gap-2 rounded-full border bg-white px-3 py-1.5 text-sm"
+                                      title={s?.unitSize ? `${s.unitSize}` : undefined}
+                                    >
+                                      <span className="font-medium text-gray-900">{it.name}</span>
+                                      {price != null && (
+                                        <span className="text-xs text-gray-500">${price.toFixed(2)}</span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))
+                        )}
                       </div>
                     )}
                   </div>

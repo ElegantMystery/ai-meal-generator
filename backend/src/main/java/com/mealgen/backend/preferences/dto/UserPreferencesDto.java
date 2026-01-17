@@ -9,6 +9,6 @@ import lombok.*;
 @Builder
 public class UserPreferencesDto {
     private String dietaryRestrictions;
-    private String dislikedIngredients;
+    private String allergies;
     private Integer targetCaloriesPerDay;
 }

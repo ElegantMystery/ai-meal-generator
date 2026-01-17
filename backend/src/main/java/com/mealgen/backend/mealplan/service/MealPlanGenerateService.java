@@ -40,10 +40,10 @@ public class MealPlanGenerateService {
             throw new IllegalArgumentException("No items found for store=" + store);
         }
 
-        // Filter by dislikes (very simple string matching)
-        Set<String> dislikes = splitToSet(prefs == null ? null : prefs.getDislikedIngredients());
+        // Filter by allergies (very simple string matching)
+        Set<String> allergies = splitToSet(prefs == null ? null : prefs.getAllergies());
         List<Item> filtered = all.stream()
-                .filter(i -> !containsAny(i.getName(), dislikes))
+                .filter(i -> !containsAny(i.getName(), allergies))
                 .collect(Collectors.toList());
 
         if (filtered.size() < 10) {
@@ -76,7 +76,7 @@ public class MealPlanGenerateService {
 
         Map<String, Object> prefSummary = new LinkedHashMap<>();
         prefSummary.put("dietaryRestrictions", prefs == null ? null : prefs.getDietaryRestrictions());
-        prefSummary.put("dislikedIngredients", prefs == null ? null : prefs.getDislikedIngredients());
+        prefSummary.put("allergies", prefs == null ? null : prefs.getAllergies());
         prefSummary.put("targetCaloriesPerDay", prefs == null ? null : prefs.getTargetCaloriesPerDay());
         plan.put("preferences", prefSummary);
 

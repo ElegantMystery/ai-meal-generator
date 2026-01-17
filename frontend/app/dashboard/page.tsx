@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 
 type PreferencesDto = {
   dietaryRestrictions: string | null;
-  dislikedIngredients: string | null;
+  allergies: string | null;
   targetCaloriesPerDay: number | null;
 } | null;
 
@@ -54,8 +54,19 @@ export default function DashboardPage() {
     if (!prefs) return null;
     const parts: string[] = [];
     if (prefs.targetCaloriesPerDay != null) parts.push(`🎯 ${prefs.targetCaloriesPerDay} cal/day`);
-    if (prefs.dietaryRestrictions) parts.push(`🥗 ${prefs.dietaryRestrictions}`);
-    if (prefs.dislikedIngredients) parts.push(`🚫 ${prefs.dislikedIngredients}`);
+    if (prefs.dietaryRestrictions) {
+      // Format dietary style nicely
+      const style = prefs.dietaryRestrictions
+        .split("-")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join("-");
+      parts.push(`🥗 ${style}`);
+    }
+    if (prefs.allergies) {
+      // Format allergies nicely (semicolon-separated to comma-separated for display)
+      const allergiesList = prefs.allergies.split(";").map(a => a.trim()).join(", ");
+      parts.push(`⚠️ Allergies: ${allergiesList}`);
+    }
     return parts.length ? parts.join(" · ") : "No preferences set yet.";
   }, [prefs]);
 

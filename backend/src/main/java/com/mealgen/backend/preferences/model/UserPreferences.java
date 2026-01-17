@@ -28,10 +28,10 @@ public class UserPreferences {
     private String dietaryRestrictions;
 
     /**
-     * e.g. "cilantro;blue_cheese"
+     * e.g. "gluten;peanut;banana"
      */
-    @Column(name = "disliked_ingredients", columnDefinition = "text")
-    private String dislikedIngredients;
+    @Column(name = "allergies", columnDefinition = "text")
+    private String allergies;
 
     /**
      * Target calories per day for planning.
