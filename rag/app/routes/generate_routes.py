@@ -29,10 +29,18 @@ def generate(req: GenerateRequest, x_rag_secret: Optional[str] = Header(default=
     if req.days < 1 or req.days > 14:
         raise HTTPException(status_code=400, detail="days must be between 1 and 14")
 
+    # Format dietary style for better LLM understanding
+    dietary_style = req.preferences.dietaryRestrictions or "none"
+    if dietary_style and dietary_style != "none":
+        # Convert hyphenated values to more readable format
+        dietary_style_formatted = dietary_style.replace("-", " ").title()
+    else:
+        dietary_style_formatted = dietary_style
+    
     query_text = f"""
     Create a {req.days}-day meal plan using {req.store} grocery items.
-    Dietary restrictions: {req.preferences.dietaryRestrictions or "none"}.
-    Disliked ingredients: {req.preferences.dislikedIngredients or "none"}.
+    Dietary style: {dietary_style_formatted}.
+    Allergies: {req.preferences.allergies or "none"}.
     Target calories per day: {req.preferences.targetCaloriesPerDay or "not specified"}.
     Prefer variety and practical meals.
     """.strip()
@@ -47,11 +55,13 @@ def generate(req: GenerateRequest, x_rag_secret: Optional[str] = Header(default=
     end = start + timedelta(days=req.days - 1)
 
     system = "You are a meal-planning assistant. Only use the provided items."
+    # Safely serialize preferences - handle None values
+    prefs_dict = req.preferences.model_dump() if req.preferences else {}
     payload = {
         "store": req.store,
         "days": req.days,
         "startDate": str(start),
-        "preferences": req.preferences.model_dump(),
+        "preferences": prefs_dict,
         "items": candidates
     }
 
