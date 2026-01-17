@@ -34,7 +34,7 @@ public class UserPreferencesService {
                 .orElseGet(() -> UserPreferences.builder().user(user).build());
 
         prefs.setDietaryRestrictions(normalize(dto.getDietaryRestrictions()));
-        prefs.setDislikedIngredients(normalize(dto.getDislikedIngredients()));
+        prefs.setAllergies(normalize(dto.getAllergies()));
         prefs.setTargetCaloriesPerDay(dto.getTargetCaloriesPerDay());
 
         UserPreferences saved = preferencesRepository.save(prefs);
@@ -44,7 +44,7 @@ public class UserPreferencesService {
     private UserPreferencesDto toDto(UserPreferences p) {
         return UserPreferencesDto.builder()
                 .dietaryRestrictions(p.getDietaryRestrictions())
-                .dislikedIngredients(p.getDislikedIngredients())
+                .allergies(p.getAllergies())
                 .targetCaloriesPerDay(p.getTargetCaloriesPerDay())
                 .build();
     }

@@ -109,7 +109,7 @@ public class MealPlanService {
         // Build payload for python-rag
         Map<String, Object> preferences = new LinkedHashMap<>();
         preferences.put("dietaryRestrictions", prefs == null ? null : prefs.getDietaryRestrictions());
-        preferences.put("dislikedIngredients", prefs == null ? null : prefs.getDislikedIngredients());
+        preferences.put("allergies", prefs == null ? null : prefs.getAllergies());
         preferences.put("targetCaloriesPerDay", prefs == null ? null : prefs.getTargetCaloriesPerDay());
 
         Map<String, Object> payload = new LinkedHashMap<>();

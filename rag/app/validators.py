@@ -20,7 +20,7 @@ class Meal(BaseModel):
 class DayPlan(BaseModel):
     # Keep string to avoid timezone pitfalls; validate format in UI or add regex later
     date: str
-    meals: List[Meal] = Field(min_length=3, max_length=3)
+    meals: List[Meal] = Field(min_length=0, max_length=3)
 
 
 class PlanMeta(BaseModel):
