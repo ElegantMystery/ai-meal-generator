@@ -56,7 +56,12 @@ public class CustomOAuth2UserService extends OidcUserService {
                                 .build();
                     });
 
-            // Update user fields if needed
+            // Update user fields if needed (handles account linking for local users)
+            boolean isLinking = user.getId() != null && "local".equals(user.getProvider());
+            if (isLinking) {
+                logger.info("Linking OAuth provider {} to existing local user: {}", registrationId, email);
+            }
+
             if (user.getProviderId() == null || !user.getProviderId().equals(sub)) {
                 user.setProviderId(sub);
             }

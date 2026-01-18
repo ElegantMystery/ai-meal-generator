@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/lib/authStore";
 
@@ -23,15 +24,26 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // adjust URL + payload if your backend is different
-      const res = await api.post("/auth/login", { email, password });
-
-      // assume backend returns { user: { ... } }
+      const res = await api.post("/api/auth/login", { email, password });
       setUser(res.data.user);
       router.push("/dashboard");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError("Invalid email or password.");
+      const axiosError = err as { response?: { data?: { code?: string; error?: string } } };
+      const errorCode = axiosError.response?.data?.code;
+      const errorMessage = axiosError.response?.data?.error;
+
+      if (errorCode === "OAUTH_USER") {
+        // User signed up with Google, show helpful message
+        setError(
+          errorMessage ||
+            "This account uses Google sign-in. Please use the Google button below."
+        );
+      } else if (errorCode === "INVALID_CREDENTIALS") {
+        setError("Invalid email or password.");
+      } else {
+        setError("Login failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -112,12 +124,18 @@ export default function LoginPage() {
           onClick={handleGoogleSignIn}
           className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
         >
-          {/* Simple “G” circle for now; you can swap for an SVG later */}
           <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-300 text-xs font-bold">
             G
           </span>
           <span>Continue with Google</span>
         </button>
+
+        <p className="text-center text-sm text-gray-600">
+          Don&apos;t have an account?{" "}
+          <Link href="/signup" className="text-blue-600 hover:underline">
+            Sign up
+          </Link>
+        </p>
       </div>
     </main>
   );
