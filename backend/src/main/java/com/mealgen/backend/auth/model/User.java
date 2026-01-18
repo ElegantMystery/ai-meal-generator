@@ -26,4 +26,8 @@ public class User {
 
     // e.g. Google "sub" id
     private String providerId;
+
+    // BCrypt hashed password for local authentication (null for OAuth-only users)
+    @Column(name = "password_hash")
+    private String passwordHash;
 }

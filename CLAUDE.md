@@ -39,8 +39,11 @@ cd backend
 mvn spring-boot:run                    # Run dev server on :8080
 mvn clean package                      # Build JAR
 mvn flyway:migrate                     # Run DB migrations manually
+mvn flyway:info                        # Check migration status
 mvn test                               # Run tests
 ```
+
+**Important:** After creating new Flyway migration files (e.g., `V025__*.sql`), you must run `mvn flyway:migrate` to apply them to the database before testing. When using Docker Compose, migrations run automatically on startup.
 
 ### Frontend (Node / npm)
 ```bash
@@ -93,7 +96,7 @@ backend/
 │   ├── mealplan/       # Meal plans, RagClient, ShoppingList
 │   ├── preferences/    # User dietary preferences
 │   └── security/       # Spring Security config
-└── src/main/resources/db/migration/  # Flyway SQL migrations (V1-V024)
+└── src/main/resources/db/migration/  # Flyway SQL migrations (V1-V025)
 
 frontend/
 ├── app/                # Next.js app router pages
@@ -116,7 +119,7 @@ rag/app/
 ## Database Schema
 
 Key tables (managed by Flyway):
-- `users` - OAuth2 users
+- `users` - Users (supports OAuth2 and local email/password auth)
 - `user_preferences` - Dietary restrictions, allergies, calorie targets
 - `items` - Grocery items with store, price, category
 - `meal_plans` - Generated meal plans (JSON stored in `plan_json`)
@@ -125,6 +128,11 @@ Key tables (managed by Flyway):
 ## API Endpoints
 
 ### Backend REST API (port 8080)
+- `POST /api/auth/signup` - Register with email/password
+- `POST /api/auth/login` - Login with email/password
+- `GET /api/auth/me` - Get current user
+- `POST /api/auth/logout` - Logout
+- `GET /oauth2/authorization/google` - Google OAuth2 login
 - `GET/POST/DELETE /api/mealplans` - Meal plan CRUD
 - `POST /api/mealplans/generate` - Rule-based generation
 - `POST /api/mealplans/generate-ai` - AI RAG generation
