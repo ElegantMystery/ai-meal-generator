@@ -36,6 +36,7 @@ function formatCreatedAt(iso: string | null) {
 
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
+  const preferencesVersion = useAuthStore((s) => s.preferencesVersion);
 
   const [prefs, setPrefs] = useState<PreferencesDto>(null);
   const [loadingPrefs, setLoadingPrefs] = useState(true);
@@ -70,34 +71,30 @@ export default function DashboardPage() {
     return parts.length ? parts.join(" · ") : "No preferences set yet.";
   }, [prefs]);
 
+  // Load preferences (re-runs when preferencesVersion changes)
   useEffect(() => {
-    const load = async () => {
-      setError(null);
+    setLoadingPrefs(true);
+    api
+      .get<PreferencesDto>("/api/preferences/me")
+      .then((res) => setPrefs(res.data))
+      .catch((err) => {
+        console.error("Failed to load preferences:", err);
+        setError((prev) => prev ?? "Failed to load preferences.");
+      })
+      .finally(() => setLoadingPrefs(false));
+  }, [preferencesVersion]);
 
-      // Preferences
-      setLoadingPrefs(true);
-      api
-        .get<PreferencesDto>("/api/preferences/me")
-        .then((res) => setPrefs(res.data))
-        .catch((err) => {
-          console.error("Failed to load preferences:", err);
-          setError((prev) => prev ?? "Failed to load preferences.");
-        })
-        .finally(() => setLoadingPrefs(false));
-
-      // Meal plans
-      setLoadingPlans(true);
-      api
-        .get<MealPlan[]>("/api/mealplans")
-        .then((res) => setMealplans(res.data || []))
-        .catch((err) => {
-          console.error("Failed to load meal plans:", err);
-          setError((prev) => prev ?? "Failed to load meal plans.");
-        })
-        .finally(() => setLoadingPlans(false));
-    };
-
-    load();
+  // Load meal plans (only on initial mount)
+  useEffect(() => {
+    setLoadingPlans(true);
+    api
+      .get<MealPlan[]>("/api/mealplans")
+      .then((res) => setMealplans(res.data || []))
+      .catch((err) => {
+        console.error("Failed to load meal plans:", err);
+        setError((prev) => prev ?? "Failed to load meal plans.");
+      })
+      .finally(() => setLoadingPlans(false));
   }, []);
 
   const generateMealPlan = async () => {

@@ -96,7 +96,7 @@ backend/
 │   ├── mealplan/       # Meal plans, RagClient, ShoppingList
 │   ├── preferences/    # User dietary preferences
 │   └── security/       # Spring Security config
-└── src/main/resources/db/migration/  # Flyway SQL migrations (V1-V025)
+└── src/main/resources/db/migration/  # Flyway SQL migrations (V1-V026)
 
 frontend/
 ├── app/                # Next.js app router pages
@@ -119,7 +119,7 @@ rag/app/
 ## Database Schema
 
 Key tables (managed by Flyway):
-- `users` - Users (supports OAuth2 and local email/password auth)
+- `users` - Users (supports OAuth2 and local email/password auth, tracks onboarding status)
 - `user_preferences` - Dietary restrictions, allergies, calorie targets
 - `items` - Grocery items with store, price, category
 - `meal_plans` - Generated meal plans (JSON stored in `plan_json`)
@@ -132,6 +132,7 @@ Key tables (managed by Flyway):
 - `POST /api/auth/login` - Login with email/password
 - `GET /api/auth/me` - Get current user
 - `POST /api/auth/logout` - Logout
+- `POST /api/auth/complete-onboarding` - Mark user onboarding as completed
 - `GET /oauth2/authorization/google` - Google OAuth2 login
 - `GET/POST/DELETE /api/mealplans` - Meal plan CRUD
 - `POST /api/mealplans/generate` - Rule-based generation
