@@ -74,12 +74,22 @@ public class AuthService {
         return toAuthResponse(user);
     }
 
+    @Transactional
+    public void completeOnboarding(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalStateException("User not found"));
+        user.setOnboardingCompleted(true);
+        userRepository.save(user);
+        logger.info("User completed onboarding: {}", email);
+    }
+
     private AuthResponse toAuthResponse(User user) {
         return AuthResponse.builder()
                 .id(user.getId())
                 .email(user.getEmail())
                 .name(user.getName())
                 .provider(user.getProvider())
+                .onboardingCompleted(user.isOnboardingCompleted())
                 .build();
     }
 }

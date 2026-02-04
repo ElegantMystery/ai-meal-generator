@@ -4,6 +4,7 @@ import { useAuthStore } from "@/lib/authStore";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import OnboardingModal from "@/components/OnboardingModal";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -11,10 +12,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const setUser = useAuthStore((s) => s.setUser);
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     if (user) {
       setLoading(false);
+      // Show onboarding modal if user hasn't completed it
+      if (user.onboardingCompleted === false) {
+        setShowOnboarding(true);
+      }
       return;
     }
 
@@ -28,6 +34,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         const res = await api.get("/api/auth/me");
         setUser(res.data);
         setLoading(false);
+        // Show onboarding modal if user hasn't completed it
+        if (res.data.onboardingCompleted === false) {
+          setShowOnboarding(true);
+        }
       } catch (err: any) {
         if (err?.response?.status === 401) {
           setLoading(false);
@@ -42,6 +52,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     fetchUser();
   }, [user, setUser, router, loggingOut]);
+
+  const handleOnboardingComplete = () => {
+    setShowOnboarding(false);
+    // Update user state to reflect onboarding completion
+    if (user) {
+      setUser({ ...user, onboardingCompleted: true });
+    }
+  };
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -70,6 +88,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <OnboardingModal
+        isOpen={showOnboarding}
+        onComplete={handleOnboardingComplete}
+      />
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">

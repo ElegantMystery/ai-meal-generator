@@ -96,7 +96,8 @@ public class AuthController {
                     "email", user.getEmail(),
                     "name", user.getName() != null ? user.getName() : "",
                     "provider", user.getProvider() != null ? user.getProvider() : "",
-                    "providerId", user.getProviderId() != null ? user.getProviderId() : ""
+                    "providerId", user.getProviderId() != null ? user.getProviderId() : "",
+                    "onboardingCompleted", user.isOnboardingCompleted()
             ));
         }
 
@@ -116,7 +117,8 @@ public class AuthController {
                             "email", response.getEmail(),
                             "name", response.getName() != null ? response.getName() : "",
                             "provider", response.getProvider() != null ? response.getProvider() : "",
-                            "providerId", ""
+                            "providerId", "",
+                            "onboardingCompleted", response.isOnboardingCompleted()
                     ));
                 } catch (Exception e) {
                     logger.error("Error fetching user from session", e);
@@ -125,6 +127,48 @@ public class AuthController {
         }
 
         return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
+    }
+
+    @PostMapping("/complete-onboarding")
+    public ResponseEntity<?> completeOnboarding(
+            @AuthenticationPrincipal OAuth2User oauth2User,
+            HttpServletRequest request
+    ) {
+        String email = null;
+
+        // Check OAuth2 authentication
+        if (oauth2User != null) {
+            String providerId = oauth2User.getName();
+            Optional<User> userOpt = userRepository.findByProviderId(providerId);
+            if (userOpt.isPresent()) {
+                email = userOpt.get().getEmail();
+            }
+        }
+
+        // Check session-based authentication (local users)
+        if (email == null) {
+            HttpSession session = request.getSession(false);
+            if (session != null) {
+                SecurityContext securityContext = (SecurityContext) session.getAttribute(
+                        HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
+                if (securityContext != null && securityContext.getAuthentication() != null
+                        && securityContext.getAuthentication().isAuthenticated()) {
+                    email = (String) securityContext.getAuthentication().getPrincipal();
+                }
+            }
+        }
+
+        if (email == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
+        }
+
+        try {
+            authService.completeOnboarding(email);
+            return ResponseEntity.ok(Map.of("message", "Onboarding completed"));
+        } catch (Exception e) {
+            logger.error("Error completing onboarding", e);
+            return ResponseEntity.status(500).body(Map.of("error", "Failed to complete onboarding"));
+        }
     }
 
     @PostMapping("/logout")

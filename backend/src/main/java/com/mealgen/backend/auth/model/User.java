@@ -30,4 +30,9 @@ public class User {
     // BCrypt hashed password for local authentication (null for OAuth-only users)
     @Column(name = "password_hash")
     private String passwordHash;
+
+    // Tracks whether user has completed or skipped the onboarding flow
+    @Builder.Default
+    @Column(name = "onboarding_completed", nullable = false)
+    private boolean onboardingCompleted = false;
 }
