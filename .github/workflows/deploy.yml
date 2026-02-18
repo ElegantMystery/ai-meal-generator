@@ -1,0 +1,161 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # allow manual trigger
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build and push all 3 images to ECR in parallel
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build & Push (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false  # let other builds finish even if one fails
+      matrix:
+        include:
+          - service: frontend
+            context: ./frontend
+            repo: meal-gen-frontend
+          - service: backend
+            context: ./backend
+            repo: meal-gen-backend
+          - service: rag
+            context: ./rag
+            repo: meal-gen-rag
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # QEMU + Buildx for cross-compiling to linux/arm64 (EC2 t4g is ARM)
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ matrix.repo }}:${{ github.sha }}
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ matrix.repo }}:latest
+          # GHA layer cache — dramatically speeds up rebuilds
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  # ---------------------------------------------------------------------------
+  # Deploy to EC2 once all 3 images are pushed
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Copy compose file + nginx config to EC2
+      - name: Copy config files to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "docker-compose.prod.yml,nginx/"
+          target: /opt/meal-gen/
+
+      # SSH in, pull new images, rolling restart
+      - name: Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+          IMAGE_TAG: ${{ github.sha }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: ECR_REGISTRY,IMAGE_TAG
+          script: |
+            set -euo pipefail
+            cd /opt/meal-gen
+
+            echo "==> Logging in to ECR"
+            aws ecr get-login-password --region us-east-1 | \
+              docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+            echo "==> Updating .env"
+            # Upsert IMAGE_TAG and ECR_REGISTRY in .env
+            update_env() {
+              local key=$1 val=$2
+              if grep -q "^${key}=" .env 2>/dev/null; then
+                sed -i "s|^${key}=.*|${key}=${val}|" .env
+              else
+                echo "${key}=${val}" >> .env
+              fi
+            }
+            update_env IMAGE_TAG     "$IMAGE_TAG"
+            update_env ECR_REGISTRY  "$ECR_REGISTRY"
+
+            echo "==> Pulling new images"
+            docker compose -f docker-compose.prod.yml pull
+
+            echo "==> Rolling restart"
+            # Restart in dependency order; brief sleeps let healthchecks pass
+            docker compose -f docker-compose.prod.yml up -d --no-deps python-rag
+            sleep 15
+            docker compose -f docker-compose.prod.yml up -d --no-deps backend
+            sleep 20
+            docker compose -f docker-compose.prod.yml up -d --no-deps frontend
+            docker compose -f docker-compose.prod.yml up -d --no-deps nginx
+
+            echo "==> Pruning old images"
+            docker image prune -f
+
+            echo "==> Deploy complete ($IMAGE_TAG)"
+
+  # ---------------------------------------------------------------------------
+  # Smoke test — verify the backend health endpoint responds
+  # ---------------------------------------------------------------------------
+  health-check:
+    name: Health Check
+    runs-on: ubuntu-latest
+    needs: deploy
+
+    steps:
+      - name: Wait for services to stabilize
+        run: sleep 30
+
+      - name: Check /api/actuator/health
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 10 \
+            "http://${{ secrets.EC2_HOST }}/api/actuator/health")
+          echo "HTTP status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "Health check failed (HTTP $STATUS)"
+            exit 1
+          fi
+          echo "Health check passed"
