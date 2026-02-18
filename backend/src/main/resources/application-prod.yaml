@@ -1,0 +1,47 @@
+spring:
+  session:
+    cookie:
+      sameSite: lax
+      secure: true
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+
+server:
+  forward-headers-strategy: framework
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+mealgen:
+  rag:
+    base-url: ${MEALGEN_RAG_BASEURL:http://python-rag:8000}
+    secret: ${MEALGEN_RAG_SECRET}
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+
+frontend:
+  url: ${FRONTEND_URL:http://localhost:3000}
