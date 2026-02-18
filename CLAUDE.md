@@ -55,7 +55,9 @@ npm run lint                           # ESLint
 ```
 
 ### RAG Service (Python / FastAPI)
+**Important:** Always use the project-level virtual environment at `.venv/` for Python dependencies.
 ```bash
+source .venv/bin/activate                          # Activate venv first
 cd rag
 pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000   # Run dev server
