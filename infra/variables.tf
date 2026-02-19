@@ -26,7 +26,7 @@ variable "ec2_ami" {
   description = "Amazon Linux 2023 ARM64 AMI ID (update per region)"
   type        = string
   # Amazon Linux 2023 arm64 in us-east-1 — update if you change region
-  default = "ami-0f9de6e2d2b79f9e1"
+  default = "ami-044006edae9a34ef5"
 }
 
 variable "ec2_key_name" {

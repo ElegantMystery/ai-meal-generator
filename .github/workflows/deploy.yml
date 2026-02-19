@@ -61,6 +61,9 @@ jobs:
           tags: |
             ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ matrix.repo }}:${{ github.sha }}
             ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ matrix.repo }}:latest
+          # Bake NEXT_PUBLIC_API_BASE_URL into the frontend bundle at build time
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=${{ matrix.service == 'frontend' && format('http://{0}', secrets.EC2_HOST) || '' }}
           # GHA layer cache — dramatically speeds up rebuilds
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
