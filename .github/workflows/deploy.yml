@@ -151,11 +151,11 @@ jobs:
       - name: Wait for services to stabilize
         run: sleep 30
 
-      - name: Check /api/actuator/health
+      - name: Check /actuator/health
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             --max-time 10 \
-            "http://${{ secrets.EC2_HOST }}/api/actuator/health")
+            "http://${{ secrets.EC2_HOST }}/actuator/health")
           echo "HTTP status: $STATUS"
           if [ "$STATUS" != "200" ]; then
             echo "Health check failed (HTTP $STATUS)"
