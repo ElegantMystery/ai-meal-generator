@@ -14,6 +14,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Accept public API URL at build time (Next.js bakes NEXT_PUBLIC_* into the bundle)
+ARG NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

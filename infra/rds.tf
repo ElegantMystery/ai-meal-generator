@@ -47,8 +47,9 @@ resource "aws_db_parameter_group" "postgres" {
 
   # pgvector must be loaded via shared_preload_libraries for some operations
   parameter {
-    name  = "shared_preload_libraries"
-    value = "pg_stat_statements"
+    name         = "shared_preload_libraries"
+    value        = "pg_stat_statements"
+    apply_method = "pending-reboot"
   }
 
   tags = {
