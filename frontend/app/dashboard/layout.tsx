@@ -3,6 +3,7 @@
 import { useAuthStore } from "@/lib/authStore";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import OnboardingModal from "@/components/OnboardingModal";
@@ -101,7 +102,7 @@ export default function DashboardLayout({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             {/* Left - Icon + Logo */}
-            <a href="/" className="flex items-center gap-3 group">
+            <Link href="/" className="flex items-center gap-3 group">
               <Image
                 src="/icon.png"
                 alt="Whole Haul icon"
@@ -116,7 +117,7 @@ export default function DashboardLayout({
                 width={120}
                 className="object-contain"
               />
-            </a>
+            </Link>
 
             {/* Right - User info + Navigation + Logout */}
             <div className="flex items-center gap-4">

@@ -15,6 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Whole Haul",
   description: "AI-powered meal planning with your favorite grocery stores.",
+  icons: { icon: "/icon.png" },
 };
 
 export default function RootLayout({
