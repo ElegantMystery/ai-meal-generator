@@ -13,7 +13,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/mealgen
     username: meal_user
-    password: 236810
+    password: ${SPRING_DATASOURCE_PASSWORD:?SPRING_DATASOURCE_PASSWORD must be set}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -36,8 +36,8 @@ spring:
       client:
         registration:
           google:
-            client-id: "446392270628-r2vjchlfn4u43aphqg3veke1ktvbe7q7.apps.googleusercontent.com"
-            client-secret: "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"
+            client-id: ${GOOGLE_CLIENT_ID:?GOOGLE_CLIENT_ID must be set}
+            client-secret: ${GOOGLE_CLIENT_SECRET:?GOOGLE_CLIENT_SECRET must be set}
             scope:
               - openid
               - profile

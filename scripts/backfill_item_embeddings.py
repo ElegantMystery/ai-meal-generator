@@ -19,7 +19,7 @@ if DATABASE_URL and "postgres-mealgen" in DATABASE_URL:
     DATABASE_URL = DATABASE_URL.replace("postgres-mealgen", "localhost")
 elif not DATABASE_URL:
     # Default local connection if not set
-    DATABASE_URL = "postgresql://meal_user:236810@localhost:5432/mealgen"
+    raise RuntimeError("DATABASE_URL must be set (e.g. export DATABASE_URL=postgresql://meal_user:PASSWORD@localhost:5432/mealgen)")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")

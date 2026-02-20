@@ -137,7 +137,7 @@ def main():
     db_port = int(os.getenv("PGPORT", "5432"))
     db_name = os.getenv("PGDATABASE", "mealgen")
     db_user = os.getenv("PGUSER", "meal_user")
-    db_pass = os.getenv("PGPASSWORD", "236810")
+    db_pass = os.getenv("PGPASSWORD") or os.environ["PGPASSWORD"]  # required — no default
 
     json_path = os.getenv("TJ_JSON_PATH", "./tj-items.json")
     nutrition_parsed_path = os.getenv("TJ_NUTRITION_PARSED_PATH", "./tj-nutrition-parsed.json")
