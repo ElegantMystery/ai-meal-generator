@@ -63,7 +63,7 @@ jobs:
             ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ matrix.repo }}:latest
           # Bake NEXT_PUBLIC_API_BASE_URL into the frontend bundle at build time
           build-args: |
-            NEXT_PUBLIC_API_BASE_URL=${{ matrix.service == 'frontend' && format('http://{0}', secrets.EC2_HOST) || '' }}
+            NEXT_PUBLIC_API_BASE_URL=${{ matrix.service == 'frontend' && 'https://whole-haul.com' || '' }}
           # GHA layer cache — dramatically speeds up rebuilds
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
@@ -133,6 +133,7 @@ jobs:
             sleep 20
             docker compose -f docker-compose.prod.yml up -d --no-deps frontend
             docker compose -f docker-compose.prod.yml up -d --no-deps nginx
+            docker compose -f docker-compose.prod.yml up -d --no-deps certbot
 
             echo "==> Pruning old images"
             docker image prune -f
@@ -155,7 +156,7 @@ jobs:
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             --max-time 10 \
-            "http://${{ secrets.EC2_HOST }}/actuator/health")
+            "https://whole-haul.com/actuator/health")
           echo "HTTP status: $STATUS"
           if [ "$STATUS" != "200" ]; then
             echo "Health check failed (HTTP $STATUS)"
