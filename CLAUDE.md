@@ -25,6 +25,17 @@ The backend handles user auth (Google OAuth2), meal plan CRUD, and preferences. 
 
 Two generation modes exist: rule-based (`/api/mealplans/generate`) and AI-powered (`/api/mealplans/generate-ai`).
 
+## Git Workflow
+
+**Always follow this workflow for every new feature or task:**
+
+1. `git pull origin main` — sync with latest main
+2. `git checkout -b feat/<feature-name>` — create a new feature branch
+3. Implement the feature (with TDD where applicable)
+4. Open a PR to merge back into `main`
+
+Never commit new features directly to `main`. Each feature gets its own branch.
+
 ## Development Commands
 
 ### Full Stack (Docker Compose)
