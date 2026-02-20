@@ -5,11 +5,17 @@ import Link from "next/link";
 import { useAuthStore } from "@/lib/authStore";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/Card";
 import { Select } from "@/components/ui/Select";
-import { Badge } from "@/components/ui/Badge";
 import { SkeletonCard, SkeletonText } from "@/components/ui/Skeleton";
 import { CalendarDaysIcon, SparklesIcon } from "@heroicons/react/24/outline";
+import { formatDateRange, formatCreatedAt } from "@/lib/formatters";
 
 type PreferencesDto = {
   dietaryRestrictions: string | null;
@@ -27,18 +33,6 @@ type MealPlan = {
 };
 
 type StoreOption = "TRADER_JOES" | "COSTCO";
-
-function formatDateRange(start: string | null, end: string | null) {
-  if (!start && !end) return "No date range";
-  if (start && !end) return `From ${start}`;
-  if (!start && end) return `Until ${end}`;
-  return `${start} → ${end}`;
-}
-
-function formatCreatedAt(iso: string | null) {
-  if (!iso) return "";
-  return iso.replace("T", " ").replace("Z", " UTC");
-}
 
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
@@ -60,7 +54,8 @@ export default function DashboardPage() {
   const prefsSummary = useMemo(() => {
     if (!prefs) return null;
     const parts: string[] = [];
-    if (prefs.targetCaloriesPerDay != null) parts.push(`🎯 ${prefs.targetCaloriesPerDay} cal/day`);
+    if (prefs.targetCaloriesPerDay != null)
+      parts.push(`🎯 ${prefs.targetCaloriesPerDay} cal/day`);
     if (prefs.dietaryRestrictions) {
       const style = prefs.dietaryRestrictions
         .split("-")
@@ -69,7 +64,10 @@ export default function DashboardPage() {
       parts.push(`🥗 ${style}`);
     }
     if (prefs.allergies) {
-      const list = prefs.allergies.split(";").map((a) => a.trim()).join(", ");
+      const list = prefs.allergies
+        .split(";")
+        .map((a) => a.trim())
+        .join(", ");
       parts.push(`⚠️ Allergies: ${list}`);
     }
     return parts.length ? parts.join(" · ") : null;
@@ -103,7 +101,9 @@ export default function DashboardPage() {
     setCreating(true);
     setError(null);
     try {
-      const res = await api.post<MealPlan>("/api/mealplans/generate", null, { params: { store, days } });
+      const res = await api.post<MealPlan>("/api/mealplans/generate", null, {
+        params: { store, days },
+      });
       setMealplans((prev) => [res.data, ...prev]);
     } catch (err) {
       console.error("Failed to generate meal plan:", err);
@@ -117,7 +117,9 @@ export default function DashboardPage() {
     setCreatingAi(true);
     setError(null);
     try {
-      const res = await api.post<MealPlan>("/api/mealplans/generate-ai", null, { params: { store, days } });
+      const res = await api.post<MealPlan>("/api/mealplans/generate-ai", null, {
+        params: { store, days },
+      });
       setMealplans((prev) => [res.data, ...prev]);
     } catch (err) {
       console.error("Failed to generate AI meal plan:", err);
@@ -133,7 +135,10 @@ export default function DashboardPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-gray-500 text-sm mt-1">
-          Welcome back, <span className="font-medium text-gray-700">{user?.name || user?.email || "friend"}</span>
+          Welcome back,{" "}
+          <span className="font-medium text-gray-700">
+            {user?.name || user?.email || "friend"}
+          </span>
         </p>
       </div>
 
@@ -151,9 +156,14 @@ export default function DashboardPage() {
             <div className="flex items-start justify-between">
               <div>
                 <CardTitle>Your Preferences</CardTitle>
-                <CardDescription>Used to personalize your meal plans.</CardDescription>
+                <CardDescription>
+                  Used to personalize your meal plans.
+                </CardDescription>
               </div>
-              <Link href="/settings" className="text-sm font-medium text-brand-600 hover:text-brand-700 transition">
+              <Link
+                href="/settings"
+                className="text-sm font-medium text-brand-600 hover:text-brand-700 transition"
+              >
                 Edit
               </Link>
             </div>
@@ -166,7 +176,10 @@ export default function DashboardPage() {
             ) : (
               <p className="text-sm text-gray-400">
                 No preferences set.{" "}
-                <Link href="/settings" className="text-brand-600 hover:underline">
+                <Link
+                  href="/settings"
+                  className="text-brand-600 hover:underline"
+                >
                   Add them in Settings.
                 </Link>
               </p>
@@ -244,7 +257,9 @@ export default function DashboardPage() {
           ) : mealplans.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center gap-3">
               <CalendarDaysIcon className="h-10 w-10 text-gray-300" />
-              <p className="text-sm text-gray-500">No meal plans yet. Generate your first one above.</p>
+              <p className="text-sm text-gray-500">
+                No meal plans yet. Generate your first one above.
+              </p>
             </div>
           ) : (
             <ul className="divide-y divide-gray-100">
@@ -259,13 +274,12 @@ export default function DashboardPage() {
                         >
                           {p.title}
                         </Link>
-                        <Badge variant="success">
-                          {p.planJson ? "AI" : "Rule-based"}
-                        </Badge>
                       </div>
                       <p className="text-xs text-gray-400 mt-0.5">
                         {formatDateRange(p.startDate, p.endDate)}
-                        {p.createdAt ? ` · ${formatCreatedAt(p.createdAt)}` : ""}
+                        {p.createdAt
+                          ? ` · ${formatCreatedAt(p.createdAt)}`
+                          : ""}
                       </p>
                     </div>
                     <Link

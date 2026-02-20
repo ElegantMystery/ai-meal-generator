@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/Badge";
 import { SkeletonCard, SkeletonText } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import Modal from "@/components/Modal";
+import { formatDateRange, formatCreatedAt } from "@/lib/formatters";
 
 type MealPlan = {
   id: number;
@@ -95,18 +96,6 @@ function normalizeMealName(name: string) {
   return name || "Meal";
 }
 
-function formatDateRange(start: string | null, end: string | null) {
-  if (!start && !end) return "No date range";
-  if (start && !end) return `From ${start}`;
-  if (!start && end) return `Until ${end}`;
-  return `${start} → ${end}`;
-}
-
-function formatCreatedAt(iso: string | null) {
-  if (!iso) return "";
-  return iso.replace("T", " ").replace("Z", " UTC");
-}
-
 const mealAccent: Record<string, string> = {
   Breakfast: "border-l-amber-400",
   Lunch: "border-l-brand-500",
@@ -143,12 +132,15 @@ export default function MealPlanDetailPage() {
 
   useEffect(() => {
     if (!id) return;
+    let cancelled = false;
     const load = async () => {
       setLoading(true);
       try {
         const res = await api.get<MealPlan>(`/api/mealplans/${id}`);
+        if (cancelled) return;
         setPlan(res.data);
       } catch (err: unknown) {
+        if (cancelled) return;
         const e = err as { response?: { status?: number } };
         if (e?.response?.status === 401) {
           router.push("/login");
@@ -161,29 +153,38 @@ export default function MealPlanDetailPage() {
         console.error(err);
         setError("Failed to load meal plan.");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     load();
+    return () => {
+      cancelled = true;
+    };
   }, [id, router]);
 
   useEffect(() => {
     if (!id) return;
+    let cancelled = false;
     const fetchShopping = async () => {
       setShoppingLoading(true);
       try {
         const res = await api.get<ShoppingListResponse>(
           `/api/mealplans/${id}/shopping-list`,
         );
+        if (cancelled) return;
         setShopping(res.data);
       } catch (e) {
+        if (cancelled) return;
         console.error(e);
         setShoppingError("Failed to load shopping list.");
       } finally {
-        setShoppingLoading(false);
+        if (!cancelled) setShoppingLoading(false);
       }
     };
     fetchShopping();
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   const findShoppingItem = (itemId: number) =>
@@ -198,8 +199,12 @@ export default function MealPlanDetailPage() {
         return `${it.qty}x ${it.name}${unitStr}${priceStr}`;
       })
       .join("\n");
-    await navigator.clipboard.writeText(text);
-    toast("Shopping list copied to clipboard!", "success");
+    try {
+      await navigator.clipboard.writeText(text);
+      toast("Shopping list copied to clipboard!", "success");
+    } catch {
+      toast("Could not copy to clipboard. Please copy manually.", "error");
+    }
   };
 
   const handleDelete = async () => {
@@ -373,15 +378,24 @@ export default function MealPlanDetailPage() {
 
               <div className="divide-y">
                 {shopping.items.map((it) => (
-                  <div
+                  <label
                     key={it.id}
+                    htmlFor={`item-${it.id}`}
                     className="py-3 flex items-center gap-3 cursor-pointer group"
-                    onClick={() =>
-                      setCheckedItems((p) => ({ ...p, [it.id]: !p[it.id] }))
-                    }
                   >
-                    {/* Checkbox */}
+                    {/* Visually-hidden real checkbox for keyboard/screen-reader access */}
+                    <input
+                      id={`item-${it.id}`}
+                      type="checkbox"
+                      className="sr-only"
+                      checked={!!checkedItems[it.id]}
+                      onChange={() =>
+                        setCheckedItems((p) => ({ ...p, [it.id]: !p[it.id] }))
+                      }
+                    />
+                    {/* Visual checkbox */}
                     <div
+                      aria-hidden="true"
                       className={`h-5 w-5 rounded border flex items-center justify-center shrink-0 transition ${checkedItems[it.id] ? "bg-brand-600 border-brand-600" : "border-gray-300 group-hover:border-brand-400"}`}
                     >
                       {checkedItems[it.id] && (
@@ -442,7 +456,7 @@ export default function MealPlanDetailPage() {
                         </div>
                       )}
                     </div>
-                  </div>
+                  </label>
                 ))}
               </div>
 
@@ -544,6 +558,8 @@ export default function MealPlanDetailPage() {
                   >
                     <button
                       className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-surface-50 transition text-left"
+                      aria-expanded={isOpen}
+                      aria-controls={`day-panel-${day.date}`}
                       onClick={() =>
                         setExpandedDays((p) => ({
                           ...p,
@@ -568,7 +584,10 @@ export default function MealPlanDetailPage() {
                     </button>
 
                     {isOpen && (
-                      <div className="bg-surface-50 px-4 py-4 space-y-4 border-t">
+                      <div
+                        id={`day-panel-${day.date}`}
+                        className="bg-surface-50 px-4 py-4 space-y-4 border-t"
+                      >
                         {meals.length === 0 ? (
                           <p className="text-sm text-gray-400 italic">
                             No meals planned.
