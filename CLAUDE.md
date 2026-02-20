@@ -31,8 +31,14 @@ Two generation modes exist: rule-based (`/api/mealplans/generate`) and AI-powere
 
 1. `git pull origin main` — sync with latest main
 2. `git checkout -b feat/<feature-name>` — create a new feature branch
-3. Implement the feature (with TDD where applicable)
-4. Open a PR to merge back into `main`
+3. **Implement using `/tdd-workflow`:**
+   - Write tests first (RED), implement to pass (GREEN), refactor (IMPROVE)
+   - Test locally: run `npm run dev` / `mvn spring-boot:run` and verify manually
+   - Run test suite: `npm test` (frontend) or `mvn test` (backend) — must pass
+4. **Run `/code-review`** — fix all CRITICAL and HIGH issues before proceeding
+5. **Push and create PR** — only if tests pass and code review is clean
+   - `git push origin feat/<feature-name>`
+   - `gh pr create --base main --head feat/<feature-name>`
 
 Never commit new features directly to `main`. Each feature gets its own branch.
 
