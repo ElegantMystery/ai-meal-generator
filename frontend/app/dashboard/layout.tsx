@@ -2,11 +2,16 @@
 
 import { useAuthStore } from "@/lib/authStore";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import OnboardingModal from "@/components/OnboardingModal";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
@@ -95,15 +100,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            {/* Left - User info */}
-            <div className="flex flex-col">
-              <span className="text-sm text-gray-500">Signed in as</span>
-              <span className="text-sm font-medium text-gray-900">
-                {user?.name || user?.email}
-              </span>
-            </div>
-  
-            {/* Right - Navigation + Logout */}
+            {/* Left - Icon + Logo */}
+            <a href="/" className="flex items-center gap-3 group">
+              <Image
+                src="/icon.png"
+                alt="Whole Haul icon"
+                width={36}
+                height={36}
+                className="rounded-lg"
+              />
+              <Image
+                src="/whole_haul.png"
+                alt="Whole Haul"
+                height={28}
+                width={120}
+                className="object-contain"
+              />
+            </a>
+
+            {/* Right - User info + Navigation + Logout */}
             <div className="flex items-center gap-4">
               {/* Settings link */}
               <a
@@ -112,7 +127,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               >
                 Settings
               </a>
-  
+
               {/* Logout button */}
               <button
                 onClick={handleLogout}
