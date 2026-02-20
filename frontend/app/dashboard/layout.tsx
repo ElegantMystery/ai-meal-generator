@@ -2,17 +2,13 @@
 
 import { useAuthStore } from "@/lib/authStore";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import OnboardingModal from "@/components/OnboardingModal";
+import Navbar from "@/components/Navbar";
+import { Skeleton } from "@/components/ui/Skeleton";
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
@@ -23,29 +19,21 @@ export default function DashboardLayout({
   useEffect(() => {
     if (user) {
       setLoading(false);
-      // Show onboarding modal if user hasn't completed it
-      if (user.onboardingCompleted === false) {
-        setShowOnboarding(true);
-      }
+      if (user.onboardingCompleted === false) setShowOnboarding(true);
       return;
     }
 
-    if (loggingOut) {
-      return;
-    }
+    if (loggingOut) return;
 
     const fetchUser = async () => {
       try {
-        // Your backend exposes /api/auth/me – keeping that
         const res = await api.get("/api/auth/me");
         setUser(res.data);
         setLoading(false);
-        // Show onboarding modal if user hasn't completed it
-        if (res.data.onboardingCompleted === false) {
-          setShowOnboarding(true);
-        }
-      } catch (err: any) {
-        if (err?.response?.status === 401) {
+        if (res.data.onboardingCompleted === false) setShowOnboarding(true);
+      } catch (err: unknown) {
+        const e = err as { response?: { status?: number } };
+        if (e?.response?.status === 401) {
           setLoading(false);
           router.push("/login");
           return;
@@ -61,10 +49,7 @@ export default function DashboardLayout({
 
   const handleOnboardingComplete = () => {
     setShowOnboarding(false);
-    // Update user state to reflect onboarding completion
-    if (user) {
-      setUser({ ...user, onboardingCompleted: true });
-    }
+    if (user) setUser({ ...user, onboardingCompleted: true });
   };
 
   const handleLogout = async () => {
@@ -82,65 +67,37 @@ export default function DashboardLayout({
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-gray-600">Loading...</p>
+      <div className="min-h-screen bg-surface-50">
+        <div className="bg-white border-b border-gray-200 h-16 flex items-center px-6 gap-4">
+          <Skeleton className="h-8 w-8 rounded-lg" />
+          <Skeleton className="h-5 w-28" />
+          <div className="ml-auto flex gap-3">
+            <Skeleton className="h-7 w-20 rounded-md" />
+            <Skeleton className="h-7 w-20 rounded-md" />
+          </div>
+        </div>
+        <div className="max-w-6xl mx-auto py-10 px-4 space-y-6">
+          <Skeleton className="h-8 w-48" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Skeleton className="h-40 lg:col-span-2 rounded-xl" />
+            <Skeleton className="h-40 rounded-xl" />
+          </div>
+          <Skeleton className="h-64 rounded-xl" />
+        </div>
       </div>
     );
   }
 
-  if (!user) {
-    return null; // redirect handled in useEffect
-  }
+  if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <OnboardingModal
-        isOpen={showOnboarding}
-        onComplete={handleOnboardingComplete}
+    <div className="min-h-screen bg-surface-50">
+      <OnboardingModal isOpen={showOnboarding} onComplete={handleOnboardingComplete} />
+      <Navbar
+        userName={user.name || user.email}
+        onLogout={handleLogout}
+        loggingOut={loggingOut}
       />
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            {/* Left - Icon + Logo */}
-            <Link href="/" className="flex items-center gap-3 group">
-              <Image
-                src="/icon.png"
-                alt="Whole Haul icon"
-                width={36}
-                height={36}
-                className="rounded-lg"
-              />
-              <Image
-                src="/whole_haul.png"
-                alt="Whole Haul"
-                height={28}
-                width={120}
-                className="object-contain"
-              />
-            </Link>
-
-            {/* Right - User info + Navigation + Logout */}
-            <div className="flex items-center gap-4">
-              {/* Settings link */}
-              <a
-                href="/settings"
-                className="text-sm font-medium text-gray-700 hover:text-gray-900 transition"
-              >
-                Settings
-              </a>
-
-              {/* Logout button */}
-              <button
-                onClick={handleLogout}
-                disabled={loggingOut}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition"
-              >
-                {loggingOut ? "Logging out..." : "Log out"}
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
       {children}
     </div>
   );

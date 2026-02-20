@@ -1,8 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useAuthStore } from "@/lib/authStore";
 import { api } from "@/lib/api";
+import { Button } from "@/components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
+import { Select } from "@/components/ui/Select";
+import { Badge } from "@/components/ui/Badge";
+import { SkeletonCard, SkeletonText } from "@/components/ui/Skeleton";
+import { CalendarDaysIcon, SparklesIcon } from "@heroicons/react/24/outline";
 
 type PreferencesDto = {
   dietaryRestrictions: string | null;
@@ -16,7 +23,7 @@ type MealPlan = {
   startDate: string | null;
   endDate: string | null;
   planJson: string | null;
-  createdAt: string | null; // ISO
+  createdAt: string | null;
 };
 
 type StoreOption = "TRADER_JOES" | "COSTCO";
@@ -30,7 +37,6 @@ function formatDateRange(start: string | null, end: string | null) {
 
 function formatCreatedAt(iso: string | null) {
   if (!iso) return "";
-  // Keep it simple + stable (no timezone weirdness). You can prettify later.
   return iso.replace("T", " ").replace("Z", " UTC");
 }
 
@@ -56,22 +62,19 @@ export default function DashboardPage() {
     const parts: string[] = [];
     if (prefs.targetCaloriesPerDay != null) parts.push(`🎯 ${prefs.targetCaloriesPerDay} cal/day`);
     if (prefs.dietaryRestrictions) {
-      // Format dietary style nicely
       const style = prefs.dietaryRestrictions
         .split("-")
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
         .join("-");
       parts.push(`🥗 ${style}`);
     }
     if (prefs.allergies) {
-      // Format allergies nicely (semicolon-separated to comma-separated for display)
-      const allergiesList = prefs.allergies.split(";").map(a => a.trim()).join(", ");
-      parts.push(`⚠️ Allergies: ${allergiesList}`);
+      const list = prefs.allergies.split(";").map((a) => a.trim()).join(", ");
+      parts.push(`⚠️ Allergies: ${list}`);
     }
-    return parts.length ? parts.join(" · ") : "No preferences set yet.";
+    return parts.length ? parts.join(" · ") : null;
   }, [prefs]);
 
-  // Load preferences (re-runs when preferencesVersion changes)
   useEffect(() => {
     setLoadingPrefs(true);
     api
@@ -84,7 +87,6 @@ export default function DashboardPage() {
       .finally(() => setLoadingPrefs(false));
   }, [preferencesVersion]);
 
-  // Load meal plans (only on initial mount)
   useEffect(() => {
     setLoadingPlans(true);
     api
@@ -100,11 +102,8 @@ export default function DashboardPage() {
   const generateMealPlan = async () => {
     setCreating(true);
     setError(null);
-
     try {
-      const res = await api.post<MealPlan>("/api/mealplans/generate", null, {
-        params: {store,days},
-      });
+      const res = await api.post<MealPlan>("/api/mealplans/generate", null, { params: { store, days } });
       setMealplans((prev) => [res.data, ...prev]);
     } catch (err) {
       console.error("Failed to generate meal plan:", err);
@@ -117,12 +116,8 @@ export default function DashboardPage() {
   const generateMealPlanAi = async () => {
     setCreatingAi(true);
     setError(null);
-  
     try {
-      const res = await api.post<MealPlan>("/api/mealplans/generate-ai", null, {
-        params: { store, days },
-      });
-  
+      const res = await api.post<MealPlan>("/api/mealplans/generate-ai", null, { params: { store, days } });
       setMealplans((prev) => [res.data, ...prev]);
     } catch (err) {
       console.error("Failed to generate AI meal plan:", err);
@@ -131,169 +126,161 @@ export default function DashboardPage() {
       setCreatingAi(false);
     }
   };
-  
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      <div className="max-w-6xl mx-auto py-10 px-4 space-y-6">
-        {/* Title */}
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
-          <p className="text-gray-700">
-            Welcome,{" "}
-            <span className="font-semibold">{user?.name || user?.email || "friend"}</span>!
-          </p>
+    <main className="max-w-6xl mx-auto py-8 px-4 space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <p className="text-gray-500 text-sm mt-1">
+          Welcome back, <span className="font-medium text-gray-700">{user?.name || user?.email || "friend"}</span>
+        </p>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">
+          {error}
         </div>
+      )}
 
-        {/* Error */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
-            {error}
-          </div>
-        )}
-
-        {/* Row 1: Preferences + Actions */}
-        <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Preferences card */}
-          <div className="bg-white rounded-xl shadow-sm border p-6 lg:col-span-2">
-            <div className="flex items-start justify-between gap-4">
+      {/* Row 1: Preferences + Generate */}
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Preferences card */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <div className="flex items-start justify-between">
               <div>
-                <h2 className="text-lg font-medium text-gray-900">Your Preferences</h2>
-                <p className="text-sm text-gray-600 mt-1">
-                  Used to personalize meal plans and recommendations.
-                </p>
+                <CardTitle>Your Preferences</CardTitle>
+                <CardDescription>Used to personalize your meal plans.</CardDescription>
               </div>
-              <a
-                href="/settings"
-                className="text-sm font-medium text-blue-600 hover:text-blue-700 transition"
-              >
+              <Link href="/settings" className="text-sm font-medium text-brand-600 hover:text-brand-700 transition">
                 Edit
-              </a>
+              </Link>
             </div>
-
-            <div className="mt-4">
-              {loadingPrefs ? (
-                <p className="text-sm text-gray-500">Loading preferences…</p>
-              ) : prefsSummary ? (
-                <p className="text-sm text-gray-700">{prefsSummary}</p>
-              ) : (
-                <p className="text-sm text-gray-500">
-                  No preferences set. Go to <a className="text-blue-600 hover:underline" href="/settings">Settings</a>.
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Action card */}
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <h2 className="text-lg font-medium text-gray-900">Quick Actions</h2>
-            <p className="text-sm text-gray-600 mt-1">Create a plan to test the flow.</p>
-
-            {/* Store and days selector */}
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Store</label>
-                <select
-                  value={store}
-                  onChange={(e) => setStore(e.target.value as StoreOption)}
-                  className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={creating}
-                >
-                  <option value="TRADER_JOES">Trader Joe&apos;s</option>
-                  <option value="COSTCO">Costco</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Days</label>
-                <select
-                  value={days}
-                  onChange={(e) => setDays(Number(e.target.value))}
-                  className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={creating}
-                >
-                  <option value={3}>3 days</option>
-                  <option value={5}>5 days</option>
-                  <option value={7}>7 days</option>
-                  <option value={14}>14 days</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 gap-2">
-              <button
-                onClick={generateMealPlan}
-                disabled={creating || creatingAi}
-                className="w-full inline-flex justify-center items-center px-4 py-2 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
-              >
-                {creating ? "Generating..." : "Generate (Rule-based)"}
-              </button>
-
-              <button
-                onClick={generateMealPlanAi}
-                disabled={creatingAi || creating}
-                className="w-full inline-flex justify-center items-center px-4 py-2 rounded-md text-sm font-medium text-white bg-black hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition"
-              >
-                {creatingAi ? "Generating AI..." : "Generate (AI RAG)"}
-              </button>
-            </div>
-
-            <p className="mt-3 text-xs text-gray-500">
-              Next: replace this with a real “Generate” endpoint using Trader Joe’s items + preferences.
-            </p>
-          </div>
-        </section>
-
-        {/* Meal plans list */}
-        <section className="bg-white rounded-xl shadow-sm border p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-medium text-gray-900">My Meal Plans</h2>
-              <p className="text-sm text-gray-600 mt-1">
-                Your saved meal plans (latest first).
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-4">
-            {loadingPlans ? (
-              <p className="text-sm text-gray-500">Loading meal plans…</p>
-            ) : mealplans.length === 0 ? (
-              <div className="rounded-md bg-blue-50 border border-blue-200 text-blue-700 p-3 text-sm">
-                No meal plans yet. Click <span className="font-medium">Generate Meal Plan</span> to test.
-              </div>
+          </CardHeader>
+          <CardContent>
+            {loadingPrefs ? (
+              <SkeletonText lines={2} />
+            ) : prefsSummary ? (
+              <p className="text-sm text-gray-700">{prefsSummary}</p>
             ) : (
-              <ul className="divide-y divide-gray-100">
-                {mealplans.map((p) => (
-                  <li key={p.id} className="py-3">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <a
+              <p className="text-sm text-gray-400">
+                No preferences set.{" "}
+                <Link href="/settings" className="text-brand-600 hover:underline">
+                  Add them in Settings.
+                </Link>
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Generate card */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Generate Plan</CardTitle>
+            <CardDescription>Pick a store and duration.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <Select
+                id="store"
+                label="Store"
+                value={store}
+                onChange={(e) => setStore(e.target.value as StoreOption)}
+                disabled={creating || creatingAi}
+              >
+                <option value="TRADER_JOES">Trader Joe&apos;s</option>
+                <option value="COSTCO">Costco</option>
+              </Select>
+
+              <Select
+                id="days"
+                label="Duration"
+                value={days}
+                onChange={(e) => setDays(Number(e.target.value))}
+                disabled={creating || creatingAi}
+              >
+                <option value={3}>3 days</option>
+                <option value={5}>5 days</option>
+                <option value={7}>7 days</option>
+                <option value={14}>14 days</option>
+              </Select>
+
+              <div className="pt-1 space-y-2">
+                <Button
+                  variant="primary"
+                  className="w-full"
+                  onClick={generateMealPlanAi}
+                  disabled={creatingAi || creating}
+                  loading={creatingAi}
+                >
+                  <SparklesIcon className="h-4 w-4" />
+                  {creatingAi ? "Generating…" : "Generate with AI"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="w-full"
+                  onClick={generateMealPlan}
+                  disabled={creating || creatingAi}
+                  loading={creating}
+                >
+                  {creating ? "Generating…" : "Generate (Rule-based)"}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Meal plans list */}
+      <Card>
+        <CardHeader>
+          <CardTitle>My Meal Plans</CardTitle>
+          <CardDescription>Your saved plans, latest first.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loadingPlans ? (
+            <SkeletonCard className="border-0 shadow-none p-0" />
+          ) : mealplans.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center gap-3">
+              <CalendarDaysIcon className="h-10 w-10 text-gray-300" />
+              <p className="text-sm text-gray-500">No meal plans yet. Generate your first one above.</p>
+            </div>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {mealplans.map((p) => (
+                <li key={p.id} className="py-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Link
                           href={`/mealplans/${p.id}`}
-                          className="text-sm font-semibold text-gray-900 hover:underline"
+                          className="text-sm font-semibold text-gray-900 hover:text-brand-600 transition"
                         >
                           {p.title}
-                        </a>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {formatDateRange(p.startDate, p.endDate)}
-                          {p.createdAt ? ` · Created: ${formatCreatedAt(p.createdAt)}` : ""}
-                        </p>
+                        </Link>
+                        <Badge variant="success">
+                          {p.planJson ? "AI" : "Rule-based"}
+                        </Badge>
                       </div>
-
-                      <a
-                        href={`/mealplans/${p.id}`}
-                        className="text-sm text-blue-600 hover:text-blue-700 transition"
-                      >
-                        View →
-                      </a>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {formatDateRange(p.startDate, p.endDate)}
+                        {p.createdAt ? ` · ${formatCreatedAt(p.createdAt)}` : ""}
+                      </p>
                     </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </section>
-      </div>
+                    <Link
+                      href={`/mealplans/${p.id}`}
+                      className="text-sm font-medium text-brand-600 hover:text-brand-700 transition shrink-0"
+                    >
+                      View →
+                    </Link>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </main>
   );
 }
