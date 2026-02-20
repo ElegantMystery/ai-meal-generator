@@ -8,7 +8,11 @@ import OnboardingModal from "@/components/OnboardingModal";
 import Navbar from "@/components/Navbar";
 import { Skeleton } from "@/components/ui/Skeleton";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
@@ -25,13 +29,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     if (loggingOut) return;
 
+    let cancelled = false;
     const fetchUser = async () => {
       try {
         const res = await api.get("/api/auth/me");
+        if (cancelled) return;
         setUser(res.data);
         setLoading(false);
         if (res.data.onboardingCompleted === false) setShowOnboarding(true);
       } catch (err: unknown) {
+        if (cancelled) return;
         const e = err as { response?: { status?: number } };
         if (e?.response?.status === 401) {
           setLoading(false);
@@ -45,6 +52,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     };
 
     fetchUser();
+    return () => {
+      cancelled = true;
+    };
   }, [user, setUser, router, loggingOut]);
 
   const handleOnboardingComplete = () => {
@@ -92,7 +102,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen bg-surface-50">
-      <OnboardingModal isOpen={showOnboarding} onComplete={handleOnboardingComplete} />
+      <OnboardingModal
+        isOpen={showOnboarding}
+        onComplete={handleOnboardingComplete}
+      />
       <Navbar
         userName={user.name || user.email}
         onLogout={handleLogout}

@@ -7,7 +7,13 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AllergyTagInput from "@/components/AllergyTagInput";
 import { Button } from "@/components/ui/Button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/Card";
 import { Select } from "@/components/ui/Select";
 import { Input } from "@/components/ui/Input";
 import { SkeletonText } from "@/components/ui/Skeleton";
@@ -33,20 +39,28 @@ export default function SettingsPage() {
   const [targetCaloriesPerDay, setTargetCaloriesPerDay] = useState<string>("");
 
   useEffect(() => {
+    let cancelled = false;
     const load = async () => {
       try {
         const res = await api.get<PreferencesDto | null>("/api/preferences/me");
+        if (cancelled) return;
         const prefs = res.data;
         setDietaryStyle(prefs?.dietaryRestrictions ?? "");
         setAllergies(
           prefs?.allergies
-            ? prefs.allergies.split(";").map((a) => a.trim()).filter(Boolean)
-            : []
+            ? prefs.allergies
+                .split(";")
+                .map((a) => a.trim())
+                .filter(Boolean)
+            : [],
         );
         setTargetCaloriesPerDay(
-          prefs?.targetCaloriesPerDay != null ? String(prefs.targetCaloriesPerDay) : ""
+          prefs?.targetCaloriesPerDay != null
+            ? String(prefs.targetCaloriesPerDay)
+            : "",
         );
       } catch (err: unknown) {
+        if (cancelled) return;
         const e = err as { response?: { status?: number } };
         if (e?.response?.status === 401) {
           router.push("/login");
@@ -55,10 +69,13 @@ export default function SettingsPage() {
         console.error("Failed to load preferences:", err);
         toast("Failed to load preferences.", "error");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     load();
+    return () => {
+      cancelled = true;
+    };
   }, [router, toast]);
 
   const onSave = async () => {
@@ -73,7 +90,10 @@ export default function SettingsPage() {
         : null,
     };
 
-    if (payload.targetCaloriesPerDay != null && Number.isNaN(payload.targetCaloriesPerDay)) {
+    if (
+      payload.targetCaloriesPerDay != null &&
+      Number.isNaN(payload.targetCaloriesPerDay)
+    ) {
       setSaving(false);
       toast("Target calories must be a number.", "error");
       return;
@@ -110,9 +130,16 @@ export default function SettingsPage() {
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-          <p className="text-sm text-gray-500 mt-1">Personalize your meal recommendations.</p>
+          <p className="text-sm text-gray-500 mt-1">
+            Personalize your meal recommendations.
+          </p>
         </div>
-        <Button variant="primary" onClick={onSave} disabled={loading || saving} loading={saving}>
+        <Button
+          variant="primary"
+          onClick={onSave}
+          disabled={loading || saving}
+          loading={saving}
+        >
           {saving ? "Saving…" : "Save"}
         </Button>
       </div>
@@ -145,7 +172,9 @@ export default function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Preferences</CardTitle>
-          <CardDescription>Set your dietary style, allergies, and calorie target.</CardDescription>
+          <CardDescription>
+            Set your dietary style, allergies, and calorie target.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -169,7 +198,9 @@ export default function SettingsPage() {
               </Select>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Allergies</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Allergies
+                </label>
                 <AllergyTagInput
                   value={allergies}
                   onChange={setAllergies}
