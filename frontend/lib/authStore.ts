@@ -11,8 +11,8 @@ export interface User {
 }
 
 interface AuthState {
-  user: any | null;
-  setUser: (u: any | null) => void;
+  user: User | null;
+  setUser: (u: User | null) => void;
   // Counter to trigger preference refresh in dashboard
   preferencesVersion: number;
   incrementPreferencesVersion: () => void;
@@ -22,5 +22,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   setUser: (user) => set({ user }),
   preferencesVersion: 0,
-  incrementPreferencesVersion: () => set((state) => ({ preferencesVersion: state.preferencesVersion + 1 })),
+  incrementPreferencesVersion: () =>
+    set((state) => ({ preferencesVersion: state.preferencesVersion + 1 })),
 }));
