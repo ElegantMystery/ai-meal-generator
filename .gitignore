@@ -4,3 +4,7 @@
 __pycache__/
 .env
 *.pem
+infra/terraform.tfvars
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.backup
