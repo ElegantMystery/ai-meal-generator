@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { api, apiBaseUrl } from "@/lib/api";
 import { useAuthStore } from "@/lib/authStore";
 import { Button } from "@/components/ui/Button";
@@ -83,101 +84,112 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-surface-50 px-4">
-      <div className="w-full max-w-md animate-fade-in">
-        {/* Logo */}
-        <div className="flex flex-col items-center mb-8 gap-3">
-          <Link href="/" className="flex items-center gap-2.5">
+    <div className="min-h-screen flex flex-col bg-surface-50">
+      {/* Header */}
+      <header className="sticky top-0 z-40 bg-white border-b border-gray-100">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
+          <Link href="/">
             <Image
               src="/icon.png"
               alt="Whole Haul"
-              width={40}
-              height={40}
+              width={36}
+              height={36}
               className="rounded-xl"
             />
-            <Image
-              src="/whole_haul.png"
-              alt="Whole Haul"
-              width={120}
-              height={28}
-              className="object-contain"
-            />
           </Link>
-          <p className="text-sm text-gray-500">Sign in to your account</p>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 space-y-5">
-          {/* Google button */}
-          <Button
-            type="button"
-            variant="secondary"
-            size="lg"
-            className="w-full"
-            onClick={handleGoogleSignIn}
+          <Link
+            href="/"
+            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 transition"
           >
-            <GoogleIcon />
-            Continue with Google
-          </Button>
+            <ArrowLeftIcon className="h-4 w-4" />
+            Back
+          </Link>
+        </div>
+      </header>
 
-          {/* Divider */}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-gray-200" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white px-2 text-gray-400">or</span>
-            </div>
+      {/* Form */}
+      <main className="flex-1 flex items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md animate-fade-in">
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-bold text-gray-900">Welcome back</h1>
+            <p className="text-sm text-gray-500 mt-1">
+              Sign in to your account
+            </p>
           </div>
 
-          {/* Email form */}
-          <form onSubmit={handleEmailLogin} className="space-y-4">
-            <Input
-              id="email"
-              type="email"
-              label="Email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-            <Input
-              id="password"
-              type="password"
-              label="Password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-
-            {error && (
-              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
-                {error}
-              </p>
-            )}
-
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 space-y-5">
+            {/* Google button */}
             <Button
-              type="submit"
-              variant="primary"
+              type="button"
+              variant="secondary"
               size="lg"
-              loading={loading}
               className="w-full"
+              onClick={handleGoogleSignIn}
             >
-              {loading ? "Signing in…" : "Sign in with Email"}
+              <GoogleIcon />
+              Continue with Google
             </Button>
-          </form>
 
-          <p className="text-center text-sm text-gray-500">
-            Don&apos;t have an account?{" "}
-            <Link
-              href="/signup"
-              className="text-brand-600 font-medium hover:underline"
-            >
-              Sign up
-            </Link>
-          </p>
+            {/* Divider */}
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-gray-200" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-white px-2 text-gray-400">or</span>
+              </div>
+            </div>
+
+            {/* Email form */}
+            <form onSubmit={handleEmailLogin} className="space-y-4">
+              <Input
+                id="email"
+                type="email"
+                label="Email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+              <Input
+                id="password"
+                type="password"
+                label="Password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+
+              {error && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                  {error}
+                </p>
+              )}
+
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                loading={loading}
+                className="w-full"
+              >
+                {loading ? "Signing in…" : "Sign in with Email"}
+              </Button>
+            </form>
+
+            <p className="text-center text-sm text-gray-500">
+              Don&apos;t have an account?{" "}
+              <Link
+                href="/signup"
+                className="text-brand-600 font-medium hover:underline"
+              >
+                Sign up
+              </Link>
+            </p>
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }
