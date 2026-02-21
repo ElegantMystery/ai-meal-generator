@@ -49,6 +49,13 @@ resource "aws_instance" "app" {
     mkdir -p /opt/meal-gen
     chown ec2-user:ec2-user /opt/meal-gen
 
+    # Create nginx log directory (mounted from container for CloudWatch Agent)
+    mkdir -p /opt/meal-gen/nginx-logs
+    chown ec2-user:ec2-user /opt/meal-gen/nginx-logs
+
+    # Install CloudWatch Agent
+    dnf install -y amazon-cloudwatch-agent
+
     echo "Bootstrap complete"
   EOF
 

@@ -5,6 +5,7 @@ import com.mealgen.backend.auth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
@@ -45,9 +46,14 @@ public class CustomOAuth2UserService extends OidcUserService {
 
 
             // Create or update local user
+            boolean[] isNewUser = {false};
             User user = userRepository.findByEmail(email)
                     .orElseGet(() -> {
+                        isNewUser[0] = true;
+                        MDC.put("event", "SIGNUP_SUCCESS");
+                        MDC.put("provider", registrationId);
                         logger.info("Creating new user with email: {}", email);
+                        MDC.clear();
                         return User.builder()
                                 .email(email)
                                 .name(name)
@@ -74,7 +80,14 @@ public class CustomOAuth2UserService extends OidcUserService {
 
             // Save user (will update if exists, insert if new)
             User savedUser = userRepository.save(user);
-            logger.info("User saved successfully - ID: {}, email: {}", savedUser.getId(), savedUser.getEmail());
+            if (!isNewUser[0]) {
+                MDC.put("event", "OAUTH_LOGIN_SUCCESS");
+                MDC.put("provider", registrationId);
+                logger.info("User saved successfully - ID: {}, email: {}", savedUser.getId(), savedUser.getEmail());
+                MDC.clear();
+            } else {
+                logger.info("User saved successfully - ID: {}, email: {}", savedUser.getId(), savedUser.getEmail());
+            }
 
             // Return OidcUser for Spring Security
             return new DefaultOidcUser(

@@ -1,0 +1,23 @@
+{
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/opt/meal-gen/nginx-logs/access.log",
+            "log_group_name": "/meal-gen/prod/nginx",
+            "log_stream_name": "{instance_id}/nginx-access",
+            "timestamp_format": "%Y-%m-%dT%H:%M:%S%z",
+            "timezone": "UTC"
+          },
+          {
+            "file_path": "/opt/meal-gen/nginx-logs/error.log",
+            "log_group_name": "/meal-gen/prod/nginx",
+            "log_stream_name": "{instance_id}/nginx-error",
+            "timezone": "UTC"
+          }
+        ]
+      }
+    }
+  }
+}
