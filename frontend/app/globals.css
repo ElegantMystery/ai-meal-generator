@@ -9,18 +9,19 @@
   /* Fonts */
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-brand: var(--font-brand);
 
-  /* Brand green */
-  --color-brand-50:  #f0fdf4;
-  --color-brand-100: #dcfce7;
-  --color-brand-200: #bbf7d0;
-  --color-brand-300: #86efac;
-  --color-brand-400: #4ade80;
-  --color-brand-500: #22c55e;
-  --color-brand-600: #16a34a;
-  --color-brand-700: #15803d;
-  --color-brand-800: #166534;
-  --color-brand-900: #14532d;
+  /* Brand green — ink green #2E5A3D */
+  --color-brand-50:  #f0f7f3;
+  --color-brand-100: #d5eadd;
+  --color-brand-200: #add5bb;
+  --color-brand-300: #7ab899;
+  --color-brand-400: #539b77;
+  --color-brand-500: #3d7558;
+  --color-brand-600: #2e5a3d;
+  --color-brand-700: #224530;
+  --color-brand-800: #173022;
+  --color-brand-900: #0d1d14;
 
   /* Accent amber (CTAs, highlights) */
   --color-accent-50:  #fffbeb;
