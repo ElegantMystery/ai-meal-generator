@@ -187,11 +187,30 @@ resource "aws_cloudwatch_dashboard" "main" {
           title  = "Recent Auth Events"
           region = var.aws_region
           view   = "table"
-          query  = "SOURCE '/meal-gen/prod/backend' | fields @timestamp, mdc.event, mdc.provider, mdc.sourceIp, message | filter mdc.event in ['SIGNUP_SUCCESS', 'LOGIN_SUCCESS', 'OAUTH_LOGIN_SUCCESS', 'LOGIN_FAILED'] | sort @timestamp desc | limit 50"
+          query  = "SOURCE '/meal-gen/prod/backend' | fields @timestamp, mdc.event, mdc.provider, message | filter mdc.event in ['SIGNUP_SUCCESS', 'LOGIN_SUCCESS', 'OAUTH_LOGIN_SUCCESS', 'LOGIN_FAILED'] | sort @timestamp desc | limit 50"
         }
       }
     ]
   })
+}
+
+# ---------------------------------------------------------------------------
+# SNS Topic + Email Subscription for Alerts
+# ---------------------------------------------------------------------------
+
+resource "aws_sns_topic" "alerts" {
+  name = "${var.project}-${var.env}-alerts"
+
+  tags = {
+    Project = var.project
+    Env     = var.env
+  }
+}
+
+resource "aws_sns_topic_subscription" "alerts_email" {
+  topic_arn = aws_sns_topic.alerts.arn
+  protocol  = "email"
+  endpoint  = var.alert_email
 }
 
 # ---------------------------------------------------------------------------
@@ -209,12 +228,11 @@ resource "aws_cloudwatch_metric_alarm" "high_login_failures" {
   statistic           = "Sum"
   threshold           = 10
   treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
 
   tags = {
     Project = var.project
     Env     = var.env
   }
-
-  # Uncomment after creating an SNS topic for alerts:
-  # alarm_actions = [aws_sns_topic.alerts.arn]
 }

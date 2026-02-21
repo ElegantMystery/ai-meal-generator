@@ -82,6 +82,7 @@ class AuthControllerTest {
     @Test
     void signup_removesSourceIpMdcEvenWhenServiceThrows() {
         HttpServletRequest httpRequest = mock(HttpServletRequest.class);
+        when(httpRequest.getHeader("X-Forwarded-For")).thenReturn(null);
         when(httpRequest.getRemoteAddr()).thenReturn("203.0.113.1");
         when(authService.signup(any())).thenThrow(new InvalidCredentialsException("boom"));
 
@@ -133,6 +134,7 @@ class AuthControllerTest {
     @Test
     void login_removesSourceIpMdcEvenWhenServiceThrows() {
         HttpServletRequest httpRequest = mock(HttpServletRequest.class);
+        when(httpRequest.getHeader("X-Forwarded-For")).thenReturn(null);
         when(httpRequest.getRemoteAddr()).thenReturn("10.0.0.42");
         when(authService.login(any())).thenThrow(new InvalidCredentialsException("bad creds"));
 
@@ -148,14 +150,84 @@ class AuthControllerTest {
     }
 
     // -------------------------------------------------------------------------
+    // X-Forwarded-For — primary production path (behind nginx)
+    // -------------------------------------------------------------------------
+
+    @Test
+    void signup_usesXForwardedForHeaderOverRemoteAddr() {
+        HttpServletRequest httpRequest = mockHttpRequestWithXff("10.1.2.3", "172.18.0.2");
+        AuthResponse mockResponse = buildAuthResponse();
+
+        AtomicReference<String> capturedIp = new AtomicReference<>();
+        doAnswer(inv -> {
+            capturedIp.set(MDC.get("sourceIp"));
+            return mockResponse;
+        }).when(authService).signup(any(SignupRequest.class));
+
+        authController.signup(buildSignupRequest(), httpRequest);
+
+        assertThat(capturedIp.get())
+                .as("X-Forwarded-For should take priority over getRemoteAddr()")
+                .isEqualTo("10.1.2.3");
+    }
+
+    @Test
+    void signup_takesFirstIpWhenXForwardedForIsMultiValue() {
+        HttpServletRequest httpRequest = mockHttpRequestWithXff("203.0.113.5, 10.0.0.1", "172.18.0.2");
+        AuthResponse mockResponse = buildAuthResponse();
+
+        AtomicReference<String> capturedIp = new AtomicReference<>();
+        doAnswer(inv -> {
+            capturedIp.set(MDC.get("sourceIp"));
+            return mockResponse;
+        }).when(authService).signup(any(SignupRequest.class));
+
+        authController.signup(buildSignupRequest(), httpRequest);
+
+        assertThat(capturedIp.get())
+                .as("Only the first (client-originated) IP should be taken from XFF chain")
+                .isEqualTo("203.0.113.5");
+    }
+
+    @Test
+    void login_usesXForwardedForHeaderOverRemoteAddr() {
+        HttpServletRequest httpRequest = mockHttpRequestWithXff("10.1.2.3", "172.18.0.2");
+        AuthResponse mockResponse = buildAuthResponse();
+
+        AtomicReference<String> capturedIp = new AtomicReference<>();
+        doAnswer(inv -> {
+            capturedIp.set(MDC.get("sourceIp"));
+            return mockResponse;
+        }).when(authService).login(any(LoginRequest.class));
+
+        authController.login(buildLoginRequest(), httpRequest);
+
+        assertThat(capturedIp.get())
+                .as("X-Forwarded-For should take priority over getRemoteAddr()")
+                .isEqualTo("10.1.2.3");
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
+    /** Simulates request arriving directly (no reverse proxy). Falls back to getRemoteAddr(). */
     private HttpServletRequest mockHttpRequest(String remoteAddr) {
         HttpServletRequest request = mock(HttpServletRequest.class);
         HttpSession session = mock(HttpSession.class);
+        when(request.getHeader("X-Forwarded-For")).thenReturn(null);
         when(request.getRemoteAddr()).thenReturn(remoteAddr);
         when(request.getSession(true)).thenReturn(session);
+        return request;
+    }
+
+    /** Simulates request arriving via nginx with X-Forwarded-For header set. */
+    private HttpServletRequest mockHttpRequestWithXff(String xff, String remoteAddr) {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        HttpSession session = mock(HttpSession.class);
+        when(request.getHeader("X-Forwarded-For")).thenReturn(xff);
+        when(request.getSession(true)).thenReturn(session);
+        lenient().when(request.getRemoteAddr()).thenReturn(remoteAddr);
         return request;
     }
 

@@ -44,8 +44,9 @@ public class AuthService {
         User savedUser = userRepository.save(user);
         MDC.put("event", "SIGNUP_SUCCESS");
         MDC.put("provider", "local");
-        logger.info("New local user created: {}", savedUser.getEmail());
-        MDC.clear();
+        logger.info("New local user created: id={}", savedUser.getId());
+        MDC.remove("event");
+        MDC.remove("provider");
 
         return toAuthResponse(savedUser);
     }
@@ -59,8 +60,9 @@ public class AuthService {
             String provider = user.getProvider() != null ? user.getProvider() : "OAuth";
             MDC.put("event", "LOGIN_FAILED");
             MDC.put("provider", provider);
-            logger.warn("OAuth-only user attempted local login: {}", user.getEmail());
-            MDC.clear();
+            logger.warn("OAuth-only user attempted local login: id={}", user.getId());
+            MDC.remove("event");
+            MDC.remove("provider");
             throw new OAuthUserLoginException(
                 "This account uses " + provider + " sign-in. Please use the '" +
                 provider + "' button to log in."
@@ -71,15 +73,17 @@ public class AuthService {
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             MDC.put("event", "LOGIN_FAILED");
             MDC.put("provider", "local");
-            logger.warn("Failed login attempt for: {}", user.getEmail());
-            MDC.clear();
+            logger.warn("Failed login attempt: id={}", user.getId());
+            MDC.remove("event");
+            MDC.remove("provider");
             throw new InvalidCredentialsException("Invalid email or password");
         }
 
         MDC.put("event", "LOGIN_SUCCESS");
         MDC.put("provider", "local");
-        logger.info("Local user logged in: {}", user.getEmail());
-        MDC.clear();
+        logger.info("Local user logged in: id={}", user.getId());
+        MDC.remove("event");
+        MDC.remove("provider");
         return toAuthResponse(user);
     }
 

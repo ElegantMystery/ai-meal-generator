@@ -42,7 +42,7 @@ public class AuthController {
             @Valid @RequestBody SignupRequest request,
             HttpServletRequest httpRequest
     ) {
-        MDC.put("sourceIp", httpRequest.getRemoteAddr());
+        MDC.put("sourceIp", clientIp(httpRequest));
         try {
             AuthResponse response = authService.signup(request);
             setSecurityContext(response, httpRequest);
@@ -57,7 +57,7 @@ public class AuthController {
             @Valid @RequestBody LoginRequest request,
             HttpServletRequest httpRequest
     ) {
-        MDC.put("sourceIp", httpRequest.getRemoteAddr());
+        MDC.put("sourceIp", clientIp(httpRequest));
         try {
             AuthResponse response = authService.login(request);
             setSecurityContext(response, httpRequest);
@@ -65,6 +65,15 @@ public class AuthController {
         } finally {
             MDC.remove("sourceIp");
         }
+    }
+
+    /** Returns the real client IP, honouring the X-Forwarded-For header set by nginx. */
+    private static String clientIp(HttpServletRequest request) {
+        String xff = request.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            return xff.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 
     private void setSecurityContext(AuthResponse user, HttpServletRequest request) {

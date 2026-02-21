@@ -50,10 +50,6 @@ public class CustomOAuth2UserService extends OidcUserService {
             User user = userRepository.findByEmail(email)
                     .orElseGet(() -> {
                         isNewUser[0] = true;
-                        MDC.put("event", "SIGNUP_SUCCESS");
-                        MDC.put("provider", registrationId);
-                        logger.info("Creating new user with email: {}", email);
-                        MDC.clear();
                         return User.builder()
                                 .email(email)
                                 .name(name)
@@ -65,7 +61,7 @@ public class CustomOAuth2UserService extends OidcUserService {
             // Update user fields if needed (handles account linking for local users)
             boolean isLinking = user.getId() != null && "local".equals(user.getProvider());
             if (isLinking) {
-                logger.info("Linking OAuth provider {} to existing local user: {}", registrationId, email);
+                logger.info("Linking OAuth provider {} to existing local user: id={}", registrationId, user.getId());
             }
 
             if (user.getProviderId() == null || !user.getProviderId().equals(sub)) {
@@ -78,15 +74,20 @@ public class CustomOAuth2UserService extends OidcUserService {
                 user.setName(name);
             }
 
-            // Save user (will update if exists, insert if new)
+            // Save user (will update if exists, insert if new) — log after save so we have the ID
             User savedUser = userRepository.save(user);
-            if (!isNewUser[0]) {
+            if (isNewUser[0]) {
+                MDC.put("event", "SIGNUP_SUCCESS");
+                MDC.put("provider", registrationId);
+                logger.info("New OAuth user created: id={}", savedUser.getId());
+                MDC.remove("event");
+                MDC.remove("provider");
+            } else {
                 MDC.put("event", "OAUTH_LOGIN_SUCCESS");
                 MDC.put("provider", registrationId);
-                logger.info("User saved successfully - ID: {}, email: {}", savedUser.getId(), savedUser.getEmail());
-                MDC.clear();
-            } else {
-                logger.info("User saved successfully - ID: {}, email: {}", savedUser.getId(), savedUser.getEmail());
+                logger.info("OAuth user logged in: id={}", savedUser.getId());
+                MDC.remove("event");
+                MDC.remove("provider");
             }
 
             // Return OidcUser for Spring Security
