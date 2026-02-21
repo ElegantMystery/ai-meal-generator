@@ -88,6 +88,97 @@ docker run --name postgres-mealgen -e POSTGRES_DB=mealgen \
   -p 5432:5432 pgvector/pgvector:pg18
 ```
 
+## Production Observability
+
+AWS CloudWatch is the central observability layer. All resources are declared in `infra/cloudwatch.tf`.
+
+### Log Groups (30-day retention)
+
+| Log Group | Source | How |
+|-----------|--------|-----|
+| `/meal-gen/prod/backend` | Spring Boot | `awslogs` Docker driver |
+| `/meal-gen/prod/rag` | FastAPI | `awslogs` Docker driver |
+| `/meal-gen/prod/nginx` | nginx | CloudWatch Agent reads host-mounted `/opt/meal-gen/nginx-logs/` |
+
+### Tailing logs in production
+
+`docker logs` does **not** work for backend/RAG in prod (awslogs driver). Use AWS CLI:
+```bash
+aws logs tail /meal-gen/prod/backend --follow --region us-east-1
+aws logs tail /meal-gen/prod/rag     --follow --region us-east-1
+aws logs tail /meal-gen/prod/nginx   --follow --region us-east-1
+```
+
+### Auth event MDC markers
+
+Spring Boot emits structured MDC fields on every auth path — these drive CloudWatch metric filters:
+
+| `mdc.event` value | Trigger | `mdc.provider` |
+|-------------------|---------|----------------|
+| `SIGNUP_SUCCESS` | New user registered | `local` or `google` |
+| `LOGIN_SUCCESS` | Successful local login | `local` |
+| `OAUTH_LOGIN_SUCCESS` | Successful Google OAuth login | `google` |
+| `LOGIN_FAILED` | Wrong password or OAuth-only user tried local login | `local` or `google` |
+
+`mdc.sourceIp` is also set (real client IP via `X-Forwarded-For`). Log messages use user **ID only** — email addresses are never written to logs.
+
+### Custom Metrics
+
+| Metric | Namespace | Alarm |
+|--------|-----------|-------|
+| `SignupCount` | `MealGen/Auth` | — |
+| `LoginCount` | `MealGen/Auth` | — |
+| `OAuthLoginCount` | `MealGen/Auth` | — |
+| `LoginFailedCount` | `MealGen/Auth` | **MealGen-HighLoginFailures** (>10 in 5 min → SNS email) |
+| `Http2xxCount` | `MealGen/HTTP` | — |
+| `Http4xxCount` | `MealGen/HTTP` | — |
+| `Http5xxCount` | `MealGen/HTTP` | — |
+
+### Dashboard
+
+**MealGen-Prod** in CloudWatch console (us-east-1) — Auth Events chart, HTTP Status chart, Recent Auth Events live table.
+
+### Useful Logs Insights queries
+
+```
+# Recent auth events
+SOURCE '/meal-gen/prod/backend'
+| fields @timestamp, mdc.event, mdc.provider, message
+| filter mdc.event in ['SIGNUP_SUCCESS','LOGIN_SUCCESS','OAUTH_LOGIN_SUCCESS','LOGIN_FAILED']
+| sort @timestamp desc | limit 50
+
+# Signups per day
+SOURCE '/meal-gen/prod/backend'
+| filter mdc.event = 'SIGNUP_SUCCESS'
+| stats count() as signups by bin(1d)
+
+# nginx 5xx errors
+SOURCE '/meal-gen/prod/nginx'
+| fields @timestamp, uri, status, request_time
+| filter status >= 500 | sort @timestamp desc
+```
+
+### CloudWatch Agent
+
+Runs on the EC2 host; config at `cloudwatch/amazon-cloudwatch-agent.json` (deployed by CI/CD on every push).
+
+Check agent status on EC2:
+```bash
+ssh -i ~/.ssh/meal-gen-key.pem ec2-user@54.205.145.93
+sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a status
+```
+
+**On a new EC2 instance:** `user_data` in `infra/ec2.tf` installs the agent automatically. For the existing instance it was installed manually once.
+
+### Terraform — adding/changing CloudWatch resources
+
+Set `alert_email` in `infra/terraform.tfvars` (gitignored), then:
+```bash
+cd infra && terraform apply
+```
+
+To change the alert email only: `terraform apply -target=aws_sns_topic_subscription.alerts_email`
+
 ## Key Configuration
 
 ### Environment Variables (RAG)
