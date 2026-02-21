@@ -11,6 +11,7 @@ import com.mealgen.backend.auth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,7 +42,11 @@ public class AuthService {
                 .build();
 
         User savedUser = userRepository.save(user);
-        logger.info("New local user created: {}", savedUser.getEmail());
+        MDC.put("event", "SIGNUP_SUCCESS");
+        MDC.put("provider", "local");
+        logger.info("New local user created: id={}", savedUser.getId());
+        MDC.remove("event");
+        MDC.remove("provider");
 
         return toAuthResponse(savedUser);
     }
@@ -53,6 +58,11 @@ public class AuthService {
         // Check if user is OAuth-only (no password set)
         if (user.getPasswordHash() == null) {
             String provider = user.getProvider() != null ? user.getProvider() : "OAuth";
+            MDC.put("event", "LOGIN_FAILED");
+            MDC.put("provider", provider);
+            logger.warn("OAuth-only user attempted local login: id={}", user.getId());
+            MDC.remove("event");
+            MDC.remove("provider");
             throw new OAuthUserLoginException(
                 "This account uses " + provider + " sign-in. Please use the '" +
                 provider + "' button to log in."
@@ -61,10 +71,19 @@ public class AuthService {
 
         // Verify password
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+            MDC.put("event", "LOGIN_FAILED");
+            MDC.put("provider", "local");
+            logger.warn("Failed login attempt: id={}", user.getId());
+            MDC.remove("event");
+            MDC.remove("provider");
             throw new InvalidCredentialsException("Invalid email or password");
         }
 
-        logger.info("Local user logged in: {}", user.getEmail());
+        MDC.put("event", "LOGIN_SUCCESS");
+        MDC.put("provider", "local");
+        logger.info("Local user logged in: id={}", user.getId());
+        MDC.remove("event");
+        MDC.remove("provider");
         return toAuthResponse(user);
     }
 

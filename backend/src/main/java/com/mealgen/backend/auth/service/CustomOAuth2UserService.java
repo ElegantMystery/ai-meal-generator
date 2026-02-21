@@ -5,6 +5,7 @@ import com.mealgen.backend.auth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
@@ -45,9 +46,10 @@ public class CustomOAuth2UserService extends OidcUserService {
 
 
             // Create or update local user
+            boolean[] isNewUser = {false};
             User user = userRepository.findByEmail(email)
                     .orElseGet(() -> {
-                        logger.info("Creating new user with email: {}", email);
+                        isNewUser[0] = true;
                         return User.builder()
                                 .email(email)
                                 .name(name)
@@ -59,7 +61,7 @@ public class CustomOAuth2UserService extends OidcUserService {
             // Update user fields if needed (handles account linking for local users)
             boolean isLinking = user.getId() != null && "local".equals(user.getProvider());
             if (isLinking) {
-                logger.info("Linking OAuth provider {} to existing local user: {}", registrationId, email);
+                logger.info("Linking OAuth provider {} to existing local user: id={}", registrationId, user.getId());
             }
 
             if (user.getProviderId() == null || !user.getProviderId().equals(sub)) {
@@ -72,9 +74,21 @@ public class CustomOAuth2UserService extends OidcUserService {
                 user.setName(name);
             }
 
-            // Save user (will update if exists, insert if new)
+            // Save user (will update if exists, insert if new) — log after save so we have the ID
             User savedUser = userRepository.save(user);
-            logger.info("User saved successfully - ID: {}, email: {}", savedUser.getId(), savedUser.getEmail());
+            if (isNewUser[0]) {
+                MDC.put("event", "SIGNUP_SUCCESS");
+                MDC.put("provider", registrationId);
+                logger.info("New OAuth user created: id={}", savedUser.getId());
+                MDC.remove("event");
+                MDC.remove("provider");
+            } else {
+                MDC.put("event", "OAUTH_LOGIN_SUCCESS");
+                MDC.put("provider", registrationId);
+                logger.info("OAuth user logged in: id={}", savedUser.getId());
+                MDC.remove("event");
+                MDC.remove("provider");
+            }
 
             // Return OidcUser for Spring Security
             return new DefaultOidcUser(

@@ -13,6 +13,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -41,9 +42,14 @@ public class AuthController {
             @Valid @RequestBody SignupRequest request,
             HttpServletRequest httpRequest
     ) {
-        AuthResponse response = authService.signup(request);
-        setSecurityContext(response, httpRequest);
-        return ResponseEntity.ok(Map.of("user", response));
+        MDC.put("sourceIp", clientIp(httpRequest));
+        try {
+            AuthResponse response = authService.signup(request);
+            setSecurityContext(response, httpRequest);
+            return ResponseEntity.ok(Map.of("user", response));
+        } finally {
+            MDC.remove("sourceIp");
+        }
     }
 
     @PostMapping("/login")
@@ -51,9 +57,23 @@ public class AuthController {
             @Valid @RequestBody LoginRequest request,
             HttpServletRequest httpRequest
     ) {
-        AuthResponse response = authService.login(request);
-        setSecurityContext(response, httpRequest);
-        return ResponseEntity.ok(Map.of("user", response));
+        MDC.put("sourceIp", clientIp(httpRequest));
+        try {
+            AuthResponse response = authService.login(request);
+            setSecurityContext(response, httpRequest);
+            return ResponseEntity.ok(Map.of("user", response));
+        } finally {
+            MDC.remove("sourceIp");
+        }
+    }
+
+    /** Returns the real client IP, honouring the X-Forwarded-For header set by nginx. */
+    private static String clientIp(HttpServletRequest request) {
+        String xff = request.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            return xff.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 
     private void setSecurityContext(AuthResponse user, HttpServletRequest request) {
