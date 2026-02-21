@@ -34,8 +34,13 @@ export default function HomePage() {
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
-            <Image src="/icon.png" alt="Whole Haul" width={32} height={32} className="rounded-lg" />
-            <Image src="/whole_haul.png" alt="Whole Haul" width={110} height={24} className="object-contain" />
+            <Image
+              src="/icon.png"
+              alt="Whole Haul"
+              width={32}
+              height={32}
+              className="rounded-lg"
+            />
           </Link>
           <nav className="flex items-center gap-3">
             <Link
@@ -61,14 +66,25 @@ export default function HomePage() {
             <SparklesIcon className="h-3.5 w-3.5" />
             Powered by AI
           </div>
+          <div className="flex justify-center">
+            <span
+              className="font-brand text-6xl sm:text-7xl font-bold tracking-tight"
+              style={{ color: "#2e5a3d" }}
+            >
+              Whole Haul
+            </span>
+          </div>
           <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 leading-tight tracking-tight">
             Meal planning made simple.
             <br />
-            <span className="text-brand-600">Powered by your grocery store.</span>
+            <span className="text-brand-600">
+              Powered by your grocery store.
+            </span>
           </h1>
           <p className="text-lg text-gray-600 max-w-xl mx-auto">
-            Generate personalized weekly meal plans using real items from Trader Joe&apos;s and
-            Costco — with a ready-to-use shopping list and prices included.
+            Generate personalized weekly meal plans using real items from Trader
+            Joe&apos;s and Costco — with a ready-to-use shopping list and prices
+            included.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
             <Link
@@ -91,12 +107,19 @@ export default function HomePage() {
       <section className="py-20 px-4 bg-white">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12">
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">How it works</h2>
-            <p className="text-gray-500 mt-2 text-sm">Three steps to a full week of meals.</p>
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">
+              How it works
+            </h2>
+            <p className="text-gray-500 mt-2 text-sm">
+              Three steps to a full week of meals.
+            </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
             {steps.map((step, i) => (
-              <div key={i} className="flex flex-col items-center text-center gap-4">
+              <div
+                key={i}
+                className="flex flex-col items-center text-center gap-4"
+              >
                 <div className="flex items-center justify-center h-14 w-14 rounded-2xl bg-brand-100 text-brand-600">
                   <step.icon className="h-7 w-7" />
                 </div>
@@ -104,8 +127,12 @@ export default function HomePage() {
                   <p className="text-xs font-semibold text-brand-600 uppercase tracking-widest mb-1">
                     Step {i + 1}
                   </p>
-                  <h3 className="text-base font-semibold text-gray-900">{step.title}</h3>
-                  <p className="text-sm text-gray-500 mt-1 leading-relaxed">{step.description}</p>
+                  <h3 className="text-base font-semibold text-gray-900">
+                    {step.title}
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1 leading-relaxed">
+                    {step.description}
+                  </p>
                 </div>
               </div>
             ))}
@@ -151,10 +178,16 @@ export default function HomePage() {
       {/* ── Footer ── */}
       <footer className="py-6 px-4 border-t border-gray-100 bg-white">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-400">
-          <span>© {new Date().getFullYear()} Whole Haul. All rights reserved.</span>
+          <span>
+            © {new Date().getFullYear()} Whole Haul. All rights reserved.
+          </span>
           <div className="flex gap-4">
-            <Link href="/login" className="hover:text-gray-600 transition">Sign in</Link>
-            <Link href="/signup" className="hover:text-gray-600 transition">Sign up</Link>
+            <Link href="/login" className="hover:text-gray-600 transition">
+              Sign in
+            </Link>
+            <Link href="/signup" className="hover:text-gray-600 transition">
+              Sign up
+            </Link>
           </div>
         </div>
       </footer>
