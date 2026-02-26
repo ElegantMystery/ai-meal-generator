@@ -55,6 +55,12 @@ if [[ -z "${PGHOST:-}" ]] && [[ -n "${SPRING_DATASOURCE_URL:-}" ]]; then
   export PGHOST PGPORT PGDATABASE
 fi
 
+# Map Spring datasource password to PGPASSWORD if not already set
+if [[ -z "${PGPASSWORD:-}" ]] && [[ -n "${SPRING_DATASOURCE_PASSWORD:-}" ]]; then
+  PGPASSWORD="$SPRING_DATASOURCE_PASSWORD"
+  export PGPASSWORD
+fi
+
 [[ -n "${PGHOST:-}"     ]] || error "PGHOST not set"
 [[ -n "${PGPASSWORD:-}" ]] || error "PGPASSWORD not set"
 [[ -n "${RAG_SHARED_SECRET:-}" ]] || error "RAG_SHARED_SECRET not set"
@@ -72,7 +78,9 @@ log "DB host: ${PGHOST}"
 log "=== Step 2: Playwright browser install ==="
 cd "$SCRIPTS_DIR"
 npm install --prefer-offline 2>&1 || npm install 2>&1
-npx playwright install chromium --with-deps 2>&1
+# --with-deps uses apt-get which isn't available on Amazon Linux 2023;
+# OS-level deps are pre-installed via bootstrap / user_data.
+npx playwright install chromium 2>&1
 log "Playwright ready"
 
 # ---------------------------------------------------------------------------
