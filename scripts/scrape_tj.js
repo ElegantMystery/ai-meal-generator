@@ -13,11 +13,11 @@
  *   --meta    ./tj-metadata.json
  */
 
-'use strict';
+"use strict";
 
-const { chromium } = require('playwright');
-const fs = require('fs');
-const path = require('path');
+const { chromium } = require("playwright");
+const fs = require("fs");
+const path = require("path");
 
 // ---------------------------------------------------------------------------
 // CLI args
@@ -27,25 +27,25 @@ function getArg(name, fallback) {
   const idx = args.indexOf(name);
   return idx !== -1 && args[idx + 1] ? args[idx + 1] : fallback;
 }
-const OUTPUT_PATH = getArg('--output', path.join(__dirname, 'tj-items.json'));
-const META_PATH   = getArg('--meta',   path.join(__dirname, 'tj-metadata.json'));
+const OUTPUT_PATH = getArg("--output", path.join(__dirname, "tj-items.json"));
+const META_PATH = getArg("--meta", path.join(__dirname, "tj-metadata.json"));
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-const START_URL    = 'https://www.traderjoes.com/home/products/category/food-8';
-const TJ_BASE      = 'https://www.traderjoes.com';
-const MAX_CLICKS   = 200; // safety ceiling — TJ has ~1300 items, ~85 pages
+const START_URL = "https://www.traderjoes.com/home/products/category/food-8";
+const TJ_BASE = "https://www.traderjoes.com";
+const MAX_CLICKS = 200; // safety ceiling — TJ has ~1300 items, ~85 pages
 const PAGE_TIMEOUT = 60_000;
-const NAV_TIMEOUT  = 90_000;
+const NAV_TIMEOUT = 90_000;
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 function toAbsUrl(p) {
   if (!p) return null;
-  if (p.startsWith('http://') || p.startsWith('https://')) return p;
-  return TJ_BASE + (p.startsWith('/') ? p : '/' + p);
+  if (p.startsWith("http://") || p.startsWith("https://")) return p;
+  return TJ_BASE + (p.startsWith("/") ? p : "/" + p);
 }
 
 function extractImageUrl(raw) {
@@ -56,10 +56,12 @@ function extractImageUrl(raw) {
 function extractCategories(raw) {
   const hier = raw.category_hierarchy || [];
   // Skip the first entry ("Products") — start from "Food"
-  return hier
-    .slice(1)
-    .map(c => c.name)
-    .join(' > ') || null;
+  return (
+    hier
+      .slice(1)
+      .map((c) => c.name)
+      .join(" > ") || null
+  );
 }
 
 function extractPrice(raw) {
@@ -87,10 +89,10 @@ function extractIngredients(raw) {
 function extractTags(raw) {
   const tags = [];
   for (const t of raw.fun_tags || []) {
-    if (typeof t === 'string' && t.trim()) tags.push(t.trim());
+    if (typeof t === "string" && t.trim()) tags.push(t.trim());
   }
   for (const t of raw.item_characteristics || []) {
-    if (typeof t === 'string' && t.trim()) tags.push(t.trim());
+    if (typeof t === "string" && t.trim()) tags.push(t.trim());
   }
   return tags;
 }
@@ -111,12 +113,12 @@ function parseGraphQLBody(body) {
 
   // Walk the JSON tree looking for SimpleProduct nodes
   function walk(node) {
-    if (!node || typeof node !== 'object') return;
+    if (!node || typeof node !== "object") return;
     if (Array.isArray(node)) {
       for (const child of node) walk(child);
       return;
     }
-    if (node.__typename === 'SimpleProduct' && node.sku) {
+    if (node.__typename === "SimpleProduct" && node.sku) {
       items.push(node);
       return; // don't recurse into the product itself
     }
@@ -138,8 +140,8 @@ async function main() {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
     userAgent:
-      'Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 ' +
-      '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 " +
+      "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   });
   const page = await context.newPage();
   page.setDefaultTimeout(PAGE_TIMEOUT);
@@ -148,24 +150,24 @@ async function main() {
   // Collect raw product objects keyed by SKU (deduplication)
   const productsBySku = new Map();
   let networkRequests = 0;
-  let jsonResponses   = 0;
+  let jsonResponses = 0;
 
   // Intercept all network responses and capture product JSON
-  page.on('response', async (response) => {
+  page.on("response", async (response) => {
     networkRequests++;
     const url = response.url();
 
     // TJ uses a GraphQL endpoint and/or REST under /api
     const isApiCall =
-      url.includes('/graphql') ||
-      url.includes('/api/') ||
-      url.includes('traderjoes.com/home/products');
+      url.includes("/graphql") ||
+      url.includes("/api/") ||
+      url.includes("traderjoes.com/home/products");
 
     if (!isApiCall) return;
     if (response.status() !== 200) return;
 
-    const ct = response.headers()['content-type'] || '';
-    if (!ct.includes('application/json') && !ct.includes('text/plain')) return;
+    const ct = response.headers()["content-type"] || "";
+    if (!ct.includes("application/json") && !ct.includes("text/plain")) return;
 
     let body;
     try {
@@ -188,7 +190,7 @@ async function main() {
 
   // Navigate to the product listing page
   console.log(`[scrape_tj] Navigating to ${START_URL}`);
-  await page.goto(START_URL, { waitUntil: 'domcontentloaded' });
+  await page.goto(START_URL, { waitUntil: "domcontentloaded" });
 
   // Wait for initial products to load
   await page.waitForTimeout(3000);
@@ -196,18 +198,20 @@ async function main() {
   // Click "Load more results" until it's gone or we hit MAX_CLICKS
   let clickCount = 0;
   let noNewProductsCount = 0;
-  let endReason = 'max_clicks';
+  let endReason = "max_clicks";
 
   for (let i = 0; i < MAX_CLICKS; i++) {
     const countBefore = productsBySku.size;
 
     // Find the "Load more" button — TJ renders it as a <button> or <a>
-    const loadMoreBtn = page.locator(
-      'button:has-text("Load more"), ' +
-      'a:has-text("Load more"), ' +
-      '[data-testid="load-more"], ' +
-      '.load-more-button'
-    ).first();
+    const loadMoreBtn = page
+      .locator(
+        'button:has-text("Load more"), ' +
+          'a:has-text("Load more"), ' +
+          '[data-testid="load-more"], ' +
+          ".load-more-button",
+      )
+      .first();
 
     const isVisible = await loadMoreBtn.isVisible().catch(() => false);
     const isDisabled = isVisible
@@ -215,8 +219,10 @@ async function main() {
       : false;
 
     if (!isVisible || isDisabled) {
-      endReason = 'load_more_disabled';
-      console.log(`[scrape_tj] No more "Load more" button. Done after ${i} clicks.`);
+      endReason = "load_more_disabled";
+      console.log(
+        `[scrape_tj] No more "Load more" button. Done after ${i} clicks.`,
+      );
       break;
     }
 
@@ -225,20 +231,24 @@ async function main() {
       clickCount++;
     } catch (err) {
       console.warn(`[scrape_tj] Click failed: ${err.message}`);
-      endReason = 'click_error';
+      endReason = "click_error";
       break;
     }
 
-    // Wait for network to settle after click
+    // Wait for network to settle after click; cap at 5s so a hung request
+    // (e.g. stalled ad/analytics call) doesn't stall the entire loop.
     await page.waitForTimeout(2000);
-    await page.waitForLoadState('networkidle').catch(() => {});
+    await Promise.race([
+      page.waitForLoadState("networkidle"),
+      new Promise((r) => setTimeout(r, 5000)),
+    ]);
 
     const countAfter = productsBySku.size;
     if (countAfter === countBefore) {
       noNewProductsCount++;
       if (noNewProductsCount >= 3) {
-        endReason = 'no_new_products';
-        console.log('[scrape_tj] No new products after 3 clicks. Stopping.');
+        endReason = "no_new_products";
+        console.log("[scrape_tj] No new products after 3 clicks. Stopping.");
         break;
       }
     } else {
@@ -246,7 +256,9 @@ async function main() {
     }
 
     if (i % 10 === 0) {
-      console.log(`[scrape_tj] Click ${i + 1}: ${productsBySku.size} products collected`);
+      console.log(
+        `[scrape_tj] Click ${i + 1}: ${productsBySku.size} products collected`,
+      );
     }
   }
 
@@ -258,7 +270,7 @@ async function main() {
   const items = [];
   for (const [sku, raw] of productsBySku) {
     items.push({
-      store: 'TRADER_JOES',
+      store: "TRADER_JOES",
       sku,
       name: raw.item_title || raw.name || null,
       price: extractPrice(raw),
@@ -274,13 +286,13 @@ async function main() {
   if (items.length < 100) {
     console.error(
       `[scrape_tj] ERROR: Only ${items.length} items collected — ` +
-      'expected at least 100. Possible site change or block. Exiting with error.'
+        "expected at least 100. Possible site change or block. Exiting with error.",
     );
     process.exit(1);
   }
 
   // Write items
-  fs.writeFileSync(OUTPUT_PATH, JSON.stringify(items, null, 2), 'utf8');
+  fs.writeFileSync(OUTPUT_PATH, JSON.stringify(items, null, 2), "utf8");
   console.log(`[scrape_tj] Wrote ${items.length} items to ${OUTPUT_PATH}`);
 
   // Write metadata
@@ -295,12 +307,12 @@ async function main() {
     networkRequests,
     jsonResponses,
   };
-  fs.writeFileSync(META_PATH, JSON.stringify(meta, null, 2), 'utf8');
+  fs.writeFileSync(META_PATH, JSON.stringify(meta, null, 2), "utf8");
   console.log(`[scrape_tj] Metadata written to ${META_PATH}`);
-  console.log('[scrape_tj] Done.');
+  console.log("[scrape_tj] Done.");
 }
 
-main().catch(err => {
-  console.error('[scrape_tj] Fatal error:', err);
+main().catch((err) => {
+  console.error("[scrape_tj] Fatal error:", err);
   process.exit(1);
 });

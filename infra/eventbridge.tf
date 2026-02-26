@@ -54,12 +54,6 @@ resource "aws_iam_role_policy" "eventbridge_ssm_send" {
           aws_instance.app.arn,
         ]
       },
-      {
-        # Required to poll command status (EventBridge checks execution)
-        Effect   = "Allow"
-        Action   = ["ssm:GetCommandInvocation", "ssm:ListCommands"]
-        Resource = "*"
-      }
     ]
   })
 }

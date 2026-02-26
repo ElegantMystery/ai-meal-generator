@@ -40,8 +40,11 @@ cd "$WORK_DIR"
 ENV_FILE="${APP_DIR}/.env"
 [[ -f "$ENV_FILE" ]] || error ".env not found at ${ENV_FILE}"
 
-# Export only the vars we need (avoid exporting unrelated secrets)
-eval "$(grep -E '^(PGHOST|PGPORT|PGDATABASE|PGUSER|PGPASSWORD|RAG_SHARED_SECRET|SPRING_DATASOURCE_URL)=' "$ENV_FILE" | sed 's/^/export /')"
+# Source the .env file; set -a exports all variables defined within it
+set -a
+# shellcheck source=/dev/null
+source "$ENV_FILE"
+set +a
 
 # Derive PG vars from SPRING_DATASOURCE_URL if individual vars aren't set
 if [[ -z "${PGHOST:-}" ]] && [[ -n "${SPRING_DATASOURCE_URL:-}" ]]; then
@@ -79,7 +82,8 @@ log "=== Step 3: Run TJ scraper ==="
 cd "$SCRIPTS_DIR"
 node scrape_tj.js --output "${WORK_DIR}/tj-items.json" --meta "${WORK_DIR}/tj-metadata.json" 2>&1
 
-ITEM_COUNT=$(python3 -c "import json,sys; d=json.load(open('${WORK_DIR}/tj-items.json')); print(len(d))")
+ITEMS_FILE="${WORK_DIR}/tj-items.json"
+ITEM_COUNT=$(python3 -c "import json; print(len(json.load(open('${ITEMS_FILE}'))))")
 log "Scraped ${ITEM_COUNT} items"
 
 [[ "$ITEM_COUNT" -ge 100 ]] || error "Too few items scraped (${ITEM_COUNT}), aborting import"
@@ -109,11 +113,12 @@ for EMBED_TYPE in items nutrition ingredients; do
   UPDATED=1
   BATCH=0
   while [[ "$UPDATED" -gt 0 ]]; do
-    RESPONSE=$(docker exec "$RAG_CONTAINER" \
+    # Pass the secret via docker exec -e to avoid exposure in /proc/<pid>/cmdline
+    RESPONSE=$(docker exec -e _RAG_SECRET="${RAG_SHARED_SECRET}" "$RAG_CONTAINER" \
       curl -s -X POST \
         "http://localhost:8000/embed/backfill/${EMBED_TYPE}" \
         -H 'Content-Type: application/json' \
-        -H "X-RAG-SECRET: ${RAG_SHARED_SECRET}" \
+        -H "X-RAG-SECRET: ${_RAG_SECRET}" \
         -d '{"limit": 200}' 2>&1) || {
           log "WARNING: embed backfill curl failed for ${EMBED_TYPE}, skipping"
           break
