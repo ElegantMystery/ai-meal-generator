@@ -152,10 +152,10 @@ resource "aws_cloudwatch_dashboard" "main" {
           view   = "timeSeries"
           period = 300
           metrics = [
-            ["MealGen/Auth", "SignupCount",     { stat = "Sum", label = "Sign-ups",           color = "#2ca02c" }],
-            ["MealGen/Auth", "LoginCount",      { stat = "Sum", label = "Local logins",       color = "#1f77b4" }],
-            ["MealGen/Auth", "OAuthLoginCount", { stat = "Sum", label = "Google logins",      color = "#ff7f0e" }],
-            ["MealGen/Auth", "LoginFailedCount",{ stat = "Sum", label = "Failed login attempts", color = "#d62728" }]
+            ["MealGen/Auth", "SignupCount", { stat = "Sum", label = "Sign-ups", color = "#2ca02c" }],
+            ["MealGen/Auth", "LoginCount", { stat = "Sum", label = "Local logins", color = "#1f77b4" }],
+            ["MealGen/Auth", "OAuthLoginCount", { stat = "Sum", label = "Google logins", color = "#ff7f0e" }],
+            ["MealGen/Auth", "LoginFailedCount", { stat = "Sum", label = "Failed login attempts", color = "#d62728" }]
           ]
         }
       },

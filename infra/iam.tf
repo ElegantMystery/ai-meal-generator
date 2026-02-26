@@ -77,3 +77,9 @@ resource "aws_iam_instance_profile" "ec2" {
   name = "${var.project}-${var.env}-ec2-profile"
   role = aws_iam_role.ec2.name
 }
+
+# Allow EC2 to be managed by SSM (Run Command, Session Manager)
+resource "aws_iam_role_policy_attachment" "ssm_core" {
+  role       = aws_iam_role.ec2.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
