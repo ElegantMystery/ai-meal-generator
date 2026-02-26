@@ -99,14 +99,16 @@ AWS CloudWatch is the central observability layer. All resources are declared in
 | `/meal-gen/prod/backend` | Spring Boot | `awslogs` Docker driver |
 | `/meal-gen/prod/rag` | FastAPI | `awslogs` Docker driver |
 | `/meal-gen/prod/nginx` | nginx | CloudWatch Agent reads host-mounted `/opt/meal-gen/nginx-logs/` |
+| `/meal-gen/prod/scraper` | TJ scraper pipeline | SSM Run Command CloudWatch output |
 
 ### Tailing logs in production
 
 `docker logs` does **not** work for backend/RAG in prod (awslogs driver). Use AWS CLI:
 ```bash
-aws logs tail /meal-gen/prod/backend --follow --region us-east-1
-aws logs tail /meal-gen/prod/rag     --follow --region us-east-1
-aws logs tail /meal-gen/prod/nginx   --follow --region us-east-1
+aws logs tail /meal-gen/prod/backend  --follow --region us-east-1
+aws logs tail /meal-gen/prod/rag      --follow --region us-east-1
+aws logs tail /meal-gen/prod/nginx    --follow --region us-east-1
+aws logs tail /meal-gen/prod/scraper  --follow --region us-east-1
 ```
 
 ### Auth event MDC markers
@@ -168,7 +170,7 @@ ssh -i ~/.ssh/meal-gen-key.pem ec2-user@54.205.145.93
 sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a status
 ```
 
-**On a new EC2 instance:** `user_data` in `infra/ec2.tf` installs the agent automatically. For the existing instance it was installed manually once.
+**On a new EC2 instance:** `user_data` in `infra/ec2.tf` installs both CloudWatch Agent and SSM Agent automatically.
 
 ### Terraform — adding/changing CloudWatch resources
 
@@ -178,6 +180,59 @@ cd infra && terraform apply
 ```
 
 To change the alert email only: `terraform apply -target=aws_sns_topic_subscription.alerts_email`
+
+## TJ Scraper Pipeline
+
+Automated weekly pipeline that scrapes Trader Joe's catalog and keeps the database fresh.
+
+### Architecture
+
+```
+EventBridge Scheduler (cron: Sun 00:00 UTC)
+  → SSM Run Command (meal-gen-prod-tj-scraper)
+    → EC2: /opt/meal-gen/scripts/tj-scraper-pipeline.sh
+      1. Source /opt/meal-gen/.env for DB creds + RAG secret
+      2. node scrape_tj.js  → intercepts TJ GraphQL API, paginates ~85 pages
+      3. python3 import_tj.py  → upserts items into RDS
+      4. docker exec python-rag curl /embed/backfill/{items,nutrition,ingredients}
+      → Output streamed to CloudWatch: /meal-gen/prod/scraper
+```
+
+### Key files
+
+| File | Purpose |
+|------|---------|
+| `scripts/scrape_tj.js` | Playwright scraper — intercepts TJ GraphQL, outputs `tj-items.json` |
+| `scripts/tj-scraper-pipeline.sh` | Bash orchestrator run by SSM |
+| `scripts/import_tj.py` | Upserts items into RDS (`items`, `item_nutrition`, `item_ingredients`) |
+| `infra/eventbridge.tf` | EventBridge Scheduler + SSM Document + IAM role + CW log group |
+
+### Triggering manually
+
+```bash
+# Fire the pipeline immediately (without waiting for Sunday)
+aws ssm send-command \
+  --document-name meal-gen-prod-tj-scraper \
+  --instance-ids i-0853bf2e135e5201f \
+  --cloud-watch-output-config '{"CloudWatchLogGroupName":"/meal-gen/prod/scraper","CloudWatchOutputEnabled":true}' \
+  --region us-east-1
+
+# Watch output
+aws logs tail /meal-gen/prod/scraper --follow --region us-east-1
+
+# Check command status
+aws ssm list-commands --region us-east-1 --query 'Commands[0].{Status:Status,Requested:RequestedDateTime}'
+```
+
+### Disabling / changing schedule
+
+```bash
+# Disable (set scraper_enabled = false in terraform.tfvars, then apply)
+cd infra && terraform apply -target=aws_scheduler_schedule.tj_scraper
+
+# Change schedule (edit scraper_schedule_expression in terraform.tfvars)
+cd infra && terraform apply -target=aws_scheduler_schedule.tj_scraper
+```
 
 ## Key Configuration
 
