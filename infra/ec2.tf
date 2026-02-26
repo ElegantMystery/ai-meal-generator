@@ -56,6 +56,11 @@ resource "aws_instance" "app" {
     # Install CloudWatch Agent
     dnf install -y amazon-cloudwatch-agent
 
+    # Install SSM Agent (enables Run Command for scraper pipeline automation)
+    dnf install -y amazon-ssm-agent
+    systemctl enable amazon-ssm-agent
+    systemctl start amazon-ssm-agent
+
     echo "Bootstrap complete"
   EOF
 
