@@ -65,6 +65,12 @@ variable "ecr_image_count" {
   default     = 5
 }
 
+variable "db_password" {
+  description = "RDS PostgreSQL master password for meal_user"
+  type        = string
+  sensitive   = true
+}
+
 variable "alert_email" {
   description = "Email address to receive CloudWatch alarm notifications (brute-force, errors)"
   type        = string
