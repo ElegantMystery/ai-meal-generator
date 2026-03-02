@@ -56,21 +56,10 @@ resource "aws_instance" "app" {
     # Install CloudWatch Agent
     dnf install -y amazon-cloudwatch-agent
 
-    # Install SSM Agent (enables Run Command for scraper pipeline automation)
+    # Install SSM Agent (enables Session Manager for ad-hoc EC2 access)
     dnf install -y amazon-ssm-agent
     systemctl enable amazon-ssm-agent
     systemctl start amazon-ssm-agent
-
-    # Install Node.js + npm (for Playwright TJ scraper)
-    dnf install -y nodejs npm
-
-    # Install Playwright Chromium OS-level dependencies
-    # (Amazon Linux 2023 uses dnf; playwright --with-deps requires apt-get)
-    dnf install -y alsa-lib atk cups-libs gtk3 libdrm libgbm \
-      libX11 libXcomposite libXdamage libXext libXfixes libXrandr \
-      libxcb nss pango \
-      xorg-x11-fonts-100dpi xorg-x11-fonts-75dpi xorg-x11-utils \
-      xorg-x11-fonts-cyrillic xorg-x11-fonts-Type1 xorg-x11-fonts-misc
 
     echo "Bootstrap complete"
   EOF

@@ -1,0 +1,157 @@
+name: TJ Scraper Pipeline
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Every Sunday at 00:00 UTC
+  workflow_dispatch:       # Allow manual trigger
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Scrape on GitHub Actions runner (rotating IPs — not blocked by Trader Joe's)
+  # ---------------------------------------------------------------------------
+  scrape:
+    name: Scrape Trader Joe's
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: scripts/package-lock.json
+
+      - name: Install dependencies
+        working-directory: scripts
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: scripts
+        run: npx playwright install chromium --with-deps
+
+      - name: Run TJ scraper
+        run: node scripts/scrape_tj.js --output "${{ github.workspace }}/tj-items.json" --meta "${{ github.workspace }}/tj-metadata.json"
+
+      - name: Upload scraped data as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tj-items-${{ github.run_id }}
+          path: |
+            tj-items.json
+            tj-metadata.json
+          retention-days: 7
+
+      - name: Copy tj-items.json to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "tj-items.json"
+          target: /tmp/
+
+  # ---------------------------------------------------------------------------
+  # Import into RDS and backfill embeddings — runs on EC2 via SSH
+  # (EC2 has VPC access to RDS; scraping already done on GHA runner)
+  # ---------------------------------------------------------------------------
+  import-and-embed:
+    name: Import & Backfill Embeddings
+    runs-on: ubuntu-latest
+    needs: scrape
+
+    steps:
+      - name: Import items and backfill embeddings on EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 60m
+          script: |
+            set -euo pipefail
+
+            echo "[TJ-PIPELINE] === Starting import + embed backfill ==="
+
+            # Source secrets and config from .env
+            ENV_FILE="/opt/meal-gen/.env"
+            [[ -f "$ENV_FILE" ]] || { echo "ERROR: .env not found"; exit 1; }
+            set -a
+            source "$ENV_FILE"
+            set +a
+
+            # Derive PG connection vars from Spring datasource URL
+            if [[ -z "${PGHOST:-}" ]] && [[ -n "${SPRING_DATASOURCE_URL:-}" ]]; then
+              PGHOST=$(echo "$SPRING_DATASOURCE_URL" | sed -E 's|jdbc:postgresql://([^:/]+).*|\1|')
+              PGPORT=$(echo "$SPRING_DATASOURCE_URL" | sed -E 's|.*:([0-9]+)/.*|\1|')
+              PGDATABASE=$(echo "$SPRING_DATASOURCE_URL" | sed -E 's|.*/([^?]+).*|\1|')
+              export PGHOST PGPORT PGDATABASE
+            fi
+
+            if [[ -z "${PGPASSWORD:-}" ]] && [[ -n "${SPRING_DATASOURCE_PASSWORD:-}" ]]; then
+              PGPASSWORD="$SPRING_DATASOURCE_PASSWORD"
+              export PGPASSWORD
+            fi
+
+            PGUSER="${PGUSER:-meal_user}"
+            PGPORT="${PGPORT:-5432}"
+            PGDATABASE="${PGDATABASE:-mealgen}"
+            export PGUSER PGPORT PGDATABASE
+
+            [[ -n "${PGHOST:-}"         ]] || { echo "ERROR: PGHOST not set"; exit 1; }
+            [[ -n "${PGPASSWORD:-}"     ]] || { echo "ERROR: PGPASSWORD not set"; exit 1; }
+            [[ -n "${RAG_SHARED_SECRET:-}" ]] || { echo "ERROR: RAG_SHARED_SECRET not set"; exit 1; }
+
+            echo "[TJ-PIPELINE] DB host: ${PGHOST}"
+
+            # Verify the scraped file arrived
+            ITEMS_FILE="/tmp/tj-items.json"
+            [[ -f "$ITEMS_FILE" ]] || { echo "ERROR: $ITEMS_FILE not found on EC2"; exit 1; }
+            ITEM_COUNT=$(python3 -c "import json; print(len(json.load(open('${ITEMS_FILE}'))))")
+            echo "[TJ-PIPELINE] Item count in file: ${ITEM_COUNT}"
+            [[ "$ITEM_COUNT" -ge 100 ]] || { echo "ERROR: Too few items (${ITEM_COUNT})"; exit 1; }
+
+            # Activate Python venv (has psycopg2)
+            VENV_DIR="/opt/meal-gen/.venv"
+            [[ -f "${VENV_DIR}/bin/activate" ]] && source "${VENV_DIR}/bin/activate"
+
+            # Step 1: Import items into RDS
+            echo "[TJ-PIPELINE] === Step 1: Import items into database ==="
+            TJ_JSON_PATH="$ITEMS_FILE" python3 /opt/meal-gen/scripts/import_tj.py
+            echo "[TJ-PIPELINE] Database import complete"
+
+            # Step 2: Backfill embeddings via RAG container
+            echo "[TJ-PIPELINE] === Step 2: Backfill embeddings ==="
+            RAG_CONTAINER="python-rag"
+
+            for EMBED_TYPE in items nutrition ingredients; do
+              echo "[TJ-PIPELINE] Backfilling ${EMBED_TYPE} embeddings..."
+              UPDATED=1
+              BATCH=0
+              while [[ "$UPDATED" -gt 0 ]]; do
+                # Pass secret via -e so it doesn't appear in the process listing.
+                # Use bash -c with single quotes so $_ vars are expanded inside the container.
+                RESPONSE=$(docker exec \
+                  -e _RAG_SECRET="${RAG_SHARED_SECRET}" \
+                  -e _EMBED_TYPE="${EMBED_TYPE}" \
+                  "$RAG_CONTAINER" \
+                  bash -c 'curl -s -X POST "http://localhost:8000/embed/backfill/$_EMBED_TYPE" \
+                    -H "Content-Type: application/json" \
+                    -H "X-RAG-SECRET: $_RAG_SECRET" \
+                    -d "{\"limit\": 200}"') || {
+                  echo "[TJ-PIPELINE] WARNING: embed backfill curl failed for ${EMBED_TYPE}, skipping"
+                  break
+                }
+                UPDATED=$(echo "$RESPONSE" | python3 -c \
+                  "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('updated',0))" 2>/dev/null || echo 0)
+                BATCH=$((BATCH + 1))
+                echo "[TJ-PIPELINE]   ${EMBED_TYPE}: batch=${BATCH} updated=${UPDATED}"
+              done
+              echo "[TJ-PIPELINE] ${EMBED_TYPE} embeddings complete (${BATCH} batches)"
+            done
+
+            # Cleanup
+            rm -f "$ITEMS_FILE"
+            echo "[TJ-PIPELINE] === Pipeline Complete ==="
