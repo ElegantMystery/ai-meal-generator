@@ -3,10 +3,14 @@
 /**
  * scrape_tj.js — Trader Joe's product catalog scraper
  *
- * Uses playwright-extra + stealth plugin to bypass bot detection.
- * Navigates to the TJ food category page, intercepts GraphQL API responses,
- * scrolls to trigger lazy-loading / "Load more" until exhausted,
- * then writes tj-items.json and tj-metadata.json.
+ * Strategy:
+ *  1. Launch stealth Chromium and navigate to TJ's food category page.
+ *  2. Use page.route to intercept TJ's own GraphQL request and capture
+ *     its URL, headers, and body (including session cookies + any nonces).
+ *  3. Use page.evaluate to replay that exact request for every subsequent
+ *     page from within the browser context — so Akamai sees legitimate
+ *     browser traffic with valid session state, not raw Node.js fetches.
+ *  4. Fall back to scroll/click loop if no GraphQL request was captured.
  *
  * Usage:
  *   node scrape_tj.js [--output <path>] [--meta <path>]
@@ -17,7 +21,6 @@ const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 const fs = require("fs");
 const path = require("path");
 
-// Apply all stealth evasions
 chromium.use(StealthPlugin());
 
 // ---------------------------------------------------------------------------
@@ -36,7 +39,7 @@ const META_PATH = getArg("--meta", path.join(__dirname, "tj-metadata.json"));
 // ---------------------------------------------------------------------------
 const START_URL = "https://www.traderjoes.com/home/products/category/food-8";
 const TJ_BASE = "https://www.traderjoes.com";
-const MAX_ITERS = 300;   // safety ceiling for scroll/click loop
+const MAX_FALLBACK_ITERS = 150;
 const PAGE_TIMEOUT = 60_000;
 const NAV_TIMEOUT = 90_000;
 
@@ -51,7 +54,12 @@ function toAbsUrl(p) {
 
 function extractCategories(raw) {
   const hier = raw.category_hierarchy || [];
-  return hier.slice(1).map((c) => c.name).join(" > ") || null;
+  return (
+    hier
+      .slice(1)
+      .map((c) => c.name)
+      .join(" > ") || null
+  );
 }
 
 function extractPrice(raw) {
@@ -60,29 +68,50 @@ function extractPrice(raw) {
     const n = parseFloat(retail);
     if (!isNaN(n)) return n;
   }
-  try { return raw.price_range.minimum_price.final_price.value; } catch (_) {}
+  try {
+    return raw.price_range.minimum_price.final_price.value;
+  } catch (_) {}
   return null;
 }
 
+/**
+ * Walk a parsed JSON object and collect SimpleProduct nodes + page_info.
+ */
 function parseGraphQLBody(body) {
   let parsed;
-  try { parsed = JSON.parse(body); } catch (_) { return []; }
+  try {
+    parsed = JSON.parse(body);
+  } catch (_) {
+    return { items: [], pageInfo: null };
+  }
+
   const items = [];
+  let pageInfo = null;
+
   function walk(node) {
     if (!node || typeof node !== "object") return;
-    if (Array.isArray(node)) { node.forEach(walk); return; }
-    if (node.__typename === "SimpleProduct" && node.sku) { items.push(node); return; }
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    if (node.__typename === "SimpleProduct" && node.sku) {
+      items.push(node);
+      return;
+    }
+    if (!pageInfo && node.page_info && node.page_info.total_pages) {
+      pageInfo = node.page_info;
+    }
     Object.values(node).forEach(walk);
   }
   walk(parsed);
-  return items;
+  return { items, pageInfo };
 }
 
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 async function main() {
-  console.log(`[scrape_tj] Starting with stealth mode. Output: ${OUTPUT_PATH}`);
+  console.log(`[scrape_tj] Starting. Output: ${OUTPUT_PATH}`);
 
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
@@ -97,96 +126,272 @@ async function main() {
   page.setDefaultTimeout(PAGE_TIMEOUT);
   page.setDefaultNavigationTimeout(NAV_TIMEOUT);
 
-  const productsBySku = new Map();
-  let networkRequests = 0;
-  let jsonResponses = 0;
+  // Forward browser console errors to Node.js stdout for debugging
+  page.on("console", (msg) => {
+    if (msg.type() === "error") {
+      console.log(`[browser-err] ${msg.text()}`);
+    }
+  });
 
-  // Intercept GraphQL / API responses
+  const productsBySku = new Map();
+  let capturedGQLRequest = null; // { url, headers, body: parsed }
+  let capturedPageInfo = null; // { current_page, page_size, total_pages }
+
+  // Capture TJ's own GraphQL request for pagination replay
+  await page.route("**graphql**", async (route) => {
+    const request = route.request();
+    if (request.method() === "POST" && !capturedGQLRequest) {
+      const rawBody = request.postData();
+      if (rawBody) {
+        try {
+          const parsed = JSON.parse(rawBody);
+          if (parsed.variables && parsed.query) {
+            capturedGQLRequest = {
+              url: request.url(),
+              headers: request.headers(),
+              body: parsed,
+            };
+            console.log(`[scrape_tj] Captured GQL request → ${request.url()}`);
+            console.log(
+              `[scrape_tj] GQL variable keys: ${Object.keys(parsed.variables).join(", ")}`,
+            );
+          }
+        } catch (_) {}
+      }
+    }
+    await route.continue();
+  });
+
+  // Intercept responses to collect first-page products + page_info
   page.on("response", async (response) => {
-    networkRequests++;
     const url = response.url();
-    const isApi =
-      url.includes("/graphql") ||
-      url.includes("/api/") ||
-      url.includes("traderjoes.com/home/products");
+    const isApi = url.includes("graphql") || url.includes("/api/");
     if (!isApi) return;
-    if (response.status() !== 200) return;
+    if (response.status() !== 200) {
+      if (url.includes("graphql")) {
+        console.log(`[scrape_tj] GraphQL HTTP ${response.status()} ← ${url}`);
+      }
+      return;
+    }
     const ct = response.headers()["content-type"] || "";
     if (!ct.includes("application/json") && !ct.includes("text/plain")) return;
-    let body;
-    try { body = await response.text(); } catch (_) { return; }
-    const extracted = parseGraphQLBody(body);
-    if (!extracted.length) return;
-    jsonResponses++;
-    for (const raw of extracted) {
-      if (!productsBySku.has(String(raw.sku))) productsBySku.set(String(raw.sku), raw);
+    let rawBody;
+    try {
+      rawBody = await response.text();
+    } catch (_) {
+      return;
+    }
+
+    const { items, pageInfo } = parseGraphQLBody(rawBody);
+    for (const raw of items) {
+      if (!productsBySku.has(String(raw.sku)))
+        productsBySku.set(String(raw.sku), raw);
+    }
+    if (pageInfo && !capturedPageInfo) {
+      capturedPageInfo = pageInfo;
+      console.log(
+        `[scrape_tj] Page info: ${pageInfo.current_page}/${pageInfo.total_pages} (size=${pageInfo.page_size})`,
+      );
     }
   });
 
   console.log(`[scrape_tj] Navigating to ${START_URL}`);
   await page.goto(START_URL, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(5000); // let Akamai challenges resolve
+  await page.waitForTimeout(8000); // let Akamai challenges + initial GQL load complete
 
-  console.log(`[scrape_tj] Page loaded. Starting scroll/click loop...`);
+  // Unregister route handler — no longer needed after initial load
+  await page.unroute("**graphql**");
 
-  let noProgressCount = 0;
-  let iterCount = 0;
-  let endReason = "max_iters";
+  console.log(`[scrape_tj] After initial load: ${productsBySku.size} products`);
 
-  for (let i = 0; i < MAX_ITERS; i++) {
-    iterCount = i + 1;
-    const countBefore = productsBySku.size;
+  // ---------------------------------------------------------------------------
+  // Strategy A: In-browser GraphQL pagination (preferred)
+  //
+  // We replay TJ's own captured GraphQL request from within the browser's
+  // JavaScript context via page.evaluate. Akamai sees an in-page fetch with
+  // valid cookies + the same TLS fingerprint as the initial load — not a raw
+  // Node.js connection from a datacenter IP.
+  // ---------------------------------------------------------------------------
+  if (
+    capturedGQLRequest &&
+    capturedPageInfo &&
+    capturedPageInfo.total_pages > 1
+  ) {
+    const totalPages = capturedPageInfo.total_pages;
+    console.log(
+      `[scrape_tj] Paginating ${totalPages} pages via in-browser fetch...`,
+    );
 
-    // Try clicking "Load more" button (text may vary)
-    const loadMoreBtn = page.locator(
-      'button:has-text("Load more"), ' +
-      'a:has-text("Load more"), ' +
-      '[data-testid="load-more"], ' +
-      ".load-more-button, " +
-      'button:has-text("Show more"), ' +
-      'button:has-text("View more")'
-    ).first();
-
-    const isVisible = await loadMoreBtn.isVisible().catch(() => false);
-    if (isVisible) {
-      const isDisabled = await loadMoreBtn.isDisabled().catch(() => false);
-      if (!isDisabled) {
-        try { await loadMoreBtn.click(); } catch (_) {}
-      }
-    } else {
-      // Scroll to bottom to trigger infinite scroll / lazy loading
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    // Only forward app-level headers; cookies are sent automatically
+    const safeHeaders = {};
+    for (const h of [
+      "store",
+      "content-currency",
+      "x-magento-cache-id",
+      "x-requested-with",
+    ]) {
+      if (capturedGQLRequest.headers[h])
+        safeHeaders[h] = capturedGQLRequest.headers[h];
     }
 
-    await page.waitForTimeout(2000);
-    await Promise.race([
-      page.waitForLoadState("networkidle"),
-      new Promise((r) => setTimeout(r, 5000)),
-    ]);
+    const moreItems = await page.evaluate(
+      async ({ gqlUrl, extraHeaders, gqlBody, startPage, endPage }) => {
+        const collected = [];
 
-    const countAfter = productsBySku.size;
+        function walk(node) {
+          if (!node || typeof node !== "object") return;
+          if (Array.isArray(node)) {
+            node.forEach(walk);
+            return;
+          }
+          if (node.__typename === "SimpleProduct" && node.sku) {
+            collected.push(node);
+            return;
+          }
+          Object.values(node).forEach(walk);
+        }
 
-    if (i % 10 === 0) {
-      console.log(`[scrape_tj] Iter ${i + 1}: ${productsBySku.size} products, ${networkRequests} net reqs, ${jsonResponses} JSON responses`);
+        for (let p = startPage; p <= endPage; p++) {
+          try {
+            const body = JSON.parse(JSON.stringify(gqlBody));
+            if (body.variables) {
+              // Handle both currentPage and page variable names
+              if ("currentPage" in body.variables)
+                body.variables.currentPage = p;
+              else if ("page" in body.variables) body.variables.page = p;
+              else if ("pageNumber" in body.variables)
+                body.variables.pageNumber = p;
+            }
+
+            const ac = new AbortController();
+            const timer = setTimeout(() => ac.abort(), 30_000);
+            let resp;
+            try {
+              resp = await fetch(gqlUrl, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                  ...extraHeaders,
+                },
+                body: JSON.stringify(body),
+                credentials: "include",
+                signal: ac.signal,
+              });
+            } finally {
+              clearTimeout(timer);
+            }
+
+            if (!resp.ok) {
+              console.log(`[scrape_tj] Page ${p}: HTTP ${resp.status}`);
+              if (resp.status === 403) break;
+              continue;
+            }
+
+            const data = await resp.json();
+            const sizeBefore = collected.length;
+            walk(data);
+            console.log(
+              `[scrape_tj] Page ${p}/${endPage}: +${collected.length - sizeBefore} items (total ${collected.length})`,
+            );
+          } catch (e) {
+            console.log(`[scrape_tj] Page ${p} error: ${e.message}`);
+          }
+        }
+
+        return collected;
+      },
+      {
+        gqlUrl: capturedGQLRequest.url,
+        extraHeaders: safeHeaders,
+        gqlBody: capturedGQLRequest.body,
+        startPage: 2,
+        endPage: totalPages,
+      },
+    );
+
+    console.log(
+      `[scrape_tj] In-browser pagination: ${moreItems.length} additional items`,
+    );
+    for (const raw of moreItems) {
+      if (!productsBySku.has(String(raw.sku)))
+        productsBySku.set(String(raw.sku), raw);
     }
 
-    if (countAfter === countBefore) {
-      noProgressCount++;
-      if (noProgressCount >= 5) {
-        endReason = "no_new_products";
-        console.log(`[scrape_tj] No new products after 5 iters. Done at iter ${i + 1}.`);
-        break;
-      }
+    // ---------------------------------------------------------------------------
+    // Strategy B: Scroll / "Load more" fallback
+    // ---------------------------------------------------------------------------
+  } else {
+    if (!capturedGQLRequest) {
+      console.log(
+        "[scrape_tj] No GQL request captured — falling back to scroll/click loop",
+      );
     } else {
-      noProgressCount = 0;
+      console.log(
+        "[scrape_tj] Single page or no page_info — scroll/click loop",
+      );
+    }
+
+    let noProgressCount = 0;
+
+    for (let i = 0; i < MAX_FALLBACK_ITERS; i++) {
+      const countBefore = productsBySku.size;
+
+      const loadMoreBtn = page
+        .locator(
+          'button:has-text("Load more"), a:has-text("Load more"), ' +
+            '[data-testid="load-more"], .load-more-button, ' +
+            'button:has-text("Show more"), button:has-text("View more")',
+        )
+        .first();
+
+      const isVisible = await loadMoreBtn.isVisible().catch(() => false);
+      if (isVisible) {
+        const isDisabled = await loadMoreBtn.isDisabled().catch(() => false);
+        if (!isDisabled) {
+          try {
+            await loadMoreBtn.click();
+          } catch (_) {}
+        }
+      } else {
+        await page.evaluate(() =>
+          window.scrollTo(0, document.body.scrollHeight),
+        );
+      }
+
+      await page.waitForTimeout(3000);
+      await Promise.race([
+        page.waitForLoadState("networkidle"),
+        new Promise((r) => setTimeout(r, 6000)),
+      ]);
+
+      const countAfter = productsBySku.size;
+
+      if (i % 10 === 0) {
+        console.log(
+          `[scrape_tj] Scroll iter ${i + 1}: ${productsBySku.size} products`,
+        );
+      }
+
+      if (countAfter === countBefore) {
+        noProgressCount++;
+        if (noProgressCount >= 8) {
+          console.log(
+            `[scrape_tj] No new products for 8 iters. Done at iter ${i + 1}.`,
+          );
+          break;
+        }
+      } else {
+        noProgressCount = 0;
+      }
     }
   }
 
   await browser.close();
 
-  console.log(`[scrape_tj] Loop ended (${endReason}). Building output...`);
-  console.log(`[scrape_tj] Network requests: ${networkRequests}, JSON responses: ${jsonResponses}`);
-
+  // ---------------------------------------------------------------------------
+  // Build and write output
+  // ---------------------------------------------------------------------------
   const items = [];
   for (const [sku, raw] of productsBySku) {
     items.push({
@@ -202,10 +407,11 @@ async function main() {
     });
   }
 
+  console.log(`[scrape_tj] Total items collected: ${items.length}`);
+
   if (items.length < 100) {
     console.error(
-      `[scrape_tj] ERROR: Only ${items.length} items collected — ` +
-      "expected at least 100. Stealth evasion may have failed. Exiting."
+      `[scrape_tj] ERROR: Only ${items.length} items — expected at least 100. Exiting.`,
     );
     process.exit(1);
   }
@@ -215,11 +421,6 @@ async function main() {
 
   const meta = {
     totalProducts: items.length,
-    endReason,
-    iterations: iterCount,
-    networkRequests,
-    jsonResponses,
-    startUrl: START_URL,
     timestamp: new Date().toISOString(),
   };
   fs.writeFileSync(META_PATH, JSON.stringify(meta, null, 2), "utf8");
