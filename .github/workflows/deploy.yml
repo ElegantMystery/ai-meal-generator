@@ -87,7 +87,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "docker-compose.prod.yml,nginx/,cloudwatch/,scripts/scrape_tj.js,scripts/tj-scraper-pipeline.sh,scripts/import_tj.py,scripts/package.json,scripts/package-lock.json"
+          source: "docker-compose.prod.yml,nginx/,cloudwatch/,scripts/import_tj.py"
           target: /opt/meal-gen/
 
       # SSH in, pull new images, rolling restart
@@ -144,10 +144,6 @@ jobs:
             sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
               -a fetch-config -m ec2 \
               -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
-
-            echo "==> Setting up scraper scripts"
-            mkdir -p /opt/meal-gen/scripts
-            chmod +x /opt/meal-gen/scripts/tj-scraper-pipeline.sh
 
             echo "==> Pruning old images"
             docker image prune -f

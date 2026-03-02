@@ -76,14 +76,3 @@ variable "alert_email" {
   type        = string
 }
 
-variable "scraper_schedule_expression" {
-  description = "EventBridge Scheduler cron expression for the TJ scraper pipeline (UTC)"
-  type        = string
-  default     = "cron(0 0 ? * SUN *)" # Every Sunday at 00:00 UTC
-}
-
-variable "scraper_enabled" {
-  description = "Whether the TJ scraper EventBridge schedule is enabled"
-  type        = bool
-  default     = true
-}
