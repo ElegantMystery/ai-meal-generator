@@ -137,32 +137,12 @@ async function main() {
   let capturedGQLRequest = null; // { url, headers, body: parsed }
   let capturedPageInfo = null; // { current_page, page_size, total_pages }
 
-  // Capture TJ's own GraphQL request for pagination replay
-  await page.route("**graphql**", async (route) => {
-    const request = route.request();
-    if (request.method() === "POST" && !capturedGQLRequest) {
-      const rawBody = request.postData();
-      if (rawBody) {
-        try {
-          const parsed = JSON.parse(rawBody);
-          if (parsed.variables && parsed.query) {
-            capturedGQLRequest = {
-              url: request.url(),
-              headers: request.headers(),
-              body: parsed,
-            };
-            console.log(`[scrape_tj] Captured GQL request → ${request.url()}`);
-            console.log(
-              `[scrape_tj] GQL variable keys: ${Object.keys(parsed.variables).join(", ")}`,
-            );
-          }
-        } catch (_) {}
-      }
-    }
-    await route.continue();
-  });
-
-  // Intercept responses to collect first-page products + page_info
+  // Intercept responses to collect first-page products and capture the
+  // request template for pagination replay.
+  //
+  // We correlate request + response via response.request() so we only capture
+  // the query that actually returns paginated products — not an early init
+  // query with empty variables.
   page.on("response", async (response) => {
     const url = response.url();
     const isApi = url.includes("graphql") || url.includes("/api/");
@@ -187,20 +167,40 @@ async function main() {
       if (!productsBySku.has(String(raw.sku)))
         productsBySku.set(String(raw.sku), raw);
     }
-    if (pageInfo && !capturedPageInfo) {
+
+    // Capture request template only from a response that has both products
+    // and pagination info — this is definitely the paginated product query.
+    if (items.length > 0 && pageInfo && !capturedGQLRequest) {
+      const req = response.request();
+      if (req.method() === "POST") {
+        const rawReqBody = req.postData();
+        if (rawReqBody) {
+          try {
+            const parsed = JSON.parse(rawReqBody);
+            capturedGQLRequest = {
+              url: req.url(),
+              headers: req.headers(),
+              body: parsed,
+            };
+            capturedPageInfo = pageInfo;
+            console.log(
+              `[scrape_tj] Template captured: ${items.length} items, ` +
+                `page ${pageInfo.current_page}/${pageInfo.total_pages}`,
+            );
+            console.log(
+              `[scrape_tj] GQL variable keys: ${Object.keys(parsed.variables || {}).join(", ")}`,
+            );
+          } catch (_) {}
+        }
+      }
+    } else if (pageInfo && !capturedPageInfo) {
       capturedPageInfo = pageInfo;
-      console.log(
-        `[scrape_tj] Page info: ${pageInfo.current_page}/${pageInfo.total_pages} (size=${pageInfo.page_size})`,
-      );
     }
   });
 
   console.log(`[scrape_tj] Navigating to ${START_URL}`);
   await page.goto(START_URL, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(8000); // let Akamai challenges + initial GQL load complete
-
-  // Unregister route handler — no longer needed after initial load
-  await page.unroute("**graphql**");
 
   console.log(`[scrape_tj] After initial load: ${productsBySku.size} products`);
 
