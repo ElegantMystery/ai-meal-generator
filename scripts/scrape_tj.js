@@ -1,21 +1,15 @@
+"use strict";
+
 /**
- * scrape_tj.js — Trader Joe's product catalog scraper
+ * scrape_tj.js — Trader Joe's product catalog fetcher
  *
- * Navigates to the TJ food category page, intercepts GraphQL API responses
- * that contain product data, clicks "Load more results" until exhausted,
- * then writes tj-items.json and tj-metadata.json.
+ * Queries TJ's GraphQL API directly (no browser required).
+ * Paginates through all pages and writes tj-items.json.
  *
  * Usage:
  *   node scrape_tj.js [--output <path>] [--meta <path>]
- *
- * Defaults:
- *   --output  ./tj-items.json
- *   --meta    ./tj-metadata.json
  */
 
-"use strict";
-
-const { chromium } = require("playwright");
 const fs = require("fs");
 const path = require("path");
 
@@ -33,11 +27,46 @@ const META_PATH = getArg("--meta", path.join(__dirname, "tj-metadata.json"));
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-const START_URL = "https://www.traderjoes.com/home/products/category/food-8";
+const GRAPHQL_URL = "https://www.traderjoes.com/api/graphql";
+const STORE_CODE = "701"; // Chicago South Loop — representative catalog
+const PAGE_SIZE = 100;
+const MAX_PAGES = 200; // safety ceiling
 const TJ_BASE = "https://www.traderjoes.com";
-const MAX_CLICKS = 200; // safety ceiling — TJ has ~1300 items, ~85 pages
-const PAGE_TIMEOUT = 60_000;
-const NAV_TIMEOUT = 90_000;
+
+// ---------------------------------------------------------------------------
+// GraphQL query — mirrors the fields used by import_tj.py
+// ---------------------------------------------------------------------------
+const SEARCH_PRODUCTS_QUERY = `
+  query SearchProducts($pageSize: Int, $currentPage: Int, $storeCode: String, $published: String) {
+    products(
+      filter: { store_code: { eq: $storeCode }, published: { eq: $published } }
+      pageSize: $pageSize
+      currentPage: $currentPage
+    ) {
+      items {
+        sku
+        item_title
+        primary_image
+        primary_image_meta { url }
+        retail_price
+        sales_size
+        sales_uom_description
+        category_hierarchy { name }
+        fun_tags
+        item_characteristics
+        item_description
+        item_story_qil
+        alignment_simple_description
+      }
+      page_info {
+        current_page
+        page_size
+        total_pages
+      }
+      total_count
+    }
+  }
+`;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -48,20 +77,9 @@ function toAbsUrl(p) {
   return TJ_BASE + (p.startsWith("/") ? p : "/" + p);
 }
 
-function extractImageUrl(raw) {
-  const pim = raw.primary_image_meta || {};
-  return toAbsUrl(pim.url || raw.primary_image || null);
-}
-
 function extractCategories(raw) {
   const hier = raw.category_hierarchy || [];
-  // Skip the first entry ("Products") — start from "Food"
-  return (
-    hier
-      .slice(1)
-      .map((c) => c.name)
-      .join(" > ") || null
-  );
+  return hier.map((c) => c.name).join(" > ") || null;
 }
 
 function extractPrice(raw) {
@@ -70,65 +88,39 @@ function extractPrice(raw) {
     const n = parseFloat(retail);
     if (!isNaN(n)) return n;
   }
-  try {
-    return raw.price_range.minimum_price.final_price.value;
-  } catch (_) {
-    return null;
-  }
+  return null;
 }
 
-function extractNutrition(raw) {
-  // TJ embeds nutrition as a text block in `nutritional_info` or similar fields
-  return raw.nutritional_info || raw.nutrition_text || null;
-}
+async function fetchPage(currentPage) {
+  const res = await fetch(GRAPHQL_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent":
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    },
+    body: JSON.stringify({
+      query: SEARCH_PRODUCTS_QUERY,
+      variables: {
+        storeCode: STORE_CODE,
+        published: "1",
+        pageSize: PAGE_SIZE,
+        currentPage,
+      },
+    }),
+  });
 
-function extractIngredients(raw) {
-  return raw.ingredients || null;
-}
-
-function extractTags(raw) {
-  const tags = [];
-  for (const t of raw.fun_tags || []) {
-    if (typeof t === "string" && t.trim()) tags.push(t.trim());
-  }
-  for (const t of raw.item_characteristics || []) {
-    if (typeof t === "string" && t.trim()) tags.push(t.trim());
-  }
-  return tags;
-}
-
-/**
- * Parse a GraphQL response body and extract SimpleProduct records.
- * Returns an array of normalised item objects (may be empty).
- */
-function parseGraphQLBody(body) {
-  let parsed;
-  try {
-    parsed = JSON.parse(body);
-  } catch (_) {
-    return [];
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} on page ${currentPage}`);
   }
 
-  const items = [];
-
-  // Walk the JSON tree looking for SimpleProduct nodes
-  function walk(node) {
-    if (!node || typeof node !== "object") return;
-    if (Array.isArray(node)) {
-      for (const child of node) walk(child);
-      return;
-    }
-    if (node.__typename === "SimpleProduct" && node.sku) {
-      items.push(node);
-      return; // don't recurse into the product itself
-    }
-    for (const val of Object.values(node)) {
-      walk(val);
-    }
+  const json = await res.json();
+  if (json.errors) {
+    throw new Error(`GraphQL errors: ${JSON.stringify(json.errors)}`);
   }
 
-  walk(parsed);
-  return items;
+  return json.data.products;
 }
 
 // ---------------------------------------------------------------------------
@@ -136,136 +128,39 @@ function parseGraphQLBody(body) {
 // ---------------------------------------------------------------------------
 async function main() {
   console.log(`[scrape_tj] Starting. Output: ${OUTPUT_PATH}`);
+  console.log(`[scrape_tj] Querying ${GRAPHQL_URL} (store: ${STORE_CODE})`);
 
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({
-    userAgent:
-      "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 " +
-      "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  });
-  const page = await context.newPage();
-  page.setDefaultTimeout(PAGE_TIMEOUT);
-  page.setDefaultNavigationTimeout(NAV_TIMEOUT);
-
-  // Collect raw product objects keyed by SKU (deduplication)
   const productsBySku = new Map();
-  let networkRequests = 0;
-  let jsonResponses = 0;
+  let totalPages = null;
+  let totalCount = null;
 
-  // Intercept all network responses and capture product JSON
-  page.on("response", async (response) => {
-    networkRequests++;
-    const url = response.url();
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const data = await fetchPage(page);
 
-    // TJ uses a GraphQL endpoint and/or REST under /api
-    const isApiCall =
-      url.includes("/graphql") ||
-      url.includes("/api/") ||
-      url.includes("traderjoes.com/home/products");
-
-    if (!isApiCall) return;
-    if (response.status() !== 200) return;
-
-    const ct = response.headers()["content-type"] || "";
-    if (!ct.includes("application/json") && !ct.includes("text/plain")) return;
-
-    let body;
-    try {
-      body = await response.text();
-    } catch (_) {
-      return;
+    if (totalPages === null) {
+      totalPages = data.page_info.total_pages;
+      totalCount = data.total_count;
+      console.log(
+        `[scrape_tj] Total: ${totalCount} items across ${totalPages} pages`,
+      );
     }
 
-    const extracted = parseGraphQLBody(body);
-    if (extracted.length === 0) return;
-
-    jsonResponses++;
-    for (const raw of extracted) {
+    for (const raw of data.items || []) {
       const sku = String(raw.sku);
       if (!productsBySku.has(sku)) {
         productsBySku.set(sku, raw);
       }
     }
-  });
 
-  // Navigate to the product listing page
-  console.log(`[scrape_tj] Navigating to ${START_URL}`);
-  await page.goto(START_URL, { waitUntil: "domcontentloaded" });
+    console.log(
+      `[scrape_tj] Page ${page}/${totalPages}: ${productsBySku.size} unique items so far`,
+    );
 
-  // Wait for initial products to load
-  await page.waitForTimeout(3000);
-
-  // Click "Load more results" until it's gone or we hit MAX_CLICKS
-  let clickCount = 0;
-  let noNewProductsCount = 0;
-  let endReason = "max_clicks";
-
-  for (let i = 0; i < MAX_CLICKS; i++) {
-    const countBefore = productsBySku.size;
-
-    // Find the "Load more" button — TJ renders it as a <button> or <a>
-    const loadMoreBtn = page
-      .locator(
-        'button:has-text("Load more"), ' +
-          'a:has-text("Load more"), ' +
-          '[data-testid="load-more"], ' +
-          ".load-more-button",
-      )
-      .first();
-
-    const isVisible = await loadMoreBtn.isVisible().catch(() => false);
-    const isDisabled = isVisible
-      ? await loadMoreBtn.isDisabled().catch(() => false)
-      : false;
-
-    if (!isVisible || isDisabled) {
-      endReason = "load_more_disabled";
-      console.log(
-        `[scrape_tj] No more "Load more" button. Done after ${i} clicks.`,
-      );
-      break;
-    }
-
-    try {
-      await loadMoreBtn.click();
-      clickCount++;
-    } catch (err) {
-      console.warn(`[scrape_tj] Click failed: ${err.message}`);
-      endReason = "click_error";
-      break;
-    }
-
-    // Wait for network to settle after click; cap at 5s so a hung request
-    // (e.g. stalled ad/analytics call) doesn't stall the entire loop.
-    await page.waitForTimeout(2000);
-    await Promise.race([
-      page.waitForLoadState("networkidle"),
-      new Promise((r) => setTimeout(r, 5000)),
-    ]);
-
-    const countAfter = productsBySku.size;
-    if (countAfter === countBefore) {
-      noNewProductsCount++;
-      if (noNewProductsCount >= 3) {
-        endReason = "no_new_products";
-        console.log("[scrape_tj] No new products after 3 clicks. Stopping.");
-        break;
-      }
-    } else {
-      noNewProductsCount = 0;
-    }
-
-    if (i % 10 === 0) {
-      console.log(
-        `[scrape_tj] Click ${i + 1}: ${productsBySku.size} products collected`,
-      );
-    }
+    if (page >= totalPages) break;
   }
 
-  await browser.close();
-
   // ---------------------------------------------------------------------------
-  // Build output array in the format import_tj.py expects
+  // Build output in the format import_tj.py expects
   // ---------------------------------------------------------------------------
   const items = [];
   for (const [sku, raw] of productsBySku) {
@@ -276,36 +171,30 @@ async function main() {
       price: extractPrice(raw),
       weight: null,
       categories: extractCategories(raw),
-      nutrition: extractNutrition(raw),
-      ingredients: extractIngredients(raw),
+      nutrition: null,
+      ingredients: null,
       raw,
     });
   }
 
-  // Sanity check
   if (items.length < 100) {
     console.error(
       `[scrape_tj] ERROR: Only ${items.length} items collected — ` +
-        "expected at least 100. Possible site change or block. Exiting with error.",
+        "expected at least 100. Possible API change. Exiting with error.",
     );
     process.exit(1);
   }
 
-  // Write items
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(items, null, 2), "utf8");
   console.log(`[scrape_tj] Wrote ${items.length} items to ${OUTPUT_PATH}`);
 
-  // Write metadata
   const meta = {
     totalProducts: items.length,
-    endReason,
-    scrollIterations: clickCount + 1,
-    loadMoreClickedCount: clickCount,
-    noNewProductsCount,
-    startUrl: START_URL,
+    totalCount,
+    totalPages,
+    storeCode: STORE_CODE,
+    graphqlUrl: GRAPHQL_URL,
     timestamp: new Date().toISOString(),
-    networkRequests,
-    jsonResponses,
   };
   fs.writeFileSync(META_PATH, JSON.stringify(meta, null, 2), "utf8");
   console.log(`[scrape_tj] Metadata written to ${META_PATH}`);

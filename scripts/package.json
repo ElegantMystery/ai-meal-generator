@@ -9,8 +9,5 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
-  "dependencies": {
-    "playwright": "^1.57.0"
-  }
+  "type": "commonjs"
 }
