@@ -32,26 +32,28 @@ jobs:
         working-directory: scripts
         run: npx playwright install chromium --with-deps
 
-      - name: Run TJ scraper
-        run: node scripts/scrape_tj.js --output "${{ github.workspace }}/tj-items.json" --meta "${{ github.workspace }}/tj-metadata.json"
+      - name: Write SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > /home/runner/.ssh/meal-gen-key.pem
+          chmod 600 /home/runner/.ssh/meal-gen-key.pem
+
+      - name: Run pipeline (scrape + upload to EC2)
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ec2-user
+          EC2_KEY: /home/runner/.ssh/meal-gen-key.pem
+          EC2_DEST: /tmp
+        run: bash scripts/tj/run_pipeline.sh
 
       - name: Upload scraped data as artifact
         uses: actions/upload-artifact@v4
         with:
           name: tj-items-${{ github.run_id }}
           path: |
-            tj-items.json
-            tj-metadata.json
+            scripts/tj/tj-items.json
+            scripts/tj/tj-metadata.json
           retention-days: 7
-
-      - name: Copy tj-items.json to EC2
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "tj-items.json"
-          target: /tmp/
 
   # ---------------------------------------------------------------------------
   # Import into RDS and backfill embeddings — runs on EC2 via SSH
@@ -119,7 +121,7 @@ jobs:
 
             # Step 1: Import items into RDS
             echo "[TJ-PIPELINE] === Step 1: Import items into database ==="
-            TJ_JSON_PATH="$ITEMS_FILE" python3 /opt/meal-gen/scripts/import_tj.py
+            TJ_JSON_PATH="$ITEMS_FILE" python3 /opt/meal-gen/scripts/tj/import_tj.py
             echo "[TJ-PIPELINE] Database import complete"
 
             # Step 2: Backfill embeddings via RAG container

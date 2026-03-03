@@ -1,20 +1,19 @@
-"use strict";
-
 /**
  * scrape_tj.js — Trader Joe's product catalog scraper
  *
- * Strategy:
- *  1. Launch stealth Chromium and navigate to TJ's food category page.
- *  2. Use page.route to intercept TJ's own GraphQL request and capture
- *     its URL, headers, and body (including session cookies + any nonces).
- *  3. Use page.evaluate to replay that exact request for every subsequent
- *     page from within the browser context — so Akamai sees legitimate
- *     browser traffic with valid session state, not raw Node.js fetches.
- *  4. Fall back to scroll/click loop if no GraphQL request was captured.
+ * Navigates to the TJ food category page, intercepts GraphQL API responses
+ * that contain product data, clicks "Load more results" until exhausted,
+ * then writes tj-items.json and tj-metadata.json.
  *
  * Usage:
  *   node scrape_tj.js [--output <path>] [--meta <path>]
+ *
+ * Defaults:
+ *   --output  ./tj-items.json
+ *   --meta    ./tj-metadata.json
  */
+
+"use strict";
 
 const { chromium } = require("playwright-extra");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
@@ -39,7 +38,7 @@ const META_PATH = getArg("--meta", path.join(__dirname, "tj-metadata.json"));
 // ---------------------------------------------------------------------------
 const START_URL = "https://www.traderjoes.com/home/products/category/food-8";
 const TJ_BASE = "https://www.traderjoes.com";
-const MAX_FALLBACK_ITERS = 150;
+const MAX_CLICKS = 200; // safety ceiling — TJ has ~1300 items, ~85 pages
 const PAGE_TIMEOUT = 60_000;
 const NAV_TIMEOUT = 90_000;
 
@@ -52,8 +51,14 @@ function toAbsUrl(p) {
   return TJ_BASE + (p.startsWith("/") ? p : "/" + p);
 }
 
+function extractImageUrl(raw) {
+  const pim = raw.primary_image_meta || {};
+  return toAbsUrl(pim.url || raw.primary_image || null);
+}
+
 function extractCategories(raw) {
   const hier = raw.category_hierarchy || [];
+  // Skip the first entry ("Products") — start from "Food"
   return (
     hier
       .slice(1)
@@ -70,28 +75,51 @@ function extractPrice(raw) {
   }
   try {
     return raw.price_range.minimum_price.final_price.value;
-  } catch (_) {}
-  return null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function extractNutrition(raw) {
+  // TJ embeds nutrition as a text block in `nutritional_info` or similar fields
+  return raw.nutritional_info || raw.nutrition_text || null;
+}
+
+function extractIngredients(raw) {
+  return raw.ingredients || null;
+}
+
+function extractTags(raw) {
+  const tags = [];
+  for (const t of raw.fun_tags || []) {
+    if (typeof t === "string" && t.trim()) tags.push(t.trim());
+  }
+  for (const t of raw.item_characteristics || []) {
+    if (typeof t === "string" && t.trim()) tags.push(t.trim());
+  }
+  return tags;
 }
 
 /**
- * Walk a parsed JSON object and collect SimpleProduct nodes + page_info.
+ * Parse a GraphQL response body and extract SimpleProduct records.
+ * Returns an array of normalised item objects (may be empty).
  */
 function parseGraphQLBody(body) {
   let parsed;
   try {
     parsed = JSON.parse(body);
   } catch (_) {
-    return { items: [], pageInfo: null };
+    return { items: [], pageInfo: null, totalCount: null };
   }
 
   const items = [];
   let pageInfo = null;
+  let totalCount = null;
 
   function walk(node) {
     if (!node || typeof node !== "object") return;
     if (Array.isArray(node)) {
-      node.forEach(walk);
+      for (const child of node) walk(child);
       return;
     }
     if (node.__typename === "SimpleProduct" && node.sku) {
@@ -101,10 +129,16 @@ function parseGraphQLBody(body) {
     if (!pageInfo && node.page_info && node.page_info.total_pages) {
       pageInfo = node.page_info;
     }
-    Object.values(node).forEach(walk);
+    if (totalCount === null && node.total_count != null) {
+      totalCount = node.total_count;
+    }
+    for (const val of Object.values(node)) {
+      walk(val);
+    }
   }
+
   walk(parsed);
-  return { items, pageInfo };
+  return { items, pageInfo, totalCount };
 }
 
 // ---------------------------------------------------------------------------
@@ -116,110 +150,111 @@ async function main() {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
     userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+      "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 " +
       "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    viewport: { width: 1280, height: 900 },
-    locale: "en-US",
-    timezoneId: "America/New_York",
   });
   const page = await context.newPage();
   page.setDefaultTimeout(PAGE_TIMEOUT);
   page.setDefaultNavigationTimeout(NAV_TIMEOUT);
 
-  // Forward browser console errors to Node.js stdout for debugging
-  page.on("console", (msg) => {
-    if (msg.type() === "error") {
-      console.log(`[browser-err] ${msg.text()}`);
-    }
-  });
-
+  // Collect raw product objects keyed by SKU (deduplication)
   const productsBySku = new Map();
-  let capturedGQLRequest = null; // { url, headers, body: parsed }
-  let capturedPageInfo = null; // { current_page, page_size, total_pages }
+  let capturedGQLRequest = null; // { url, headers, body }
+  let capturedPageInfo = null;
+  let capturedTotalCount = null;
 
-  // Intercept responses to collect first-page products and capture the
-  // request template for pagination replay.
-  //
-  // We correlate request + response via response.request() so we only capture
-  // the query that actually returns paginated products — not an early init
-  // query with empty variables.
+  // Intercept GQL responses: collect products and capture the request template
   page.on("response", async (response) => {
     const url = response.url();
-    const isApi = url.includes("graphql") || url.includes("/api/");
-    if (!isApi) return;
-    if (response.status() !== 200) {
-      if (url.includes("graphql")) {
-        console.log(`[scrape_tj] GraphQL HTTP ${response.status()} ← ${url}`);
-      }
-      return;
-    }
+    if (!url.includes("/graphql") && !url.includes("/api/")) return;
+    if (response.status() !== 200) return;
+
     const ct = response.headers()["content-type"] || "";
     if (!ct.includes("application/json") && !ct.includes("text/plain")) return;
-    let rawBody;
+
+    let body;
     try {
-      rawBody = await response.text();
+      body = await response.text();
     } catch (_) {
       return;
     }
 
-    const { items, pageInfo } = parseGraphQLBody(rawBody);
+    const { items, pageInfo, totalCount } = parseGraphQLBody(body);
     for (const raw of items) {
       if (!productsBySku.has(String(raw.sku)))
         productsBySku.set(String(raw.sku), raw);
     }
 
-    // Capture request template only from a response that has both products
-    // and pagination info — this is definitely the paginated product query.
-    if (items.length > 0 && pageInfo && !capturedGQLRequest) {
+    if (totalCount !== null && capturedTotalCount === null)
+      capturedTotalCount = totalCount;
+
+    // Capture the request template from the first response that has products
+    if (items.length > 0 && !capturedGQLRequest) {
       const req = response.request();
       if (req.method() === "POST") {
         const rawReqBody = req.postData();
         if (rawReqBody) {
           try {
-            const parsed = JSON.parse(rawReqBody);
             capturedGQLRequest = {
               url: req.url(),
               headers: req.headers(),
-              body: parsed,
+              body: JSON.parse(rawReqBody),
             };
             capturedPageInfo = pageInfo;
             console.log(
-              `[scrape_tj] Template captured: ${items.length} items, ` +
-                `page ${pageInfo.current_page}/${pageInfo.total_pages}`,
-            );
-            console.log(
-              `[scrape_tj] GQL variable keys: ${Object.keys(parsed.variables || {}).join(", ")}`,
+              `[scrape_tj] GQL template captured: ${items.length} items, ` +
+                `pageInfo=${JSON.stringify(pageInfo)}, totalCount=${totalCount}`,
             );
           } catch (_) {}
         }
       }
-    } else if (pageInfo && !capturedPageInfo) {
-      capturedPageInfo = pageInfo;
     }
   });
 
+  // Navigate to the product listing page
   console.log(`[scrape_tj] Navigating to ${START_URL}`);
   await page.goto(START_URL, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(8000); // let Akamai challenges + initial GQL load complete
 
-  console.log(`[scrape_tj] After initial load: ${productsBySku.size} products`);
+  // Wait for Akamai challenge + initial products to load
+  await page.waitForTimeout(8000);
+
+  // Dismiss cookie banner and email overlay before paginating
+  const gotIt = page
+    .locator('button:has-text("GOT IT"), button:has-text("Got it")')
+    .first();
+  if (await gotIt.isVisible().catch(() => false)) {
+    await gotIt.click().catch(() => {});
+    console.log("[scrape_tj] Dismissed cookie banner");
+    await page.waitForTimeout(1000);
+  }
+  await page.keyboard.press("Escape"); // close any modal/overlay
 
   // ---------------------------------------------------------------------------
-  // Strategy A: In-browser GraphQL pagination (preferred)
+  // Paginate via in-browser GQL replay
   //
-  // We replay TJ's own captured GraphQL request from within the browser's
-  // JavaScript context via page.evaluate. Akamai sees an in-page fetch with
-  // valid cookies + the same TLS fingerprint as the initial load — not a raw
-  // Node.js connection from a datacenter IP.
+  // We replay TJ's own captured GraphQL request from within the browser's JS
+  // context so Akamai sees an in-page fetch with valid cookies + TLS fingerprint.
   // ---------------------------------------------------------------------------
-  if (
-    capturedGQLRequest &&
-    capturedPageInfo &&
-    capturedPageInfo.total_pages > 1
-  ) {
-    const totalPages = capturedPageInfo.total_pages;
+  if (!capturedGQLRequest) {
     console.log(
-      `[scrape_tj] Paginating ${totalPages} pages via in-browser fetch...`,
+      "[scrape_tj] WARNING: No GQL request captured — cannot paginate.",
+    );
+  } else {
+    // Determine total pages: prefer page_info, fall back to total_count / page_size
+    let totalPages = capturedPageInfo ? capturedPageInfo.total_pages : null;
+    if (!totalPages && capturedTotalCount) {
+      const pageSize = capturedPageInfo ? capturedPageInfo.page_size : 15;
+      totalPages = Math.ceil(capturedTotalCount / pageSize);
+    }
+    if (!totalPages) {
+      totalPages = 100; // blind upper bound — stop when 0 new items
+      console.log(
+        "[scrape_tj] No total_pages known — paginating blindly up to 100 pages",
+      );
+    }
+
+    console.log(
+      `[scrape_tj] Paginating ${totalPages} pages via in-browser GQL fetch...`,
     );
 
     // Only forward app-level headers; cookies are sent automatically
@@ -255,7 +290,6 @@ async function main() {
           try {
             const body = JSON.parse(JSON.stringify(gqlBody));
             if (body.variables) {
-              // Handle both currentPage and page variable names
               if ("currentPage" in body.variables)
                 body.variables.currentPage = p;
               else if ("page" in body.variables) body.variables.page = p;
@@ -291,9 +325,11 @@ async function main() {
             const data = await resp.json();
             const sizeBefore = collected.length;
             walk(data);
+            const added = collected.length - sizeBefore;
             console.log(
-              `[scrape_tj] Page ${p}/${endPage}: +${collected.length - sizeBefore} items (total ${collected.length})`,
+              `[scrape_tj] Page ${p}/${endPage}: +${added} items (total ${collected.length})`,
             );
+            if (added === 0 && p > startPage) break; // ran out of pages
           } catch (e) {
             console.log(`[scrape_tj] Page ${p} error: ${e.message}`);
           }
@@ -311,86 +347,18 @@ async function main() {
     );
 
     console.log(
-      `[scrape_tj] In-browser pagination: ${moreItems.length} additional items`,
+      `[scrape_tj] GQL pagination: ${moreItems.length} additional items`,
     );
     for (const raw of moreItems) {
       if (!productsBySku.has(String(raw.sku)))
         productsBySku.set(String(raw.sku), raw);
-    }
-
-    // ---------------------------------------------------------------------------
-    // Strategy B: Scroll / "Load more" fallback
-    // ---------------------------------------------------------------------------
-  } else {
-    if (!capturedGQLRequest) {
-      console.log(
-        "[scrape_tj] No GQL request captured — falling back to scroll/click loop",
-      );
-    } else {
-      console.log(
-        "[scrape_tj] Single page or no page_info — scroll/click loop",
-      );
-    }
-
-    let noProgressCount = 0;
-
-    for (let i = 0; i < MAX_FALLBACK_ITERS; i++) {
-      const countBefore = productsBySku.size;
-
-      const loadMoreBtn = page
-        .locator(
-          'button:has-text("Load more"), a:has-text("Load more"), ' +
-            '[data-testid="load-more"], .load-more-button, ' +
-            'button:has-text("Show more"), button:has-text("View more")',
-        )
-        .first();
-
-      const isVisible = await loadMoreBtn.isVisible().catch(() => false);
-      if (isVisible) {
-        const isDisabled = await loadMoreBtn.isDisabled().catch(() => false);
-        if (!isDisabled) {
-          try {
-            await loadMoreBtn.click();
-          } catch (_) {}
-        }
-      } else {
-        await page.evaluate(() =>
-          window.scrollTo(0, document.body.scrollHeight),
-        );
-      }
-
-      await page.waitForTimeout(3000);
-      await Promise.race([
-        page.waitForLoadState("networkidle"),
-        new Promise((r) => setTimeout(r, 6000)),
-      ]);
-
-      const countAfter = productsBySku.size;
-
-      if (i % 10 === 0) {
-        console.log(
-          `[scrape_tj] Scroll iter ${i + 1}: ${productsBySku.size} products`,
-        );
-      }
-
-      if (countAfter === countBefore) {
-        noProgressCount++;
-        if (noProgressCount >= 8) {
-          console.log(
-            `[scrape_tj] No new products for 8 iters. Done at iter ${i + 1}.`,
-          );
-          break;
-        }
-      } else {
-        noProgressCount = 0;
-      }
     }
   }
 
   await browser.close();
 
   // ---------------------------------------------------------------------------
-  // Build and write output
+  // Build output array in the format import_tj.py expects
   // ---------------------------------------------------------------------------
   const items = [];
   for (const [sku, raw] of productsBySku) {
@@ -401,26 +369,29 @@ async function main() {
       price: extractPrice(raw),
       weight: null,
       categories: extractCategories(raw),
-      nutrition: raw.nutritional_info || raw.nutrition_text || null,
-      ingredients: raw.ingredients || null,
+      nutrition: extractNutrition(raw),
+      ingredients: extractIngredients(raw),
       raw,
     });
   }
 
-  console.log(`[scrape_tj] Total items collected: ${items.length}`);
-
+  // Sanity check
   if (items.length < 100) {
     console.error(
-      `[scrape_tj] ERROR: Only ${items.length} items — expected at least 100. Exiting.`,
+      `[scrape_tj] ERROR: Only ${items.length} items collected — ` +
+        "expected at least 100. Possible site change or block. Exiting with error.",
     );
     process.exit(1);
   }
 
+  // Write items
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(items, null, 2), "utf8");
   console.log(`[scrape_tj] Wrote ${items.length} items to ${OUTPUT_PATH}`);
 
+  // Write metadata
   const meta = {
     totalProducts: items.length,
+    startUrl: START_URL,
     timestamp: new Date().toISOString(),
   };
   fs.writeFileSync(META_PATH, JSON.stringify(meta, null, 2), "utf8");
