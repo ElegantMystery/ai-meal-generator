@@ -384,34 +384,58 @@ async function main() {
     `[scrape_tj] Phase 2: enriching ${productsBySku.size} products with nutrition/ingredients...`,
   );
 
-  let detailGQLRequest = null;
-  const captureDetailGQL = async (response) => {
-    if (detailGQLRequest) return;
+  // ---------------------------------------------------------------------------
+  // Phase 2a: Navigate to first product detail page and capture ALL GQL calls.
+  // We don't know in advance which request carries nutrition vs ingredients —
+  // intercept everything and inspect each SimpleProduct node we find.
+  // ---------------------------------------------------------------------------
+  const capturedDetailGQLs = []; // { url, headers, body (parsed), respNode }
+  const captureAllDetailResponses = async (response) => {
     const url = response.url();
-    if (!url.includes("/graphql")) return;
+    if (!url.includes("/graphql") && !url.includes("/api/")) return;
     if (response.status() !== 200) return;
     const req = response.request();
     if (req.method() !== "POST") return;
-    let rawBody;
+    const ct = response.headers()["content-type"] || "";
+    if (!ct.includes("application/json") && !ct.includes("text/plain")) return;
+    let rawBody, respText;
     try {
       rawBody = req.postData() || "";
+      respText = await response.text();
     } catch (_) {
       return;
     }
-    if (!rawBody.includes("url_key")) return;
+    let reqBodyParsed, respParsed;
     try {
-      const reqBody = JSON.parse(rawBody);
-      detailGQLRequest = {
+      reqBodyParsed = JSON.parse(rawBody);
+      respParsed = JSON.parse(respText);
+    } catch (_) {
+      return;
+    }
+    // Walk the response looking for any SimpleProduct node
+    const nodes = [];
+    (function walk(node) {
+      if (!node || typeof node !== "object") return;
+      if (Array.isArray(node)) {
+        node.forEach(walk);
+        return;
+      }
+      if (node.__typename === "SimpleProduct" && node.sku) {
+        nodes.push(node);
+        return;
+      }
+      Object.values(node).forEach(walk);
+    })(respParsed);
+    if (nodes.length > 0) {
+      capturedDetailGQLs.push({
         url: req.url(),
         headers: req.headers(),
-        body: reqBody,
-      };
-      console.log(
-        `[scrape_tj] Product detail GQL template captured. variables=${JSON.stringify(reqBody.variables)}`,
-      );
-    } catch (_) {}
+        body: reqBodyParsed,
+        respNode: nodes[0],
+      });
+    }
   };
-  page.on("response", captureDetailGQL);
+  page.on("response", captureAllDetailResponses);
 
   const [[firstSkuForDetail, firstRawForDetail]] = productsBySku.entries();
   const firstUrlKey = makeUrlKey(
@@ -425,61 +449,139 @@ async function main() {
     await page.goto(`${TJ_BASE}/home/products/pdp/${firstUrlKey}`, {
       waitUntil: "domcontentloaded",
     });
-    await page.waitForTimeout(6000);
+    await page.waitForTimeout(8000);
   } catch (err) {
     console.log(`[scrape_tj] Detail page navigation error: ${err.message}`);
   }
-  page.off("response", captureDetailGQL);
+  page.off("response", captureAllDetailResponses);
+
+  // Log every GQL call's SimpleProduct fields so we know exactly what each query returns
+  let detailGQLRequest = null; // template for product data (has sku variable)
+  let nutritionGQLRequest = null; // template for nutrition data (if separate)
+  for (const entry of capturedDetailGQLs) {
+    const { body, respNode } = entry;
+    const vars = body.variables || {};
+    console.log(
+      `[scrape_tj] Detail GQL vars=${JSON.stringify(vars)} ` +
+        `fields=${Object.keys(respNode).join(",")} ` +
+        `nutritional_info=${JSON.stringify(respNode.nutritional_info)?.substring(0, 80)}`,
+    );
+    // Product detail template: has sku variable
+    if (!detailGQLRequest && "sku" in vars) {
+      detailGQLRequest = entry;
+      console.log("[scrape_tj] Product detail GQL template captured.");
+    }
+    // Nutrition template: has non-null nutritional_info in response
+    if (!nutritionGQLRequest && respNode.nutritional_info != null) {
+      nutritionGQLRequest = entry;
+      console.log("[scrape_tj] Nutrition GQL template captured.");
+    }
+  }
+
+  // Also probe the DOM for the Nutrition Facts section
+  const domNutrition = await page.evaluate(() => {
+    const probe = {};
+    // Look for the Nutrition Facts section by common selectors
+    const selectors = [
+      '[class*="nutritionFacts"]',
+      '[class*="NutritionFacts"]',
+      '[class*="nutrition-facts"]',
+      '[class*="ProductDetail"]',
+      '[data-testid*="nutrition"]',
+    ];
+    for (const sel of selectors) {
+      const el = document.querySelector(sel);
+      if (el) {
+        probe.bySelector = { sel, text: el.innerText?.substring(0, 400) };
+        break;
+      }
+    }
+    // Also search for the literal text "Nutrition Facts" in the DOM
+    const bodyText = document.body.innerText || "";
+    const idx = bodyText.indexOf("Nutrition Facts");
+    if (idx !== -1) probe.domText = bodyText.substring(idx, idx + 600);
+    // Check for embedded JSON data (Next.js __NEXT_DATA__)
+    const nextData = document.getElementById("__NEXT_DATA__");
+    if (nextData) {
+      try {
+        const d = JSON.parse(nextData.textContent);
+        const raw = JSON.stringify(d);
+        const niIdx = raw.indexOf("nutritional_info");
+        if (niIdx !== -1)
+          probe.nextDataNutrition = raw.substring(niIdx, niIdx + 300);
+      } catch (_) {}
+    }
+    return probe;
+  });
+  console.log(
+    `[scrape_tj] DOM nutrition probe: ${JSON.stringify(domNutrition).substring(0, 600)}`,
+  );
 
   if (!detailGQLRequest) {
     console.log(
-      "[scrape_tj] WARNING: Could not capture product detail GQL. Nutrition/ingredients will be empty.",
+      "[scrape_tj] WARNING: No product detail GQL captured. Ingredients will be empty.",
     );
   } else {
-    // Forward the same app-level headers used for listing pagination
-    const detailSafeHeaders = {};
-    for (const h of [
-      "store",
-      "content-currency",
-      "x-magento-cache-id",
-      "x-requested-with",
-    ]) {
-      if (detailGQLRequest.headers[h])
-        detailSafeHeaders[h] = detailGQLRequest.headers[h];
+    // Forward app-level headers (omit browser-managed headers like cookie/auth)
+    function safeHeaders(headers) {
+      const safe = {};
+      for (const h of [
+        "store",
+        "content-currency",
+        "x-magento-cache-id",
+        "x-requested-with",
+      ]) {
+        if (headers[h]) safe[h] = headers[h];
+      }
+      return safe;
     }
+
+    const detailSafeHeaders = safeHeaders(detailGQLRequest.headers);
+    const nutritionSafeHeaders = nutritionGQLRequest
+      ? safeHeaders(nutritionGQLRequest.headers)
+      : null;
 
     const enrichItems = [...productsBySku.entries()].map(([sku, raw]) => ({
       sku,
       urlKey: makeUrlKey(raw.item_title, sku),
     }));
 
-    const CHUNK = 100; // products per page.evaluate() call (~12s per chunk at 5 concurrent)
+    const CHUNK = 100;
     const CONCURRENCY = 5;
     let totalEnriched = 0;
 
-    // Disable evaluate() timeout for long-running enrichment chunks
     page.setDefaultTimeout(0);
 
     for (let i = 0; i < enrichItems.length; i += CHUNK) {
       const chunk = enrichItems.slice(i, i + CHUNK);
 
       const chunkResults = await page.evaluate(
-        async ({ gqlUrl, extraHeaders, gqlBody, items, concurrency }) => {
+        async ({
+          gqlUrl,
+          extraHeaders,
+          gqlBody,
+          nutGqlUrl,
+          nutExtraHeaders,
+          nutGqlBody,
+          items,
+          concurrency,
+        }) => {
           const results = {};
 
-          async function fetchOne({ sku, urlKey }) {
-            const body = JSON.parse(JSON.stringify(gqlBody));
-            // TJ's product detail GQL uses variables.sku — NOT url_key.
-            // url_key appears in the GQL query text as a fetched field, which
-            // is why rawBody.includes("url_key") matched, but the per-product
-            // variable to substitute is sku.
-            if (body.variables) {
-              if ("sku" in body.variables) body.variables.sku = sku;
-              else if ("url_key" in body.variables)
-                body.variables.url_key = urlKey;
-              else if ("urlKey" in body.variables)
-                body.variables.urlKey = urlKey;
+          function substituteProduct(body, sku, urlKey) {
+            const b = JSON.parse(JSON.stringify(body));
+            if (b.variables) {
+              if ("sku" in b.variables) b.variables.sku = sku;
+              else if ("url_key" in b.variables) b.variables.url_key = urlKey;
+              else if ("urlKey" in b.variables) b.variables.urlKey = urlKey;
             }
+            return b;
+          }
+
+          async function fetchOne({ sku, urlKey }) {
+            const entry = (results[sku] = results[sku] || {});
+
+            // Fetch product detail (ingredients, etc.)
             try {
               const resp = await fetch(gqlUrl, {
                 method: "POST",
@@ -488,30 +590,62 @@ async function main() {
                   Accept: "application/json",
                   ...extraHeaders,
                 },
-                body: JSON.stringify(body),
+                body: JSON.stringify(substituteProduct(gqlBody, sku, urlKey)),
                 credentials: "include",
               });
-              if (!resp.ok) return;
-              const data = await resp.json();
-              (function walk(node) {
-                if (!node || typeof node !== "object") return;
-                if (Array.isArray(node)) {
-                  node.forEach(walk);
-                  return;
-                }
-                if (node.__typename === "SimpleProduct" && node.sku) {
-                  results[node.sku] = {
-                    nutritional_info: node.nutritional_info || null,
-                    ingredients: node.ingredients || null,
-                  };
-                  return;
-                }
-                Object.values(node).forEach(walk);
-              })(data);
+              if (resp.ok) {
+                const data = await resp.json();
+                (function walk(node) {
+                  if (!node || typeof node !== "object") return;
+                  if (Array.isArray(node)) {
+                    node.forEach(walk);
+                    return;
+                  }
+                  if (node.__typename === "SimpleProduct" && node.sku) {
+                    entry.ingredients = node.ingredients || null;
+                    entry.nutritional_info = node.nutritional_info || null;
+                    return;
+                  }
+                  Object.values(node).forEach(walk);
+                })(data);
+              }
             } catch (_) {}
+
+            // Fetch nutrition separately if we have a distinct template
+            if (nutGqlUrl && nutGqlBody) {
+              try {
+                const resp = await fetch(nutGqlUrl, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Accept: "application/json",
+                    ...nutExtraHeaders,
+                  },
+                  body: JSON.stringify(
+                    substituteProduct(nutGqlBody, sku, urlKey),
+                  ),
+                  credentials: "include",
+                });
+                if (resp.ok) {
+                  const data = await resp.json();
+                  (function walk(node) {
+                    if (!node || typeof node !== "object") return;
+                    if (Array.isArray(node)) {
+                      node.forEach(walk);
+                      return;
+                    }
+                    if (node.__typename === "SimpleProduct" && node.sku) {
+                      if (node.nutritional_info)
+                        entry.nutritional_info = node.nutritional_info;
+                      return;
+                    }
+                    Object.values(node).forEach(walk);
+                  })(data);
+                }
+              } catch (_) {}
+            }
           }
 
-          // Process with concurrency cap
           for (let j = 0; j < items.length; j += concurrency) {
             await Promise.all(items.slice(j, j + concurrency).map(fetchOne));
             await new Promise((r) => setTimeout(r, 100));
@@ -522,6 +656,9 @@ async function main() {
           gqlUrl: detailGQLRequest.url,
           extraHeaders: detailSafeHeaders,
           gqlBody: detailGQLRequest.body,
+          nutGqlUrl: nutritionGQLRequest ? nutritionGQLRequest.url : null,
+          nutExtraHeaders: nutritionSafeHeaders,
+          nutGqlBody: nutritionGQLRequest ? nutritionGQLRequest.body : null,
           items: chunk,
           concurrency: CONCURRENCY,
         },
@@ -532,8 +669,10 @@ async function main() {
         if (detail) {
           const raw = productsBySku.get(sku);
           if (raw) {
-            raw.nutritional_info = detail.nutritional_info;
-            raw.ingredients = detail.ingredients;
+            if (detail.ingredients != null)
+              raw.ingredients = detail.ingredients;
+            if (detail.nutritional_info != null)
+              raw.nutritional_info = detail.nutritional_info;
             if (detail.nutritional_info || detail.ingredients) totalEnriched++;
           }
         }
@@ -543,7 +682,7 @@ async function main() {
       );
     }
 
-    page.setDefaultTimeout(PAGE_TIMEOUT); // restore
+    page.setDefaultTimeout(PAGE_TIMEOUT);
     console.log(
       `[scrape_tj] Enrichment complete: ${totalEnriched}/${productsBySku.size} products have nutrition/ingredients`,
     );
