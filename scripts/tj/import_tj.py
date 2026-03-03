@@ -220,7 +220,8 @@ def main():
                 # Fall back to raw nutrition text from original item
                 nutrition = item.get("nutrition")
                 if nutrition:
-                    # Truncate if too long
+                    if not isinstance(nutrition, str):
+                        nutrition = json.dumps(nutrition, ensure_ascii=False)
                     if len(nutrition) > 10000:
                         nutrition = nutrition[:10000]
                     nutrition_text = nutrition
@@ -254,7 +255,8 @@ def main():
                 # Fall back to raw ingredients text from original item
                 ingredients = item.get("ingredients")
                 if ingredients:
-                    # Truncate if too long
+                    if not isinstance(ingredients, str):
+                        ingredients = json.dumps(ingredients, ensure_ascii=False)
                     if len(ingredients) > 5000:
                         ingredients = ingredients[:5000]
                     ingredients_text = ingredients
