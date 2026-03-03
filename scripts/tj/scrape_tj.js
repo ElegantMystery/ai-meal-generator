@@ -81,8 +81,8 @@ function extractPrice(raw) {
 }
 
 function extractNutrition(raw) {
-  // TJ embeds nutrition as a text block in `nutritional_info` or similar fields
-  return raw.nutritional_info || raw.nutrition_text || null;
+  // TJ's GQL returns nutrition data in the `nutrition` field (confirmed via network inspection)
+  return raw.nutrition || raw.nutritional_info || raw.nutrition_text || null;
 }
 
 function extractIngredients(raw) {
@@ -464,15 +464,15 @@ async function main() {
     console.log(
       `[scrape_tj] Detail GQL vars=${JSON.stringify(vars)} ` +
         `fields=${Object.keys(respNode).join(",")} ` +
-        `nutritional_info=${JSON.stringify(respNode.nutritional_info)?.substring(0, 80)}`,
+        `nutrition=${JSON.stringify(respNode.nutrition)?.substring(0, 80)}`,
     );
     // Product detail template: has sku variable
     if (!detailGQLRequest && "sku" in vars) {
       detailGQLRequest = entry;
       console.log("[scrape_tj] Product detail GQL template captured.");
     }
-    // Nutrition template: has non-null nutritional_info in response
-    if (!nutritionGQLRequest && respNode.nutritional_info != null) {
+    // Nutrition template: has non-null nutrition in response
+    if (!nutritionGQLRequest && respNode.nutrition != null) {
       nutritionGQLRequest = entry;
       console.log("[scrape_tj] Nutrition GQL template captured.");
     }
@@ -506,7 +506,7 @@ async function main() {
       try {
         const d = JSON.parse(nextData.textContent);
         const raw = JSON.stringify(d);
-        const niIdx = raw.indexOf("nutritional_info");
+        const niIdx = raw.indexOf('"nutrition"');
         if (niIdx !== -1)
           probe.nextDataNutrition = raw.substring(niIdx, niIdx + 300);
       } catch (_) {}
@@ -603,7 +603,7 @@ async function main() {
                   }
                   if (node.__typename === "SimpleProduct" && node.sku) {
                     entry.ingredients = node.ingredients || null;
-                    entry.nutritional_info = node.nutritional_info || null;
+                    entry.nutrition = node.nutrition || null;
                     return;
                   }
                   Object.values(node).forEach(walk);
@@ -635,8 +635,7 @@ async function main() {
                       return;
                     }
                     if (node.__typename === "SimpleProduct" && node.sku) {
-                      if (node.nutritional_info)
-                        entry.nutritional_info = node.nutritional_info;
+                      if (node.nutrition) entry.nutrition = node.nutrition;
                       return;
                     }
                     Object.values(node).forEach(walk);
@@ -671,9 +670,8 @@ async function main() {
           if (raw) {
             if (detail.ingredients != null)
               raw.ingredients = detail.ingredients;
-            if (detail.nutritional_info != null)
-              raw.nutritional_info = detail.nutritional_info;
-            if (detail.nutritional_info || detail.ingredients) totalEnriched++;
+            if (detail.nutrition != null) raw.nutrition = detail.nutrition;
+            if (detail.nutrition || detail.ingredients) totalEnriched++;
           }
         }
       }
