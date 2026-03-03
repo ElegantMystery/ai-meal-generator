@@ -53,6 +53,8 @@ jobs:
           path: |
             scripts/tj/tj-items.json
             scripts/tj/tj-metadata.json
+            scripts/tj/tj-nutrition-parsed.json
+            scripts/tj/tj-ingredients-parsed.json
           retention-days: 7
 
   # ---------------------------------------------------------------------------
