@@ -406,7 +406,9 @@ async function main() {
         headers: req.headers(),
         body: reqBody,
       };
-      console.log("[scrape_tj] Product detail GQL template captured.");
+      console.log(
+        `[scrape_tj] Product detail GQL template captured. variables=${JSON.stringify(reqBody.variables)}`,
+      );
     } catch (_) {}
   };
   page.on("response", captureDetailGQL);
@@ -467,13 +469,32 @@ async function main() {
 
           async function fetchOne({ sku, urlKey }) {
             const body = JSON.parse(JSON.stringify(gqlBody));
-            if (body.variables) {
-              if ("url_key" in body.variables) body.variables.url_key = urlKey;
-              else if ("urlKey" in body.variables)
-                body.variables.urlKey = urlKey;
-              else if (body.variables.filter)
-                body.variables.filter = { url_key: { eq: urlKey } };
-            }
+            // Deep-walk variables to replace any url_key, regardless of nesting.
+            // Handles: variables.url_key = "slug"
+            //          variables.filter.url_key = { eq: "slug" }
+            //          variables.filters.url_key = { eq: "slug" }
+            (function replaceUrlKey(obj) {
+              if (!obj || typeof obj !== "object") return;
+              if (Array.isArray(obj)) {
+                obj.forEach(replaceUrlKey);
+                return;
+              }
+              for (const k of Object.keys(obj)) {
+                if (k === "url_key") {
+                  if (typeof obj[k] === "string") {
+                    obj[k] = urlKey;
+                  } else if (
+                    obj[k] &&
+                    typeof obj[k] === "object" &&
+                    "eq" in obj[k]
+                  ) {
+                    obj[k] = { eq: urlKey };
+                  }
+                } else {
+                  replaceUrlKey(obj[k]);
+                }
+              }
+            })(body.variables);
             try {
               const resp = await fetch(gqlUrl, {
                 method: "POST",
