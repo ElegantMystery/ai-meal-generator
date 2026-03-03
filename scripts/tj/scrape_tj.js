@@ -469,32 +469,17 @@ async function main() {
 
           async function fetchOne({ sku, urlKey }) {
             const body = JSON.parse(JSON.stringify(gqlBody));
-            // Deep-walk variables to replace any url_key, regardless of nesting.
-            // Handles: variables.url_key = "slug"
-            //          variables.filter.url_key = { eq: "slug" }
-            //          variables.filters.url_key = { eq: "slug" }
-            (function replaceUrlKey(obj) {
-              if (!obj || typeof obj !== "object") return;
-              if (Array.isArray(obj)) {
-                obj.forEach(replaceUrlKey);
-                return;
-              }
-              for (const k of Object.keys(obj)) {
-                if (k === "url_key") {
-                  if (typeof obj[k] === "string") {
-                    obj[k] = urlKey;
-                  } else if (
-                    obj[k] &&
-                    typeof obj[k] === "object" &&
-                    "eq" in obj[k]
-                  ) {
-                    obj[k] = { eq: urlKey };
-                  }
-                } else {
-                  replaceUrlKey(obj[k]);
-                }
-              }
-            })(body.variables);
+            // TJ's product detail GQL uses variables.sku — NOT url_key.
+            // url_key appears in the GQL query text as a fetched field, which
+            // is why rawBody.includes("url_key") matched, but the per-product
+            // variable to substitute is sku.
+            if (body.variables) {
+              if ("sku" in body.variables) body.variables.sku = sku;
+              else if ("url_key" in body.variables)
+                body.variables.url_key = urlKey;
+              else if ("urlKey" in body.variables)
+                body.variables.urlKey = urlKey;
+            }
             try {
               const resp = await fetch(gqlUrl, {
                 method: "POST",
