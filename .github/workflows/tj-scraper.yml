@@ -139,16 +139,7 @@ jobs:
                   -e _RAG_SECRET="${RAG_SHARED_SECRET}" \
                   -e _EMBED_TYPE="${EMBED_TYPE}" \
                   "$RAG_CONTAINER" \
-                  python3 -c '
-import urllib.request, os, json
-req = urllib.request.Request(
-  f"http://localhost:8000/embed/backfill/{os.environ[\"_EMBED_TYPE\"]}",
-  data=json.dumps({"limit": 200}).encode(),
-  headers={"Content-Type": "application/json", "X-RAG-SECRET": os.environ["_RAG_SECRET"]},
-  method="POST"
-)
-print(urllib.request.urlopen(req).read().decode())
-') || {
+                  python3 -c "import urllib.request,os,json; etype=os.environ['_EMBED_TYPE']; req=urllib.request.Request('http://localhost:8000/embed/backfill/'+etype,data=json.dumps({'limit':200}).encode(),headers={'Content-Type':'application/json','X-RAG-SECRET':os.environ['_RAG_SECRET']},method='POST'); print(urllib.request.urlopen(req).read().decode())") || {
                   echo "[TJ-PIPELINE] WARNING: embed backfill request failed for ${EMBED_TYPE}, skipping"
                   break
                 }
