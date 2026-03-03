@@ -30,7 +30,9 @@ SSH_OPTS="-i $EC2_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10"
 # ---------------------------------------------------------------------------
 echo "[pipeline] === Step 1: Scraping Trader Joe's ==="
 node "$SCRIPT_DIR/scrape_tj.js" --output "$ITEMS_FILE" --meta "$META_FILE"
-echo "[pipeline] Scrape complete. $(python3 -c "import json; print(len(json.load(open('$ITEMS_FILE'))))" 2>/dev/null || echo '?') items collected."
+ITEM_COUNT=$(python3 -c "import json; print(len(json.load(open('$ITEMS_FILE'))))" 2>/dev/null || echo 0)
+echo "[pipeline] Scrape complete. ${ITEM_COUNT} items collected."
+[[ "$ITEM_COUNT" -ge 1500 ]] || { echo "[pipeline] ERROR: Only ${ITEM_COUNT} items scraped (threshold: 1500). Scraper may be blocked."; exit 1; }
 
 # ---------------------------------------------------------------------------
 # Step 2: Parse nutrition
