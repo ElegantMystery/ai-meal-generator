@@ -142,6 +142,23 @@ function parseGraphQLBody(body) {
 }
 
 // ---------------------------------------------------------------------------
+// Build a product detail URL key from item_title + sku.
+// Matches the slug format TJ uses: "ranch-flavored-rolled-corn-torilla-chips-083292"
+// ---------------------------------------------------------------------------
+function makeUrlKey(itemTitle, sku) {
+  const slug = (itemTitle || "")
+    .toLowerCase()
+    .normalize("NFD") // decompose accented chars (é → e + ́)
+    .replace(/[\u0300-\u036f]/g, "") // strip accent marks
+    .replace(/&/g, "")
+    .replace(/[^a-z0-9\s]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug ? `${slug}-${sku}` : String(sku);
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 async function main() {
@@ -353,6 +370,177 @@ async function main() {
       if (!productsBySku.has(String(raw.sku)))
         productsBySku.set(String(raw.sku), raw);
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Phase 2: Enrich products with nutrition / ingredients from detail pages.
+  //
+  // We navigate to one product detail page so the browser makes a GQL request
+  // with url_key in the variables. We capture that template, then replay it
+  // in-browser (5 concurrent fetches) for every product — Akamai sees valid
+  // cookies + TLS fingerprint so datacenter IPs are not blocked.
+  // ---------------------------------------------------------------------------
+  console.log(
+    `[scrape_tj] Phase 2: enriching ${productsBySku.size} products with nutrition/ingredients...`,
+  );
+
+  let detailGQLRequest = null;
+  const captureDetailGQL = async (response) => {
+    if (detailGQLRequest) return;
+    const url = response.url();
+    if (!url.includes("/graphql")) return;
+    if (response.status() !== 200) return;
+    const req = response.request();
+    if (req.method() !== "POST") return;
+    let rawBody;
+    try {
+      rawBody = req.postData() || "";
+    } catch (_) {
+      return;
+    }
+    if (!rawBody.includes("url_key")) return;
+    try {
+      const reqBody = JSON.parse(rawBody);
+      detailGQLRequest = {
+        url: req.url(),
+        headers: req.headers(),
+        body: reqBody,
+      };
+      console.log("[scrape_tj] Product detail GQL template captured.");
+    } catch (_) {}
+  };
+  page.on("response", captureDetailGQL);
+
+  const [[firstSkuForDetail, firstRawForDetail]] = productsBySku.entries();
+  const firstUrlKey = makeUrlKey(
+    firstRawForDetail.item_title,
+    firstSkuForDetail,
+  );
+  console.log(
+    `[scrape_tj] Navigating to first product detail page: /pdp/${firstUrlKey}`,
+  );
+  try {
+    await page.goto(`${TJ_BASE}/home/products/pdp/${firstUrlKey}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page.waitForTimeout(6000);
+  } catch (err) {
+    console.log(`[scrape_tj] Detail page navigation error: ${err.message}`);
+  }
+  page.off("response", captureDetailGQL);
+
+  if (!detailGQLRequest) {
+    console.log(
+      "[scrape_tj] WARNING: Could not capture product detail GQL. Nutrition/ingredients will be empty.",
+    );
+  } else {
+    // Forward the same app-level headers used for listing pagination
+    const detailSafeHeaders = {};
+    for (const h of [
+      "store",
+      "content-currency",
+      "x-magento-cache-id",
+      "x-requested-with",
+    ]) {
+      if (detailGQLRequest.headers[h])
+        detailSafeHeaders[h] = detailGQLRequest.headers[h];
+    }
+
+    const enrichItems = [...productsBySku.entries()].map(([sku, raw]) => ({
+      sku,
+      urlKey: makeUrlKey(raw.item_title, sku),
+    }));
+
+    const CHUNK = 100; // products per page.evaluate() call (~12s per chunk at 5 concurrent)
+    const CONCURRENCY = 5;
+    let totalEnriched = 0;
+
+    // Disable evaluate() timeout for long-running enrichment chunks
+    page.setDefaultTimeout(0);
+
+    for (let i = 0; i < enrichItems.length; i += CHUNK) {
+      const chunk = enrichItems.slice(i, i + CHUNK);
+
+      const chunkResults = await page.evaluate(
+        async ({ gqlUrl, extraHeaders, gqlBody, items, concurrency }) => {
+          const results = {};
+
+          async function fetchOne({ sku, urlKey }) {
+            const body = JSON.parse(JSON.stringify(gqlBody));
+            if (body.variables) {
+              if ("url_key" in body.variables) body.variables.url_key = urlKey;
+              else if ("urlKey" in body.variables)
+                body.variables.urlKey = urlKey;
+              else if (body.variables.filter)
+                body.variables.filter = { url_key: { eq: urlKey } };
+            }
+            try {
+              const resp = await fetch(gqlUrl, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                  ...extraHeaders,
+                },
+                body: JSON.stringify(body),
+                credentials: "include",
+              });
+              if (!resp.ok) return;
+              const data = await resp.json();
+              (function walk(node) {
+                if (!node || typeof node !== "object") return;
+                if (Array.isArray(node)) {
+                  node.forEach(walk);
+                  return;
+                }
+                if (node.__typename === "SimpleProduct" && node.sku) {
+                  results[node.sku] = {
+                    nutritional_info: node.nutritional_info || null,
+                    ingredients: node.ingredients || null,
+                  };
+                  return;
+                }
+                Object.values(node).forEach(walk);
+              })(data);
+            } catch (_) {}
+          }
+
+          // Process with concurrency cap
+          for (let j = 0; j < items.length; j += concurrency) {
+            await Promise.all(items.slice(j, j + concurrency).map(fetchOne));
+            await new Promise((r) => setTimeout(r, 100));
+          }
+          return results;
+        },
+        {
+          gqlUrl: detailGQLRequest.url,
+          extraHeaders: detailSafeHeaders,
+          gqlBody: detailGQLRequest.body,
+          items: chunk,
+          concurrency: CONCURRENCY,
+        },
+      );
+
+      for (const { sku } of chunk) {
+        const detail = chunkResults[sku];
+        if (detail) {
+          const raw = productsBySku.get(sku);
+          if (raw) {
+            raw.nutritional_info = detail.nutritional_info;
+            raw.ingredients = detail.ingredients;
+            if (detail.nutritional_info || detail.ingredients) totalEnriched++;
+          }
+        }
+      }
+      console.log(
+        `[scrape_tj] Enrichment: ${Math.min(i + CHUNK, enrichItems.length)}/${enrichItems.length} processed`,
+      );
+    }
+
+    page.setDefaultTimeout(PAGE_TIMEOUT); // restore
+    console.log(
+      `[scrape_tj] Enrichment complete: ${totalEnriched}/${productsBySku.size} products have nutrition/ingredients`,
+    );
   }
 
   await browser.close();
