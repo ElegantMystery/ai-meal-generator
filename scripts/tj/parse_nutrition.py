@@ -112,6 +112,93 @@ def parse_nutrition_text(nutrition_text: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _parse_amount(amount_str: Optional[str]) -> Optional[float]:
+    """Extract a numeric value from an amount string like '9 g' or 'less than 1g'."""
+    if not amount_str:
+        return None
+    s = str(amount_str).strip()
+    less_than = re.search(r"less\s*than\s*([\d.]+)", s, re.IGNORECASE)
+    if less_than:
+        try:
+            return float(less_than.group(1))
+        except ValueError:
+            return 0.0
+    num = re.search(r"([\d.]+)", s)
+    if num:
+        try:
+            return float(num.group(1))
+        except ValueError:
+            return None
+    return None
+
+
+# Map TJ's nutritional_item label → output field name + unit
+_NUTRIENT_MAP = {
+    "total fat":            "total_fat_g",
+    "saturated fat":        "saturated_fat_g",
+    "trans fat":            "trans_fat_g",
+    "cholesterol":          "cholesterol_mg",
+    "sodium":               "sodium_mg",
+    "total carbohydrate":   "total_carbohydrate_g",
+    "dietary fiber":        "dietary_fiber_g",
+    "total sugars":         "total_sugars_g",
+    "added sugars":         "added_sugars_g",
+    "protein":              "protein_g",
+    "vitamin d":            "vitamin_d_mcg",
+    "calcium":              "calcium_mg",
+    "iron":                 "iron_mg",
+    "potassium":            "potassium_mg",
+}
+
+
+def _parse_nutrition_from_structured(panels: list) -> Optional[Dict[str, Any]]:
+    """
+    Parse TJ's structured NutritionAttribute list into the same schema as
+    parse_nutrition_text(), so import_tj.py can store it consistently.
+    """
+    if not panels or not isinstance(panels, list):
+        return None
+
+    # Use the first panel (most products have only one)
+    panel = panels[0] if isinstance(panels[0], dict) else None
+    if not panel:
+        return None
+
+    result: Dict[str, Any] = {}
+
+    # Serving info
+    svp = panel.get("servings_per_container", "")
+    svp_match = re.search(r"(\d+)", str(svp))
+    if svp_match:
+        result["serving_count"] = int(svp_match.group(1))
+
+    serving_size = panel.get("serving_size", "").strip()
+    if serving_size:
+        result["serving_size_text"] = serving_size
+        wt = re.search(r"\((\d+(?:\.\d+)?)\s*g", serving_size)
+        if wt:
+            try:
+                result["serving_size_grams"] = float(wt.group(1))
+            except ValueError:
+                pass
+
+    cal_str = panel.get("calories_per_serving", "")
+    cal_num = _parse_amount(cal_str)
+    if cal_num is not None:
+        result["calories"] = int(cal_num)
+
+    # Nutrient details
+    for detail in panel.get("details") or []:
+        if not isinstance(detail, dict):
+            continue
+        label = str(detail.get("nutritional_item", "")).strip().lower()
+        field = _NUTRIENT_MAP.get(label)
+        if field:
+            result[field] = _parse_amount(detail.get("amount"))
+
+    return result if "calories" in result else None
+
+
 def parse_json_file(input_path: str, output_path: Optional[str] = None) -> Dict[str, Any]:
     """
     Parse nutrition data from tj-items.json and create structured output.
@@ -139,26 +226,45 @@ def parse_json_file(input_path: str, output_path: Optional[str] = None) -> Dict[
         
         sku = item.get("sku", f"unknown_{idx}")
         name = item.get("name", "Unknown")
-        nutrition_text = item.get("nutrition")
-        
-        if not nutrition_text:
+        nutrition_raw = item.get("nutrition")
+
+        if not nutrition_raw:
             items_without_nutrition.append({"sku": sku, "name": name})
             continue
-        
-        parsed = parse_nutrition_text(nutrition_text)
-        
+
+        # TJ's GQL returns nutrition as a structured list of NutritionAttribute objects:
+        # [{"serving_size": "1 oz (28g/...)", "calories_per_serving": "150 ",
+        #   "servings_per_container": "Serves 9",
+        #   "details": [{"nutritional_item": "Total Fat", "amount": "9 g",
+        #                "percent_dv": ".12", "__typename": "NutritionDetails"}, ...]}]
+        if isinstance(nutrition_raw, list):
+            parsed = _parse_nutrition_from_structured(nutrition_raw)
+            if parsed:
+                parsed_items.append({
+                    "sku": sku,
+                    "name": name,
+                    "nutrition_parsed": parsed,
+                    "nutrition_raw": nutrition_raw,
+                })
+            else:
+                items_without_nutrition.append({"sku": sku, "name": name})
+            continue
+
+        # Plain-text fallback (for stores that return nutrition as a string)
+        parsed = parse_nutrition_text(nutrition_raw)
+
         if parsed:
             parsed_items.append({
                 "sku": sku,
                 "name": name,
                 "nutrition_parsed": parsed,
-                "nutrition_raw": nutrition_text  # Keep original for reference
+                "nutrition_raw": nutrition_raw,
             })
         else:
             parse_errors.append({
                 "sku": sku,
                 "name": name,
-                "nutrition_text": nutrition_text[:200]  # First 200 chars for debugging
+                "nutrition_text": nutrition_raw[:200],
             })
     
     result = {
