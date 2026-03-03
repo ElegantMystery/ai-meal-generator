@@ -87,7 +87,8 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "docker-compose.prod.yml,nginx/,cloudwatch/,scripts/import_tj.py"
+          source: "docker-compose.prod.yml,nginx/,cloudwatch/,scripts/tj/"
+          exclude: "scripts/tj/*.json,scripts/tj/*.png"
           target: /opt/meal-gen/
 
       # SSH in, pull new images, rolling restart
