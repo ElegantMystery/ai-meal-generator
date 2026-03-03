@@ -20,6 +20,8 @@ EC2_DEST="${EC2_DEST:-/tmp}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ITEMS_FILE="$SCRIPT_DIR/tj-items.json"
 META_FILE="$SCRIPT_DIR/tj-metadata.json"
+NUTRITION_FILE="$SCRIPT_DIR/tj-nutrition-parsed.json"
+INGREDIENTS_FILE="$SCRIPT_DIR/tj-ingredients-parsed.json"
 
 SSH_OPTS="-i $EC2_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10"
 
@@ -31,10 +33,22 @@ node "$SCRIPT_DIR/scrape_tj.js" --output "$ITEMS_FILE" --meta "$META_FILE"
 echo "[pipeline] Scrape complete. $(python3 -c "import json; print(len(json.load(open('$ITEMS_FILE'))))" 2>/dev/null || echo '?') items collected."
 
 # ---------------------------------------------------------------------------
-# Step 2: SCP to EC2
+# Step 2: Parse nutrition
 # ---------------------------------------------------------------------------
-echo "[pipeline] === Step 2: Uploading to EC2 ($EC2_HOST) ==="
-scp $SSH_OPTS "$ITEMS_FILE" "$META_FILE" "${EC2_USER}@${EC2_HOST}:${EC2_DEST}/"
-echo "[pipeline] Uploaded tj-items.json and tj-metadata.json to ${EC2_USER}@${EC2_HOST}:${EC2_DEST}/"
+echo "[pipeline] === Step 2: Parsing nutrition ==="
+python3 "$SCRIPT_DIR/parse_nutrition.py" "$ITEMS_FILE" "$NUTRITION_FILE"
+
+# ---------------------------------------------------------------------------
+# Step 3: Parse ingredients
+# ---------------------------------------------------------------------------
+echo "[pipeline] === Step 3: Parsing ingredients ==="
+python3 "$SCRIPT_DIR/parse_ingredients.py" "$ITEMS_FILE" "$INGREDIENTS_FILE"
+
+# ---------------------------------------------------------------------------
+# Step 4: SCP to EC2
+# ---------------------------------------------------------------------------
+echo "[pipeline] === Step 4: Uploading to EC2 ($EC2_HOST) ==="
+scp $SSH_OPTS "$ITEMS_FILE" "$META_FILE" "$NUTRITION_FILE" "$INGREDIENTS_FILE" "${EC2_USER}@${EC2_HOST}:${EC2_DEST}/"
+echo "[pipeline] Uploaded tj-items.json, tj-metadata.json, tj-nutrition-parsed.json, tj-ingredients-parsed.json to ${EC2_USER}@${EC2_HOST}:${EC2_DEST}/"
 
 echo "[pipeline] Done."

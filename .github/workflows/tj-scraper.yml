@@ -121,7 +121,10 @@ jobs:
 
             # Step 1: Import items into RDS
             echo "[TJ-PIPELINE] === Step 1: Import items into database ==="
-            TJ_JSON_PATH="$ITEMS_FILE" python3 /opt/meal-gen/scripts/tj/import_tj.py
+            TJ_JSON_PATH="$ITEMS_FILE" \
+              TJ_NUTRITION_PARSED_PATH="/tmp/tj-nutrition-parsed.json" \
+              TJ_INGREDIENTS_PARSED_PATH="/tmp/tj-ingredients-parsed.json" \
+              python3 /opt/meal-gen/scripts/tj/import_tj.py
             echo "[TJ-PIPELINE] Database import complete"
 
             # Step 2: Backfill embeddings via RAG container
@@ -152,5 +155,5 @@ jobs:
             done
 
             # Cleanup
-            rm -f "$ITEMS_FILE"
+            rm -f "$ITEMS_FILE" /tmp/tj-metadata.json /tmp/tj-nutrition-parsed.json /tmp/tj-ingredients-parsed.json
             echo "[TJ-PIPELINE] === Pipeline Complete ==="
