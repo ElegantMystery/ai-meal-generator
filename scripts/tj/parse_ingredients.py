@@ -210,26 +210,54 @@ def parse_json_file(input_path: str, output_path: Optional[str] = None) -> Dict[
         
         sku = item.get("sku", f"unknown_{idx}")
         name = item.get("name", "Unknown")
-        ingredients_text = item.get("ingredients")
-        
-        if not ingredients_text:
+        ingredients_raw = item.get("ingredients")
+
+        if not ingredients_raw:
             items_without_ingredients.append({"sku": sku, "name": name})
             continue
-        
+
+        # TJ's GQL returns ingredients as a structured list:
+        #   [{"display_sequence": 1, "ingredient": "PORK", "__typename": "IngredientsAttribute"}, ...]
+        # Convert to a flat text string so the existing parser can handle it,
+        # and also build the structured list directly from the pre-parsed data.
+        if isinstance(ingredients_raw, list):
+            sorted_items = sorted(ingredients_raw, key=lambda x: x.get("display_sequence", 0))
+            ingredients_list = [
+                {"name": entry["ingredient"].strip()}
+                for entry in sorted_items
+                if isinstance(entry, dict) and entry.get("ingredient", "").strip()
+            ]
+            if not ingredients_list:
+                items_without_ingredients.append({"sku": sku, "name": name})
+                continue
+            parsed_items.append({
+                "sku": sku,
+                "name": name,
+                "ingredients_parsed": {
+                    "ingredients_raw": ", ".join(e["name"] for e in ingredients_list),
+                    "ingredients_list": ingredients_list,
+                    "ingredients_count": len(ingredients_list),
+                },
+                "ingredients_raw": ingredients_raw,
+            })
+            continue
+
+        # Plain-text fallback (for stores that return ingredients as a string)
+        ingredients_text = ingredients_raw
         parsed = parse_ingredients_text(ingredients_text)
-        
+
         if parsed:
             parsed_items.append({
                 "sku": sku,
                 "name": name,
                 "ingredients_parsed": parsed,
-                "ingredients_raw": ingredients_text  # Keep original for reference
+                "ingredients_raw": ingredients_text,
             })
         else:
             parse_errors.append({
                 "sku": sku,
                 "name": name,
-                "ingredients_text": ingredients_text[:200]  # First 200 chars for debugging
+                "ingredients_text": ingredients_text[:200],
             })
     
     result = {
