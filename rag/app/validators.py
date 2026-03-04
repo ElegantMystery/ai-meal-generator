@@ -1,6 +1,6 @@
 # app/validators.py
 import json
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field, ValidationError
@@ -9,12 +9,21 @@ from pydantic import BaseModel, Field, ValidationError
 class PlanItem(BaseModel):
     id: int
     name: str
+    servingsUsed: int = Field(default=1, ge=1, le=10)
+
+
+class Dish(BaseModel):
+    dishName: str
+    description: Optional[str] = None
+    estimatedCalories: Optional[int] = None
+    items: List[PlanItem] = Field(min_length=1, max_length=12)
 
 
 class Meal(BaseModel):
     # Lock meal types so UI stays consistent
     name: Literal["Breakfast", "Lunch", "Dinner"]
-    items: List[PlanItem] = Field(min_length=1, max_length=8)
+    dishes: List[Dish] = Field(default_factory=list, min_length=1, max_length=5)
+    items: List[PlanItem] = Field(default_factory=list, max_length=20)
 
 
 class DayPlan(BaseModel):
@@ -37,6 +46,40 @@ class MealPlanDoc(BaseModel):
     endDate: str
     plan: List[DayPlan]
     _meta: Optional[PlanMeta] = None
+
+
+def flatten_dishes_to_items(doc: MealPlanDoc) -> MealPlanDoc:
+    """
+    Post-process a MealPlanDoc after LLM generation:
+    - For each meal, iterate all dishes and collect all items.
+    - Deduplicate by item id, summing servingsUsed across dishes.
+    - Set meal.items to the deduplicated list (preserves first-seen item name).
+    - Backward compat: shopping list service walks meal.items and needs it populated.
+
+    Returns the same doc (mutated in place) for convenience.
+    """
+    for day in doc.plan:
+        for meal in day.meals:
+            if not meal.dishes:
+                # Nothing to flatten — leave items as-is (empty or pre-populated)
+                continue
+
+            # Collect deduplicated items from all dishes in this meal
+            # Use raw dicts to accumulate servingsUsed without the per-dish le=10 cap
+            seen_ids: Dict[int, str] = {}   # id -> name (first-seen)
+            seen_used: Dict[int, int] = {}  # id -> total servingsUsed across dishes
+            for dish in meal.dishes:
+                for item in dish.items:
+                    if item.id not in seen_ids:
+                        seen_ids[item.id] = item.name
+                    seen_used[item.id] = seen_used.get(item.id, 0) + item.servingsUsed
+
+            meal.items = [
+                PlanItem(id=iid, name=seen_ids[iid], servingsUsed=min(seen_used[iid], 10))
+                for iid in seen_ids
+            ]
+
+    return doc
 
 
 def parse_and_validate_plan_json(content: str) -> MealPlanDoc:
