@@ -181,50 +181,42 @@ To change the alert email only: `terraform apply -target=aws_sns_topic_subscript
 
 ## TJ Scraper Pipeline
 
-Automated weekly pipeline that scrapes Trader Joe's catalog and keeps the database fresh.
-Runs on GitHub Actions (rotating IPs) to avoid EC2's static IP being blocked by Trader Joe's.
+Manual pipeline that scrapes Trader Joe's catalog and keeps the database fresh.
+Must be run from a local machine — Akamai blocks datacenter/GHA IPs and only returns ~15 items.
 
 ### Architecture
 
 ```
-GitHub Actions Scheduler (cron: Sun 00:00 UTC)
-  → GHA Runner (ubuntu-latest, rotating IP):
-      node scrape_tj.js  → intercepts TJ GraphQL API, paginates ~85 pages → tj-items.json
-      scp tj-items.json → EC2:/tmp/tj-items.json
-  → EC2 (via SSH):
-      python3 import_tj.py  → upserts items into RDS
-      docker exec python-rag curl /embed/backfill/{items,nutrition,ingredients}
+Local machine (home IP):
+  node scripts/tj/scrape_tj.js  → intercepts TJ GraphQL, paginates ~85 pages
+    → tj-items.json, tj-metadata.json
+
+  node scripts/tj/run_pipeline.sh
+    → runs scrape_tj.js
+    → scp tj-items.json + tj-nutrition-parsed.json + tj-ingredients-parsed.json → EC2:/tmp/
+
+  EC2 (via SSH):
+    python3 import_tj.py  → upserts items into RDS (items, item_nutrition, item_ingredients)
+    docker exec python-rag curl /embed/backfill/{items,nutrition,ingredients}
 ```
 
 ### Key files
 
 | File | Purpose |
 |------|---------|
-| `.github/workflows/tj-scraper.yml` | GHA workflow — scrape on runner, import + embed via SSH to EC2 |
-| `scripts/scrape_tj.js` | Playwright scraper — intercepts TJ GraphQL, outputs `tj-items.json` |
-| `scripts/import_tj.py` | Upserts items into RDS (`items`, `item_nutrition`, `item_ingredients`) |
+| `scripts/tj/scrape_tj.js` | Playwright scraper — intercepts TJ GraphQL, outputs `tj-items.json` + parsed files |
+| `scripts/tj/run_pipeline.sh` | End-to-end pipeline: scrape → scp to EC2 → import → embed |
+| `scripts/tj/import_tj.py` | Upserts items into RDS (`items`, `item_nutrition`, `item_ingredients`) |
+| `.github/workflows/tj-scraper.yml` | GHA workflow — exists but **not used** (Akamai blocks GHA IPs) |
 
-### Triggering manually
+### Running the pipeline
 
 ```bash
-# Trigger via GitHub CLI
-gh workflow run tj-scraper.yml
-
-# Or via GitHub UI: Actions tab → "TJ Scraper Pipeline" → Run workflow
-
-# Watch output: Actions tab → latest "TJ Scraper Pipeline" run
+cd scripts/tj
+bash run_pipeline.sh
 ```
 
-### Disabling / changing schedule
-
-Edit the `cron` expression in `.github/workflows/tj-scraper.yml`:
-```yaml
-on:
-  schedule:
-    - cron: '0 0 * * 0'  # Edit this line (currently: Sunday 00:00 UTC)
-```
-
-To disable entirely, remove or comment out the `schedule:` block.
+This runs the full pipeline: scrape → transfer to EC2 → import to RDS → backfill embeddings.
 
 ## Key Configuration
 
