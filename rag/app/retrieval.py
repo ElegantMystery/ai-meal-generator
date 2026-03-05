@@ -1,7 +1,6 @@
 import json
 from typing import Any, Dict, List, Optional
 from .db import get_conn
-from .config import RETRIEVAL_K
 
 def fetch_items_missing_embeddings(store: Optional[str], limit: int) -> List[Dict[str, Any]]:
     with get_conn() as conn:
@@ -121,26 +120,109 @@ def _compact_ingredients(ingredients_json: Dict[str, Any] | str | None) -> Dict[
         "ingredients_count": parsed.get("ingredients_count"),
     }
 
-def retrieve_candidates(store: str, query_vec: List[float], k: int = RETRIEVAL_K) -> List[Dict[str, Any]]:
+def _fetch_by_category(cur, store: str, category_keyword: str, limit: int) -> List[Dict[str, Any]]:
+    """Fetch items whose category_path contains the given keyword (case-insensitive)."""
+    cur.execute("""
+      SELECT i.id, i.name, i.price, i.unit_size, i.category_path, i.image_url
+      FROM items i
+      INNER JOIN item_embeddings ie ON i.id = ie.item_id
+      WHERE i.store ILIKE %s AND i.category_path ILIKE %s
+      ORDER BY RANDOM()
+      LIMIT %s
+    """, (store, f"%{category_keyword}%", limit))
+    return cur.fetchall()
+
+
+# Category quotas for proportional random sampling.
+# Order matters: higher-priority categories are listed first so they are not
+# crowded out during deduplication.
+_CATEGORY_QUOTAS: List[tuple] = [
+    ("Fresh Fruits & Veggies > Veggies",        20),
+    ("Fresh Fruits & Veggies > Fruits",          10),
+    ("Meat, Seafood",                            20),
+    ("Dairy & Eggs",                             12),
+    ("Cheese",                                    8),
+    ("Pastas & Grains",                           8),
+    ("Packaged Fish, Meat, Fruit & Veg",          6),
+    ("For Baking & Cooking",                      6),
+    ("Oils & Vinegars",                           4),
+    ("BBQ, Pasta, Simmer",                        4),
+    ("Bakery > Sliced Bread",                     4),
+    ("Dressing & Seasoning",                      4),
+    ("Dip/Spread",                                4),
+]
+_FILL_LIMIT = 10
+_MAX_CANDIDATES = 120
+
+
+def retrieve_candidates(
+    store: str,
+    query_vec: Optional[List[float]] = None,  # kept for backward compat; no longer used
+) -> List[Dict[str, Any]]:
+    """
+    Retrieve meal plan candidate items using category-proportional random sampling.
+
+    Each specific category receives a fixed quota drawn via ORDER BY RANDOM(),
+    ensuring that every generation run surfaces different items and avoids the
+    same crowd-pleasers. No vector similarity search is performed.
+    """
     with get_conn() as conn:
         with conn.cursor() as cur:
-            # 1) Retrieve top-K items by item_embeddings
-            cur.execute("""
-              SELECT i.id, i.name, i.price, i.unit_size, i.category_path, i.image_url
-              FROM items i
-              INNER JOIN item_embeddings ie ON i.id = ie.item_id
-              WHERE i.store ILIKE %s
-              ORDER BY ie.embedding <=> %s::vector
-              LIMIT %s
-            """, (store, query_vec, k))
-            items = cur.fetchall()
+            # 1) Sample from each named category up to its quota
+            seen_ids: set = set()
+            items: List[Dict[str, Any]] = []
+
+            for category_keyword, quota in _CATEGORY_QUOTAS:
+                rows = _fetch_by_category(cur, store, category_keyword, quota)
+                for row in rows:
+                    if row["id"] not in seen_ids:
+                        seen_ids.add(row["id"])
+                        items.append(row)
+
+            # 2) Fill remaining capacity with any non-candy/non-frozen category
+            remaining = _MAX_CANDIDATES - len(items)
+            fill_limit = min(_FILL_LIMIT, remaining)
+            if fill_limit > 0:
+                # Build an exclusion pattern: items already seen + excluded categories
+                cur.execute("""
+                  SELECT i.id, i.name, i.price, i.unit_size, i.category_path, i.image_url
+                  FROM items i
+                  INNER JOIN item_embeddings ie ON i.id = ie.item_id
+                  WHERE i.store ILIKE %s
+                    AND i.id <> ALL(%s)
+                    AND i.category_path NOT ILIKE %s
+                    AND i.category_path NOT ILIKE %s
+                    AND i.category_path NOT ILIKE %s
+                    AND i.category_path NOT ILIKE %s
+                    AND i.category_path NOT ILIKE %s
+                    AND i.category_path NOT ILIKE %s
+                    AND i.category_path NOT ILIKE %s
+                  ORDER BY RANDOM()
+                  LIMIT %s
+                """, (
+                    store,
+                    list(seen_ids),
+                    "%candy%",
+                    "%frozen%",
+                    "%holiday%",
+                    "%gift%",
+                    "%flowers%",
+                    "%beauty%",
+                    "%cleaning%",
+                    fill_limit,
+                ))
+                fill_rows = cur.fetchall()
+                for row in fill_rows:
+                    if row["id"] not in seen_ids:
+                        seen_ids.add(row["id"])
+                        items.append(row)
 
             if not items:
                 return []
 
             item_ids = [row["id"] for row in items]
 
-            # 2) Fetch nutrition JSON for these items
+            # 3) Fetch compact nutrition for these items
             cur.execute("""
               SELECT item_id, nutrition
               FROM item_nutrition
@@ -149,7 +231,7 @@ def retrieve_candidates(store: str, query_vec: List[float], k: int = RETRIEVAL_K
             nutrition_rows = cur.fetchall()
             nutrition_by_id = {r["item_id"]: r["nutrition"] for r in nutrition_rows}
 
-            # 3) Fetch ingredients JSON for these items
+            # 4) Fetch compact ingredients for these items
             cur.execute("""
               SELECT item_id, ingredients
               FROM item_ingredients
@@ -158,14 +240,10 @@ def retrieve_candidates(store: str, query_vec: List[float], k: int = RETRIEVAL_K
             ingredients_rows = cur.fetchall()
             ingredients_by_id = {r["item_id"]: r["ingredients"] for r in ingredients_rows}
 
-            # 4) Merge into enriched candidate objects
+            # 5) Build enriched candidate objects
             enriched: List[Dict[str, Any]] = []
             for it in items:
                 iid = it["id"]
-
-                nutrition_json = nutrition_by_id.get(iid)
-                ingredients_json = ingredients_by_id.get(iid)
-
                 enriched.append({
                     "id": iid,
                     "name": it["name"],
@@ -173,14 +251,8 @@ def retrieve_candidates(store: str, query_vec: List[float], k: int = RETRIEVAL_K
                     "unit_size": it.get("unit_size"),
                     "category_path": it.get("category_path"),
                     "image_url": it.get("image_url"),
-
-                    # Enriched fields (compact to keep prompt small)
-                    "nutrition": _compact_nutrition(nutrition_json),
-                    "ingredients": _compact_ingredients(ingredients_json),
-
-                    # Optional: keep raw JSON too (usually OFF to avoid prompt bloat)
-                    # "nutrition_raw": nutrition_json,
-                    # "ingredients_raw": ingredients_json,
+                    "nutrition": _compact_nutrition(nutrition_by_id.get(iid)),
+                    "ingredients": _compact_ingredients(ingredients_by_id.get(iid)),
                 })
 
             return enriched

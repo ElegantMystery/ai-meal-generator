@@ -19,6 +19,12 @@ import { SkeletonCard, SkeletonText } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import Modal from "@/components/Modal";
 import { formatDateRange, formatCreatedAt } from "@/lib/formatters";
+import {
+  safeParsePlanJson,
+  hasDishes,
+  getDishItemLabel,
+  type PlanDoc,
+} from "@/lib/mealplan-dish-utils";
 
 type MealPlan = {
   id: number;
@@ -52,31 +58,6 @@ type ShoppingListResponse = {
   fiberPerDay?: number | null;
   sugarPerDay?: number | null;
 };
-
-type PlanItem = { id: number; name: string };
-type PlanMeal = { name: string; items: PlanItem[] };
-type PlanDay = { date: string; meals: PlanMeal[] };
-type PlanDoc = {
-  title?: string;
-  startDate?: string;
-  endDate?: string;
-  plan: PlanDay[];
-};
-
-function safeParsePlanJson(planJson: string | null): {
-  doc: PlanDoc | null;
-  error?: string;
-} {
-  if (!planJson) return { doc: null };
-  try {
-    const parsed = JSON.parse(planJson);
-    if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.plan))
-      return { doc: null, error: "Plan JSON has unexpected shape." };
-    return { doc: parsed as PlanDoc };
-  } catch {
-    return { doc: null, error: "Plan JSON is not valid JSON." };
-  }
-}
 
 function formatDayLabel(dateStr: string) {
   const d = new Date(dateStr + "T00:00:00");
@@ -603,30 +584,86 @@ export default function MealPlanDetailPage() {
                                   {meal.name}
                                 </h3>
                                 <span className="text-xs text-gray-400">
-                                  {meal.items?.length ?? 0} items
+                                  {hasDishes(meal)
+                                    ? `${meal.dishes!.length} dish${meal.dishes!.length !== 1 ? "es" : ""}`
+                                    : `${meal.items?.length ?? 0} items`}
                                 </span>
                               </div>
-                              <div className="flex flex-wrap gap-2">
-                                {(meal.items ?? []).map((it) => {
-                                  const s = findShoppingItem(it.id);
-                                  return (
+
+                              {/* Dish-centric rendering (new plans) */}
+                              {hasDishes(meal) ? (
+                                <div className="space-y-3">
+                                  {meal.dishes!.map((dish, dishIdx) => (
                                     <div
-                                      key={it.id}
-                                      className="inline-flex items-center gap-1.5 rounded-full border bg-white px-3 py-1 text-sm"
-                                      title={s?.unitSize ?? undefined}
+                                      key={`${dish.dishName}-${dishIdx}`}
+                                      className="rounded-lg border border-gray-100 bg-white p-3"
                                     >
-                                      <span className="font-medium text-gray-900">
-                                        {it.name}
-                                      </span>
-                                      {s?.price != null && (
-                                        <span className="text-xs text-gray-400">
-                                          ${s.price.toFixed(2)}
-                                        </span>
+                                      <div className="flex items-start justify-between gap-2 mb-2">
+                                        <p className="text-sm font-medium text-gray-900">
+                                          {dish.dishName}
+                                        </p>
+                                        {dish.estimatedCalories != null && (
+                                          <Badge
+                                            variant="default"
+                                            className="shrink-0"
+                                          >
+                                            {dish.estimatedCalories} kcal
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      {dish.description && (
+                                        <p className="text-xs text-gray-500 mb-2">
+                                          {dish.description}
+                                        </p>
                                       )}
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {dish.items.map((it) => {
+                                          const s = findShoppingItem(it.id);
+                                          return (
+                                            <div
+                                              key={`${it.id}-${dishIdx}`}
+                                              className="inline-flex items-center gap-1 rounded-full border bg-surface-50 px-2.5 py-0.5 text-xs"
+                                              title={s?.unitSize ?? undefined}
+                                            >
+                                              <span className="font-medium text-gray-800">
+                                                {getDishItemLabel(it)}
+                                              </span>
+                                              {s?.price != null && (
+                                                <span className="text-gray-400">
+                                                  ${s.price.toFixed(2)}
+                                                </span>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
                                     </div>
-                                  );
-                                })}
-                              </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                /* Flat item rendering (old/legacy plans) */
+                                <div className="flex flex-wrap gap-2">
+                                  {(meal.items ?? []).map((it) => {
+                                    const s = findShoppingItem(it.id);
+                                    return (
+                                      <div
+                                        key={it.id}
+                                        className="inline-flex items-center gap-1.5 rounded-full border bg-white px-3 py-1 text-sm"
+                                        title={s?.unitSize ?? undefined}
+                                      >
+                                        <span className="font-medium text-gray-900">
+                                          {it.name}
+                                        </span>
+                                        {s?.price != null && (
+                                          <span className="text-xs text-gray-400">
+                                            ${s.price.toFixed(2)}
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
                           ))
                         )}

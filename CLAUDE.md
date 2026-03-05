@@ -18,10 +18,9 @@ Frontend (3000) → Backend (8080) → RAG Service (8000)
 ```
 
 The backend handles user auth (Google OAuth2), meal plan CRUD, and preferences. For AI generation, it calls the RAG service which:
-1. Embeds the query using OpenAI text-embedding-3-small
-2. Retrieves top-K candidate items via vector similarity (pgvector HNSW indexes)
-3. Calls GPT-4.1-mini to generate a meal plan JSON
-4. Validates item IDs exist in the store
+1. Retrieves ~120 candidate items via **category-proportional random sampling** (no vector search at generation time — randomness ensures plan variety across runs)
+2. Calls GPT-4.1-mini (or configured `CHAT_MODEL`) to generate a dish-centric meal plan JSON
+3. Validates item IDs exist in the store
 
 Two generation modes exist: rule-based (`/api/mealplans/generate`) and AI-powered (`/api/mealplans/generate-ai`).
 
@@ -224,9 +223,8 @@ This runs the full pipeline: scrape → transfer to EC2 → import to RDS → ba
 - `DATABASE_URL` - PostgreSQL connection string
 - `OPENAI_API_KEY` - OpenAI API key
 - `RAG_SHARED_SECRET` - Shared secret for backend→RAG auth (header: `X-RAG-SECRET`)
-- `EMBED_MODEL` - Embedding model (default: `text-embedding-3-small`)
+- `EMBED_MODEL` - Embedding model (default: `text-embedding-3-small`) — used for backfill only
 - `CHAT_MODEL` - Chat model (default: `gpt-4.1-mini`)
-- `RETRIEVAL_K` - Top-K candidates for vector search (default: 120)
 
 ### Backend Config
 - `backend/src/main/resources/application.yaml` - Spring config
@@ -259,10 +257,10 @@ rag/app/
 ├── routes/
 │   ├── generate_routes.py   # POST /generate endpoint
 │   └── embed_routes.py      # Embedding backfill endpoints
-├── embedding.py        # OpenAI embedding calls
-├── retrieval.py        # Vector similarity search
-├── llm.py             # GPT-4.1-mini meal plan generation
-└── validators.py      # JSON validation, ID extraction
+├── embedding.py        # OpenAI embedding calls (backfill only)
+├── retrieval.py        # Category-proportional random candidate sampling
+├── llm.py             # Dish-centric meal plan generation (GPT)
+└── validators.py      # JSON validation, float servingsUsed, ID extraction
 ```
 
 ## Database Schema
