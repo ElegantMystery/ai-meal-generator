@@ -28,7 +28,7 @@ public class ShoppingListService {
     private final ItemRepository itemRepository;
     private final EntityManager entityManager;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    
+
     /**
      * Helper class to hold parsed nutrition values
      */
@@ -40,8 +40,9 @@ public class ShoppingListService {
         Double sodiumMg;
         Double dietaryFiberG;
         Double totalSugarsG;
+        Integer servingCount;
     }
-    
+
     /**
      * Parse nutrition JSON string and extract nutrition values.
      * Returns null if parsing fails or data is missing.
@@ -50,16 +51,16 @@ public class ShoppingListService {
         if (nutritionJsonStr == null || nutritionJsonStr.isBlank()) {
             return null;
         }
-        
+
         try {
             JsonNode root = objectMapper.readTree(nutritionJsonStr);
             JsonNode parsed = root.get("parsed");
             if (parsed == null || !parsed.isObject()) {
                 return null;
             }
-            
+
             NutritionValues values = new NutritionValues();
-            values.calories = parsed.has("calories") && !parsed.get("calories").isNull() 
+            values.calories = parsed.has("calories") && !parsed.get("calories").isNull()
                 ? parsed.get("calories").asDouble() : null;
             values.proteinG = parsed.has("protein_g") && !parsed.get("protein_g").isNull()
                 ? parsed.get("protein_g").asDouble() : null;
@@ -73,7 +74,9 @@ public class ShoppingListService {
                 ? parsed.get("dietary_fiber_g").asDouble() : null;
             values.totalSugarsG = parsed.has("total_sugars_g") && !parsed.get("total_sugars_g").isNull()
                 ? parsed.get("total_sugars_g").asDouble() : null;
-            
+            values.servingCount = parsed.has("serving_count") && !parsed.get("serving_count").isNull()
+                ? parsed.get("serving_count").asInt() : null;
+
             return values;
         } catch (Exception e) {
             // Log error but don't fail - just return null
@@ -109,8 +112,9 @@ public class ShoppingListService {
             throw new IllegalStateException("Failed to parse planJson", e);
         }
 
-        // Count item occurrences from planJson
-        Map<Long, Integer> counts = new HashMap<>();
+        // Sum servingsUsed per item across all meals.
+        // Key: item ID, Value: total servingsUsed (sum across all meal occurrences)
+        Map<Long, Double> servingsUsedMap = new HashMap<>();
         JsonNode plan = root.get("plan");
         if (plan != null && plan.isArray()) {
             for (JsonNode day : plan) {
@@ -123,7 +127,13 @@ public class ShoppingListService {
                                 JsonNode idNode = item.get("id");
                                 if (idNode != null && idNode.canConvertToLong()) {
                                     long id = idNode.asLong();
-                                    counts.put(id, counts.getOrDefault(id, 0) + 1);
+                                    // Read servingsUsed from the item; default to 1.0 if absent
+                                    double servingsUsed = 1.0;
+                                    JsonNode servingsNode = item.get("servingsUsed");
+                                    if (servingsNode != null && !servingsNode.isNull() && servingsNode.isNumber()) {
+                                        servingsUsed = servingsNode.asDouble();
+                                    }
+                                    servingsUsedMap.merge(id, servingsUsed, Double::sum);
                                 }
                             }
                         }
@@ -132,7 +142,7 @@ public class ShoppingListService {
             }
         }
 
-        if (counts.isEmpty()) {
+        if (servingsUsedMap.isEmpty()) {
             return ShoppingListResponse.builder()
                     .mealplanId(mealplanId)
                     .items(List.of())
@@ -140,17 +150,49 @@ public class ShoppingListService {
                     .build();
         }
 
-        List<Long> ids = new ArrayList<>(counts.keySet());
+        List<Long> ids = new ArrayList<>(servingsUsedMap.keySet());
         List<Item> dbItems = itemRepository.findByIdIn(ids);
 
         Map<Long, Item> itemById = dbItems.stream()
                 .collect(Collectors.toMap(Item::getId, it -> it));
 
+        // Fetch and pre-parse all nutrition data once — used for both qty computation
+        // and nutrition totals, avoiding double JSON deserialization.
+        Map<Long, String> nutritionByItemId = fetchNutritionData(ids);
+        Map<Long, NutritionValues> parsedNutritionByItemId = new HashMap<>();
+        for (Map.Entry<Long, String> entry : nutritionByItemId.entrySet()) {
+            NutritionValues nv = parseNutritionJson(entry.getValue());
+            if (nv != null) {
+                parsedNutritionByItemId.put(entry.getKey(), nv);
+            }
+        }
+
+        // Compute qty for each item:
+        //   qty = ceil(totalServingsUsed / serving_count)   if serving_count present and > 0
+        //   qty = ceil(totalServingsUsed)                   otherwise (fallback)
+        //   minimum qty is always 1
+        Map<Long, Integer> qtyByItemId = new HashMap<>();
+        for (Map.Entry<Long, Double> entry : servingsUsedMap.entrySet()) {
+            long itemId = entry.getKey();
+            double totalServingsUsed = entry.getValue();
+
+            NutritionValues nv = parsedNutritionByItemId.get(itemId);
+            Integer servingCount = (nv != null) ? nv.servingCount : null;
+
+            int qty;
+            if (servingCount != null && servingCount > 0) {
+                qty = (int) Math.ceil(totalServingsUsed / servingCount);
+            } else {
+                qty = (int) Math.ceil(totalServingsUsed);
+            }
+            qtyByItemId.put(itemId, Math.max(1, qty));
+        }
+
         // Build response items, sorted by qty desc then name
         List<ShoppingListItemDto> items = ids.stream()
                 .map(id -> {
                     Item it = itemById.get(id);
-                    Integer qty = counts.getOrDefault(id, 0);
+                    int qty = qtyByItemId.getOrDefault(id, 1);
                     if (it == null) {
                         // Item missing from DB (should not happen if verify_id works, but safe)
                         return ShoppingListItemDto.builder()
@@ -183,18 +225,16 @@ public class ShoppingListService {
                 .mapToDouble(Double::doubleValue)
                 .sum();
 
-        // Calculate nutrition metrics
-        Map<Long, String> nutritionByItemId = fetchNutritionData(ids);
-        
         // Calculate number of days
         int days = calculateDays(mp, root);
-        
-        // Calculate nutrition totals
-        NutritionTotals nutritionTotals = calculateNutritionTotals(counts, nutritionByItemId);
-        
-        // Calculate per-day averages
-        Double caloriesPerDay = days > 0 && nutritionTotals.totalCalories != null 
-            ? Math.round(nutritionTotals.totalCalories / days * 100.0) / 100.0 : null;
+
+        // Calculate nutrition totals using servingsUsed (not occurrence count)
+        NutritionTotals nutritionTotals = calculateNutritionTotals(servingsUsedMap, parsedNutritionByItemId);
+
+        // Calories: sum estimatedCalories from LLM dish entries in plan_json.
+        // DB nutrition is missing for many fresh items (NOTE: prefix artifacts), so the
+        // LLM estimate is more complete. Other macros still use DB data.
+        Double caloriesPerDay = sumEstimatedCaloriesPerDay(root, days);
         Double fatPerDay = days > 0 && nutritionTotals.totalFatG != null
             ? Math.round(nutritionTotals.totalFatG / days * 100.0) / 100.0 : null;
         Double proteinPerDay = days > 0 && nutritionTotals.totalProteinG != null
@@ -222,7 +262,7 @@ public class ShoppingListService {
                 .sugarPerDay(sugarPerDay)
                 .build();
     }
-    
+
     /**
      * Fetch nutrition data from item_nutrition table for given item IDs
      */
@@ -230,25 +270,25 @@ public class ShoppingListService {
         if (itemIds.isEmpty()) {
             return new HashMap<>();
         }
-        
+
         Query query = entityManager.createNativeQuery(
             "SELECT item_id, nutrition FROM item_nutrition WHERE item_id IN :ids"
         );
         query.setParameter("ids", itemIds);
-        
+
         @SuppressWarnings("unchecked")
         List<Object[]> results = query.getResultList();
-        
+
         Map<Long, String> nutritionMap = new HashMap<>();
         for (Object[] row : results) {
             Long itemId = ((Number) row[0]).longValue();
             String nutrition = (String) row[1];
             nutritionMap.put(itemId, nutrition);
         }
-        
+
         return nutritionMap;
     }
-    
+
     /**
      * Calculate number of days in the meal plan
      */
@@ -261,7 +301,7 @@ public class ShoppingListService {
                 return (int) (end.toEpochDay() - start.toEpochDay()) + 1;
             }
         }
-        
+
         // Fallback to planJson.days
         if (root != null && root.has("days")) {
             JsonNode daysNode = root.get("days");
@@ -269,11 +309,11 @@ public class ShoppingListService {
                 return daysNode.asInt();
             }
         }
-        
+
         // Default to 1 if we can't determine
         return 1;
     }
-    
+
     /**
      * Helper class to hold nutrition totals
      */
@@ -286,51 +326,87 @@ public class ShoppingListService {
         Double totalFiberG;
         Double totalSugarsG;
     }
-    
+
     /**
-     * Calculate total nutrition values across all items (per-serving × quantity)
+     * Sum estimatedCalories from all dish entries in plan_json and return per-day average.
+     * Falls back to null if no estimatedCalories are present or days == 0.
      */
-    private NutritionTotals calculateNutritionTotals(Map<Long, Integer> counts, Map<Long, String> nutritionByItemId) {
-        NutritionTotals totals = new NutritionTotals();
-        
-        for (Map.Entry<Long, Integer> entry : counts.entrySet()) {
-            Long itemId = entry.getKey();
-            Integer qty = entry.getValue();
-            
-            String nutritionJson = nutritionByItemId.get(itemId);
-            if (nutritionJson == null) {
-                continue;
+    private Double sumEstimatedCaloriesPerDay(JsonNode root, int days) {
+        if (days <= 0) return null;
+        double total = 0.0;
+        boolean found = false;
+        JsonNode plan = root.get("plan");
+        if (plan == null || !plan.isArray()) return null;
+        for (JsonNode day : plan) {
+            JsonNode meals = day.get("meals");
+            if (meals == null || !meals.isArray()) continue;
+            for (JsonNode meal : meals) {
+                JsonNode dishes = meal.get("dishes");
+                if (dishes == null || !dishes.isArray()) continue;
+                for (JsonNode dish : dishes) {
+                    JsonNode cal = dish.get("estimatedCalories");
+                    if (cal != null && cal.isNumber()) {
+                        total += cal.asDouble();
+                        found = true;
+                    }
+                }
             }
-            
-            NutritionValues values = parseNutritionJson(nutritionJson);
+        }
+        if (!found) return null;
+        return Math.round(total / days * 100.0) / 100.0;
+    }
+
+    /**
+     * Calculate total nutrition values across all items.
+     * Uses totalServingsUsed per item (the sum of servingsUsed across all meal occurrences)
+     * to correctly scale per-serving nutrition values.
+     * Accepts pre-parsed NutritionValues to avoid re-deserializing JSON.
+     */
+    private NutritionTotals calculateNutritionTotals(
+            Map<Long, Double> servingsUsedMap,
+            Map<Long, NutritionValues> parsedNutritionByItemId) {
+        NutritionTotals totals = new NutritionTotals();
+
+        for (Map.Entry<Long, Double> entry : servingsUsedMap.entrySet()) {
+            Long itemId = entry.getKey();
+            double totalServingsUsed = entry.getValue();
+
+            NutritionValues values = parsedNutritionByItemId.get(itemId);
             if (values == null) {
                 continue;
             }
-            
-            // Multiply per-serving values by quantity and add to totals
+
+            // Multiply per-serving values by totalServingsUsed and add to totals
             if (values.calories != null) {
-                totals.totalCalories = (totals.totalCalories == null ? 0.0 : totals.totalCalories) + (values.calories * qty);
+                totals.totalCalories = (totals.totalCalories == null ? 0.0 : totals.totalCalories)
+                        + (values.calories * totalServingsUsed);
             }
             if (values.proteinG != null) {
-                totals.totalProteinG = (totals.totalProteinG == null ? 0.0 : totals.totalProteinG) + (values.proteinG * qty);
+                totals.totalProteinG = (totals.totalProteinG == null ? 0.0 : totals.totalProteinG)
+                        + (values.proteinG * totalServingsUsed);
             }
             if (values.totalFatG != null) {
-                totals.totalFatG = (totals.totalFatG == null ? 0.0 : totals.totalFatG) + (values.totalFatG * qty);
+                totals.totalFatG = (totals.totalFatG == null ? 0.0 : totals.totalFatG)
+                        + (values.totalFatG * totalServingsUsed);
             }
             if (values.totalCarbohydrateG != null) {
-                totals.totalCarbohydrateG = (totals.totalCarbohydrateG == null ? 0.0 : totals.totalCarbohydrateG) + (values.totalCarbohydrateG * qty);
+                totals.totalCarbohydrateG = (totals.totalCarbohydrateG == null ? 0.0 : totals.totalCarbohydrateG)
+                        + (values.totalCarbohydrateG * totalServingsUsed);
             }
             if (values.sodiumMg != null) {
-                totals.totalSodiumMg = (totals.totalSodiumMg == null ? 0.0 : totals.totalSodiumMg) + (values.sodiumMg * qty);
+                totals.totalSodiumMg = (totals.totalSodiumMg == null ? 0.0 : totals.totalSodiumMg)
+                        + (values.sodiumMg * totalServingsUsed);
             }
             if (values.dietaryFiberG != null) {
-                totals.totalFiberG = (totals.totalFiberG == null ? 0.0 : totals.totalFiberG) + (values.dietaryFiberG * qty);
+                totals.totalFiberG = (totals.totalFiberG == null ? 0.0 : totals.totalFiberG)
+                        + (values.dietaryFiberG * totalServingsUsed);
             }
             if (values.totalSugarsG != null) {
-                totals.totalSugarsG = (totals.totalSugarsG == null ? 0.0 : totals.totalSugarsG) + (values.totalSugarsG * qty);
+                totals.totalSugarsG = (totals.totalSugarsG == null ? 0.0 : totals.totalSugarsG)
+                        + (values.totalSugarsG * totalServingsUsed);
             }
         }
-        
+
         return totals;
     }
 }

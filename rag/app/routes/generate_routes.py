@@ -1,14 +1,13 @@
 import json
 import logging
 import uuid
-from datetime import date, timedelta
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException
 
 from ..models import GenerateRequest, GenerateResponse
 from ..config import RAG_SHARED_SECRET
-from ..embedding import embed_one
 from ..retrieval import retrieve_candidates
 from ..llm import call_mealplan_llm, get_dish_system_prompt
 from ..validators import (
@@ -78,23 +77,7 @@ def generate(req: GenerateRequest, x_rag_secret: Optional[str] = Header(default=
     if req.days < 1 or req.days > 14:
         raise HTTPException(status_code=400, detail="days must be between 1 and 14")
 
-    # Format dietary style for better LLM understanding
-    dietary_style = req.preferences.dietaryRestrictions or "none"
-    if dietary_style and dietary_style != "none":
-        dietary_style_formatted = dietary_style.replace("-", " ").title()
-    else:
-        dietary_style_formatted = dietary_style
-
-    query_text = f"""
-    Create a {req.days}-day dish-centric meal plan using {req.store} grocery items.
-    Dietary style: {dietary_style_formatted}.
-    Allergies: {req.preferences.allergies or "none"}.
-    Target calories per day: {req.preferences.targetCaloriesPerDay or "not specified"}.
-    Prefer variety, practical dishes, and efficient use of multi-serving products.
-    """.strip()
-
-    qvec = embed_one(query_text)
-    candidates = retrieve_candidates(req.store, qvec)
+    candidates = retrieve_candidates(req.store)
 
     if not candidates:
         raise HTTPException(
@@ -102,7 +85,6 @@ def generate(req: GenerateRequest, x_rag_secret: Optional[str] = Header(default=
         )
 
     start = date.today()
-    end = start + timedelta(days=req.days - 1)
 
     system = get_dish_system_prompt()
 
@@ -118,7 +100,7 @@ def generate(req: GenerateRequest, x_rag_secret: Optional[str] = Header(default=
     logger.info("OpenAI API input - System: %s", system)
     logger.info("OpenAI API input - Number of candidates: %d", len(candidates))
 
-    content = call_mealplan_llm(system, payload, temperature=0.4)
+    content = call_mealplan_llm(system, payload, temperature=0.7)
     if not content:
         raise HTTPException(status_code=500, detail="LLM returned empty response")
 

@@ -70,13 +70,23 @@ export function hasDishes(meal: {
 }
 
 // ---------------------------------------------------------------------------
-// getDishItemLabel — chip label with optional "Nx " prefix for servingsUsed > 1
+// getDishItemLabel — chip label with optional "Nx " prefix
+//
+// Rules:
+//   n < 1  (pantry staples, e.g. 0.1 servings of olive oil): show just name
+//   n === 1 (single serving): show just name
+//   n > 1   (multiple servings): show "<n>x Name"
+//             - Number formatted via JS string coercion: trailing zeros stripped
+//               automatically (2.0 → "2", 1.50 → "1.5")
 // ---------------------------------------------------------------------------
 
 export function getDishItemLabel(item: PlanItem): string {
   const n = item.servingsUsed ?? 1;
   if (n > 1) {
-    return `${n}x ${item.name}`;
+    // Strip trailing zeros by relying on JS number-to-string coercion.
+    // e.g. 2.0 → "2", 1.5 → "1.5", 2.50 → "2.5"
+    const label = String(parseFloat(n.toPrecision(10)));
+    return `${label}x ${item.name}`;
   }
   return item.name;
 }

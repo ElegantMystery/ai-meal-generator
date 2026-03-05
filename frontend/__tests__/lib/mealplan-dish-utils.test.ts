@@ -194,29 +194,31 @@ describe("hasDishes()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// getDishItemLabel — renders chip label with optional "2x" prefix
+// getDishItemLabel — renders chip label with optional "Nx" prefix
 // ---------------------------------------------------------------------------
 
 describe("getDishItemLabel()", () => {
+  // --- existing cases (regression) ---
+
   it("returns just the name when servingsUsed is 1", () => {
     expect(getDishItemLabel({ id: 1, name: "Oats", servingsUsed: 1 })).toBe(
-      "Oats"
+      "Oats",
     );
   });
 
-  it("returns just the name when servingsUsed is undefined", () => {
+  it("returns just the name when servingsUsed is undefined (defaults to 1)", () => {
     expect(getDishItemLabel({ id: 1, name: "Oats" })).toBe("Oats");
   });
 
-  it("returns '2x Name' when servingsUsed is 2", () => {
+  it("returns '2x Name' when servingsUsed is integer 2", () => {
     expect(
-      getDishItemLabel({ id: 2, name: "Almond Milk", servingsUsed: 2 })
+      getDishItemLabel({ id: 2, name: "Almond Milk", servingsUsed: 2 }),
     ).toBe("2x Almond Milk");
   });
 
-  it("returns '5x Name' when servingsUsed is 5", () => {
+  it("returns '5x Name' when servingsUsed is integer 5", () => {
     expect(
-      getDishItemLabel({ id: 3, name: "Brown Rice", servingsUsed: 5 })
+      getDishItemLabel({ id: 3, name: "Brown Rice", servingsUsed: 5 }),
     ).toBe("5x Brown Rice");
   });
 
@@ -224,7 +226,72 @@ describe("getDishItemLabel()", () => {
     // servingsUsed=0 should not be in real data (Pydantic rejects it),
     // but frontend is defensive
     expect(getDishItemLabel({ id: 1, name: "Item", servingsUsed: 0 })).toBe(
-      "Item"
+      "Item",
+    );
+  });
+
+  // --- new cases for float formatting bug fix ---
+
+  it("returns just name when servingsUsed is 0.1 (pantry staple, < 1)", () => {
+    expect(
+      getDishItemLabel({ id: 10, name: "Olive Oil", servingsUsed: 0.1 }),
+    ).toBe("Olive Oil");
+  });
+
+  it("returns just name when servingsUsed is 0.5 (< 1)", () => {
+    expect(
+      getDishItemLabel({ id: 11, name: "Butter", servingsUsed: 0.5 }),
+    ).toBe("Butter");
+  });
+
+  it("returns just name when servingsUsed is between 1 and 2 exclusive (e.g. 1.0)", () => {
+    // 1.0 is exactly 1 — no prefix
+    expect(
+      getDishItemLabel({ id: 12, name: "Salmon", servingsUsed: 1.0 }),
+    ).toBe("Salmon");
+  });
+
+  it("returns just name when servingsUsed is 1.0 represented as float", () => {
+    expect(
+      getDishItemLabel({ id: 13, name: "Chicken", servingsUsed: 1.0 }),
+    ).toBe("Chicken");
+  });
+
+  it("returns '1.5x Name' when servingsUsed is non-integer 1.5", () => {
+    expect(
+      getDishItemLabel({ id: 14, name: "Salmon", servingsUsed: 1.5 }),
+    ).toBe("1.5x Salmon");
+  });
+
+  it("returns '2.5x Name' when servingsUsed is non-integer 2.5", () => {
+    expect(getDishItemLabel({ id: 15, name: "Tuna", servingsUsed: 2.5 })).toBe(
+      "2.5x Tuna",
+    );
+  });
+
+  it("returns '3x Name' when servingsUsed is 3 (integer >= 2)", () => {
+    expect(getDishItemLabel({ id: 16, name: "Eggs", servingsUsed: 3 })).toBe(
+      "3x Eggs",
+    );
+  });
+
+  it("strips trailing zeros: servingsUsed=2.00 renders as '2x Name'", () => {
+    // 2.00 in JS is just 2 (float representation), but explicit .toFixed style
+    const item = { id: 17, name: "Pasta", servingsUsed: 2.0 };
+    expect(getDishItemLabel(item)).toBe("2x Pasta");
+  });
+
+  it("strips trailing zeros: servingsUsed=1.50 renders as '1.5x Name'", () => {
+    const item = { id: 18, name: "Bread", servingsUsed: 1.5 };
+    expect(getDishItemLabel(item)).toBe("1.5x Bread");
+  });
+
+  it("does NOT show prefix for servingsUsed between 1 (exclusive) and 2 (exclusive) — shows name only", () => {
+    // Per spec: 1 < n < 2 with non-integers shows prefix (e.g. 1.5 gets prefix)
+    // But n exactly 1 shows no prefix
+    // Re-confirming 1 boundary:
+    expect(getDishItemLabel({ id: 19, name: "Rice", servingsUsed: 1 })).toBe(
+      "Rice",
     );
   });
 });

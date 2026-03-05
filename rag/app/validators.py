@@ -1,15 +1,18 @@
 # app/validators.py
 import json
+import logging
 from typing import Dict, List, Literal, Optional
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field, ValidationError
 
+logger = logging.getLogger(__name__)
+
 
 class PlanItem(BaseModel):
     id: int
     name: str
-    servingsUsed: int = Field(default=1, ge=1, le=10)
+    servingsUsed: float = Field(default=1.0, ge=0.05, le=20.0)
 
 
 class Dish(BaseModel):
@@ -66,16 +69,16 @@ def flatten_dishes_to_items(doc: MealPlanDoc) -> MealPlanDoc:
 
             # Collect deduplicated items from all dishes in this meal
             # Use raw dicts to accumulate servingsUsed without the per-dish le=10 cap
-            seen_ids: Dict[int, str] = {}   # id -> name (first-seen)
-            seen_used: Dict[int, int] = {}  # id -> total servingsUsed across dishes
+            seen_ids: Dict[int, str] = {}     # id -> name (first-seen)
+            seen_used: Dict[int, float] = {}  # id -> total servingsUsed across dishes
             for dish in meal.dishes:
                 for item in dish.items:
                     if item.id not in seen_ids:
                         seen_ids[item.id] = item.name
-                    seen_used[item.id] = seen_used.get(item.id, 0) + item.servingsUsed
+                    seen_used[item.id] = seen_used.get(item.id, 0.0) + item.servingsUsed
 
             meal.items = [
-                PlanItem(id=iid, name=seen_ids[iid], servingsUsed=min(seen_used[iid], 10))
+                PlanItem(id=iid, name=seen_ids[iid], servingsUsed=seen_used[iid])
                 for iid in seen_ids
             ]
 
@@ -98,8 +101,8 @@ def parse_and_validate_plan_json(content: str) -> MealPlanDoc:
     try:
         return MealPlanDoc.model_validate(raw)
     except ValidationError as e:
-        # Keep it short; too many errors gets noisy
         errors = e.errors()
+        logger.error("LLM JSON schema validation failed: %s", errors[:5])
         raise HTTPException(
             status_code=500,
             detail={
