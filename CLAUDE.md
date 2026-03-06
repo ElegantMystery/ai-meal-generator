@@ -19,8 +19,11 @@ Frontend (3000) → Backend (8080) → RAG Service (8000)
 
 The backend handles user auth (Google OAuth2), meal plan CRUD, and preferences. For AI generation, it calls the RAG service which:
 1. Retrieves ~120 candidate items via **category-proportional random sampling** (no vector search at generation time — randomness ensures plan variety across runs)
-2. Calls GPT-4.1-mini (or configured `CHAT_MODEL`) to generate a dish-centric meal plan JSON
-3. Validates item IDs exist in the store
+2. Samples 75 **recipe templates** from the `recipes` table (filtered by dietary restriction if set, with unfiltered fallback) and passes them to the LLM as dish-name inspiration
+3. Calls GPT-4.1-mini (or configured `CHAT_MODEL`) to generate a dish-centric meal plan JSON
+4. Validates item IDs exist in the store
+
+The generated plan's `_meta` includes `recipeTemplatesOffered` (list of recipe titles offered to the LLM) for traceability.
 
 Two generation modes exist: rule-based (`/api/mealplans/generate`) and AI-powered (`/api/mealplans/generate-ai`).
 
@@ -217,6 +220,41 @@ bash run_pipeline.sh
 
 This runs the full pipeline: scrape → transfer to EC2 → import to RDS → backfill embeddings.
 
+## Spoonacular Recipes Pipeline
+
+One-time (and periodic refresh) script that imports popular recipes from Spoonacular into the `recipes` table. These recipes are used as dish-name inspiration at meal plan generation time.
+
+### Key files
+
+| File | Purpose |
+|------|---------|
+| `scripts/spoonacular/fetch_recipes.py` | Fetch recipes from Spoonacular API, upsert into `recipes` table, optionally backfill `recipe_embeddings` |
+| `backend/src/main/resources/db/migration/V027__create_recipes_table.sql` | Flyway migration — creates `recipes` and `recipe_embeddings` tables with GIN indexes on `diets`/`dish_types` |
+
+### Running the import
+
+```bash
+source .venv/bin/activate
+export DATABASE_URL=postgresql://meal_user:YOUR_DB_PASSWORD@localhost:5432/mealgen
+export SPOONACULAR_API_KEY=<your-key>
+
+# Import 300 recipes (default)
+python scripts/spoonacular/fetch_recipes.py --total 300
+
+# Import + backfill vector embeddings (requires OPENAI_API_KEY)
+python scripts/spoonacular/fetch_recipes.py --total 300 --embed
+```
+
+**Free tier:** 150 requests/day. The script paginates in batches of 100 with a 0.5 s delay.
+
+### How recipes are used at generation time
+
+`retrieval.retrieve_recipes(limit=75, dietary_restriction=...)` is called on every `/generate` request:
+- If `dietary_restriction` is set (e.g. `vegetarian`), queries `WHERE diets @> ARRAY['vegetarian']`
+- Falls back to random unfiltered sample if no matching recipes found (warns to CloudWatch)
+- Recipe titles + ingredient lists are injected into the LLM prompt as dish-idea inspiration
+- Sampled titles are recorded in `plan_json._meta.recipeTemplatesOffered` for traceability
+
 ## Key Configuration
 
 ### Environment Variables (RAG)
@@ -225,6 +263,7 @@ This runs the full pipeline: scrape → transfer to EC2 → import to RDS → ba
 - `RAG_SHARED_SECRET` - Shared secret for backend→RAG auth (header: `X-RAG-SECRET`)
 - `EMBED_MODEL` - Embedding model (default: `text-embedding-3-small`) — used for backfill only
 - `CHAT_MODEL` - Chat model (default: `gpt-4.1-mini`)
+- `SPOONACULAR_API_KEY` - Spoonacular API key — only needed to run `scripts/spoonacular/fetch_recipes.py`
 
 ### Backend Config
 - `backend/src/main/resources/application.yaml` - Spring config
@@ -243,7 +282,7 @@ backend/
 │   ├── mealplan/       # Meal plans, RagClient, ShoppingList
 │   ├── preferences/    # User dietary preferences
 │   └── security/       # Spring Security config
-└── src/main/resources/db/migration/  # Flyway SQL migrations (V1-V026)
+└── src/main/resources/db/migration/  # Flyway SQL migrations (V1-V027)
 
 frontend/
 ├── app/                # Next.js app router pages
@@ -258,9 +297,14 @@ rag/app/
 │   ├── generate_routes.py   # POST /generate endpoint
 │   └── embed_routes.py      # Embedding backfill endpoints
 ├── embedding.py        # OpenAI embedding calls (backfill only)
-├── retrieval.py        # Category-proportional random candidate sampling
+├── retrieval.py        # Category-proportional sampling + retrieve_recipes
 ├── llm.py             # Dish-centric meal plan generation (GPT)
 └── validators.py      # JSON validation, float servingsUsed, ID extraction
+
+scripts/
+├── tj/                 # Trader Joe's scraper pipeline
+└── spoonacular/
+    └── fetch_recipes.py  # Import popular recipes from Spoonacular API
 ```
 
 ## Database Schema
@@ -269,7 +313,9 @@ Key tables (managed by Flyway):
 - `users` - Users (supports OAuth2 and local email/password auth, tracks onboarding status)
 - `user_preferences` - Dietary restrictions, allergies, calorie targets
 - `items` - Grocery items with store, price, category
-- `meal_plans` - Generated meal plans (JSON stored in `plan_json`)
+- `mealplans` - Generated meal plans (JSON stored in `plan_json`; `_meta.recipeTemplatesOffered` lists recipes sampled at generation time)
+- `recipes` - Recipe dataset (title, ingredients, diets, cuisines, dish_types); currently 300 Spoonacular recipes; GIN indexes on `diets` and `dish_types`
+- `recipe_embeddings` - Vector embeddings for recipes (HNSW, 1536-dim); populated via `fetch_recipes.py --embed`
 - `item_embeddings`, `item_nutrition_embeddings`, `item_ingredients_embeddings` - Vector embeddings with HNSW indexes
 
 ## API Endpoints

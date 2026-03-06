@@ -115,7 +115,7 @@ Notes:
 """
 
 
-def call_mealplan_llm(system: str, user_payload: dict, temperature: float = 0.4) -> str:
+def call_mealplan_llm(system: str, user_payload: dict, temperature: float = 0.4, recipes: list | None = None) -> str:
     prefs = user_payload.get("preferences", {})
     dietary_style = prefs.get("dietaryRestrictions")
     allergies = prefs.get("allergies")
@@ -147,10 +147,21 @@ def call_mealplan_llm(system: str, user_payload: dict, temperature: float = 0.4)
         "\n".join(constraint_lines) if constraint_lines else "No specific dietary constraints."
     )
 
+    recipes_block = ""
+    if recipes:
+        recipes_block = (
+            "\n\n## Recipe inspiration (use these as dish IDEAS — do NOT copy ingredients literally):\n"
+            "These are real recipes. Use them to name dishes and identify what raw ingredients a dish needs. "
+            "Then find those ingredients in the items list and build the dish from store items.\n"
+            + json.dumps(recipes, ensure_ascii=False)
+        )
+
     user_message = (
         f"{_SCHEMA_DESCRIPTION}\n"
-        f"Constraints:\n{constraints_block}\n\n"
-        "For each meal: (1) decide a dish name, (2) identify its raw ingredients, (3) find those ingredients in the items list below, (4) build the dish. "
+        f"Constraints:\n{constraints_block}"
+        f"{recipes_block}\n\n"
+        "For each meal: (1) decide a dish name (use the recipe inspiration above for ideas), "
+        "(2) identify its raw ingredients, (3) find those ingredients in the items list below, (4) build the dish. "
         "Every dish needs at least 3 ingredients. Fresh produce, meat, eggs, and dairy should be the stars — pantry items are the supporting cast. "
         "Items with a high serving_count should appear in multiple meals across the week."
     )

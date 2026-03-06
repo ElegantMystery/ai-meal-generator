@@ -8,7 +8,7 @@ from fastapi import APIRouter, Header, HTTPException
 
 from ..models import GenerateRequest, GenerateResponse
 from ..config import RAG_SHARED_SECRET
-from ..retrieval import retrieve_candidates
+from ..retrieval import retrieve_candidates, retrieve_recipes
 from ..llm import call_mealplan_llm, get_dish_system_prompt
 from ..validators import (
     flatten_dishes_to_items,
@@ -89,6 +89,14 @@ def generate(req: GenerateRequest, x_rag_secret: Optional[str] = Header(default=
     system = get_dish_system_prompt()
 
     prefs_dict = req.preferences.model_dump() if req.preferences else {}
+
+    # Fetch recipe templates filtered by user's dietary restriction (empty list on error)
+    try:
+        dietary_restriction = prefs_dict.get("dietaryRestrictions")
+        recipes = retrieve_recipes(limit=75, dietary_restriction=dietary_restriction)
+    except Exception as e:
+        logger.warning("Could not fetch recipes (table may not exist yet): %s", e)
+        recipes = []
     payload = {
         "store": req.store,
         "days": req.days,
@@ -98,9 +106,9 @@ def generate(req: GenerateRequest, x_rag_secret: Optional[str] = Header(default=
     }
 
     logger.info("OpenAI API input - System: %s", system)
-    logger.info("OpenAI API input - Number of candidates: %d", len(candidates))
+    logger.info("OpenAI API input - Number of candidates: %d, recipes: %d", len(candidates), len(recipes))
 
-    content = call_mealplan_llm(system, payload, temperature=0.7)
+    content = call_mealplan_llm(system, payload, temperature=0.7, recipes=recipes)
     if not content:
         raise HTTPException(status_code=500, detail="LLM returned empty response")
 
@@ -126,6 +134,7 @@ def generate(req: GenerateRequest, x_rag_secret: Optional[str] = Header(default=
         "embeddingModel": EMBED_MODEL,
         "ragRequestId": rag_id,
         "retrievalK": RETRIEVAL_K,
+        "recipeTemplatesOffered": [r["dishName"] for r in recipes],
     }
 
     return GenerateResponse(
