@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 
 import pytest
 
-from app.retrieval import retrieve_candidates, _fetch_by_category
+from app.retrieval import retrieve_candidates, retrieve_recipes, _fetch_by_category
 
 
 # ---------------------------------------------------------------------------
@@ -438,3 +438,134 @@ class TestRetrieveCandidatesEdgeCases:
         for c in mock_cur.execute.call_args_list:
             sql = c[0][0]
             assert "<=>" not in sql, f"Vector search operator found in SQL: {sql}"
+
+
+# ---------------------------------------------------------------------------
+# Tests for retrieve_recipes
+# ---------------------------------------------------------------------------
+
+def _make_recipe_row(idx: int, diets: list = None) -> dict:
+    return {
+        "title": f"Recipe {idx}",
+        "ingredients_json": json.dumps([{"name": "chicken"}, {"name": "garlic"}]),
+        "diets": diets or [],
+        "cuisines": ["italian"],
+        "servings": 4,
+        "dish_types": ["dinner"],
+    }
+
+
+def _build_simple_mock_conn_ctx(fetchall_side_effects: list):
+    """Build a simple mock conn context that replays fetchall side effects."""
+    mock_cur = MagicMock()
+    mock_cur.fetchall.side_effect = fetchall_side_effects
+
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cur)
+    mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+    mock_conn_ctx = MagicMock()
+    mock_conn_ctx.__enter__ = MagicMock(return_value=mock_conn)
+    mock_conn_ctx.__exit__ = MagicMock(return_value=False)
+
+    return mock_conn_ctx, mock_cur
+
+
+class TestRetrieveRecipesShape:
+    """retrieve_recipes returns dicts with the right keys."""
+
+    def test_returns_list_of_dicts_with_required_keys(self):
+        rows = [_make_recipe_row(i) for i in range(3)]
+        mock_ctx, _ = _build_simple_mock_conn_ctx([rows])
+
+        with patch("app.retrieval.get_conn", return_value=mock_ctx):
+            result = retrieve_recipes(limit=3)
+
+        assert len(result) == 3
+        for r in result:
+            assert "dishName" in r
+            assert "ingredients" in r
+            assert "diets" in r
+            assert "cuisines" in r
+            assert "servings" in r
+            assert "dishTypes" in r
+
+    def test_ingredients_parsed_from_json(self):
+        rows = [_make_recipe_row(1)]
+        mock_ctx, _ = _build_simple_mock_conn_ctx([rows])
+
+        with patch("app.retrieval.get_conn", return_value=mock_ctx):
+            result = retrieve_recipes(limit=1)
+
+        assert result[0]["ingredients"] == ["chicken", "garlic"]
+
+    def test_returns_empty_when_no_recipes(self):
+        mock_ctx, _ = _build_simple_mock_conn_ctx([[]])
+
+        with patch("app.retrieval.get_conn", return_value=mock_ctx):
+            result = retrieve_recipes(limit=10)
+
+        assert result == []
+
+
+class TestRetrieveRecipesDietaryFilter:
+    """retrieve_recipes filters by dietary restriction when provided."""
+
+    def test_dietary_restriction_filters_sql(self):
+        """When dietary_restriction is set, SQL must include a diet filter."""
+        rows = [_make_recipe_row(1, diets=["vegetarian"])]
+        mock_ctx, mock_cur = _build_simple_mock_conn_ctx([rows])
+
+        with patch("app.retrieval.get_conn", return_value=mock_ctx):
+            retrieve_recipes(limit=5, dietary_restriction="vegetarian")
+
+        sql = mock_cur.execute.call_args_list[0][0][0]
+        # Must filter on diets array
+        assert "@>" in sql or "diets" in sql.lower()
+
+    def test_no_filter_when_dietary_restriction_is_none(self):
+        """When dietary_restriction is None, SQL must NOT filter by diets."""
+        rows = [_make_recipe_row(1)]
+        mock_ctx, mock_cur = _build_simple_mock_conn_ctx([rows])
+
+        with patch("app.retrieval.get_conn", return_value=mock_ctx):
+            retrieve_recipes(limit=5, dietary_restriction=None)
+
+        sql = mock_cur.execute.call_args_list[0][0][0]
+        assert "@>" not in sql
+
+    def test_fallback_to_unfiltered_when_filtered_returns_empty(self):
+        """If filtered query returns empty, fall back to unfiltered query."""
+        fallback_rows = [_make_recipe_row(99)]
+        # First call (filtered) returns empty, second call (unfiltered) returns rows
+        mock_ctx, mock_cur = _build_simple_mock_conn_ctx([[], fallback_rows])
+
+        with patch("app.retrieval.get_conn", return_value=mock_ctx):
+            result = retrieve_recipes(limit=5, dietary_restriction="vegan")
+
+        # Should have made 2 DB calls — filtered + fallback
+        assert mock_cur.execute.call_count == 2
+        assert len(result) == 1
+        assert result[0]["dishName"] == "Recipe 99"
+
+    def test_no_fallback_when_filtered_returns_results(self):
+        """If filtered query returns rows, do NOT issue a second query."""
+        rows = [_make_recipe_row(i, diets=["vegetarian"]) for i in range(3)]
+        mock_ctx, mock_cur = _build_simple_mock_conn_ctx([rows])
+
+        with patch("app.retrieval.get_conn", return_value=mock_ctx):
+            result = retrieve_recipes(limit=5, dietary_restriction="vegetarian")
+
+        assert mock_cur.execute.call_count == 1
+        assert len(result) == 3
+
+    def test_dietary_restriction_none_treated_as_no_filter(self):
+        """dietary_restriction='none' (string 'none') is treated the same as None."""
+        rows = [_make_recipe_row(1)]
+        mock_ctx, mock_cur = _build_simple_mock_conn_ctx([rows])
+
+        with patch("app.retrieval.get_conn", return_value=mock_ctx):
+            retrieve_recipes(limit=5, dietary_restriction="none")
+
+        sql = mock_cur.execute.call_args_list[0][0][0]
+        assert "@>" not in sql

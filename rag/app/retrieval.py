@@ -1,6 +1,9 @@
 import json
+import logging
 from typing import Any, Dict, List, Optional
 from .db import get_conn
+
+logger = logging.getLogger(__name__)
 
 def fetch_items_missing_embeddings(store: Optional[str], limit: int) -> List[Dict[str, Any]]:
     with get_conn() as conn:
@@ -256,6 +259,66 @@ def retrieve_candidates(
                 })
 
             return enriched
+
+def retrieve_recipes(limit: int = 25, dietary_restriction: str | None = None) -> List[Dict[str, Any]]:
+    """
+    Randomly sample recipes from the recipes table to use as dish templates.
+    Returns compact dicts with dishName, ingredients, diets, servings, cuisines.
+
+    When dietary_restriction is provided (and not 'none'), filters to recipes
+    that match that diet. Falls back to unfiltered random sample if no matches.
+    """
+    # Normalise: treat the string "none" as no restriction
+    diet_filter = dietary_restriction if (dietary_restriction and dietary_restriction.lower() != "none") else None
+
+    def _parse_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        result: List[Dict[str, Any]] = []
+        for r in rows:
+            ing_names: List[str] = []
+            if r.get("ingredients_json"):
+                try:
+                    ings = json.loads(r["ingredients_json"])
+                    ing_names = [i["name"] for i in ings if isinstance(i, dict) and i.get("name")][:15]
+                except (json.JSONDecodeError, KeyError, TypeError) as exc:
+                    logger.debug("Could not parse ingredients_json for recipe '%s': %s", r.get("title"), exc)
+            result.append({
+                "dishName": r["title"],
+                "ingredients": ing_names,
+                "diets": r.get("diets") or [],
+                "cuisines": r.get("cuisines") or [],
+                "servings": r.get("servings"),
+                "dishTypes": r.get("dish_types") or [],
+            })
+        return result
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            if diet_filter:
+                cur.execute("""
+                  SELECT title, ingredients_json, diets, cuisines, servings, dish_types
+                  FROM recipes
+                  WHERE diets @> ARRAY[%s]::text[]
+                  ORDER BY RANDOM()
+                  LIMIT %s
+                """, (diet_filter, limit))
+                rows = cur.fetchall()
+                if rows:
+                    return _parse_rows(rows)
+                # Fallback: no recipes match the diet filter → use unfiltered sample
+                logger.warning(
+                    "No recipes found for diet_filter=%r; falling back to unfiltered sample",
+                    diet_filter,
+                )
+            cur.execute("""
+              SELECT title, ingredients_json, diets, cuisines, servings, dish_types
+              FROM recipes
+              ORDER BY RANDOM()
+              LIMIT %s
+            """, (limit,))
+            rows = cur.fetchall()
+
+    return _parse_rows(rows)
+
 
 def verify_ids(store: str, ids: List[int]) -> bool:
     with get_conn() as conn:
