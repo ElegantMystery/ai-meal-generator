@@ -51,7 +51,14 @@ server:
   port: 8080
 
 mealgen:
-  rag:  
+  rag:
     base-url: http://localhost:8000
     secret: dev-secret
+
+stripe:
+  secret-key: ${STRIPE_SECRET_KEY:sk_test_placeholder}
+  webhook-secret: ${STRIPE_WEBHOOK_SECRET:whsec_placeholder}
+  price-id: ${STRIPE_PRO_PRICE_ID:price_placeholder}
+  success-url: ${frontend.url:http://localhost:3000}/dashboard?upgrade=success
+  cancel-url: ${frontend.url:http://localhost:3000}/pricing
 

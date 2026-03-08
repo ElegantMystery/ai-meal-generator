@@ -9,6 +9,8 @@ import com.mealgen.backend.mealplan.repository.MealPlanRepository;
 import com.mealgen.backend.mealplan.ai.RagClient;
 import com.mealgen.backend.preferences.model.UserPreferences;
 import com.mealgen.backend.preferences.repository.UserPreferencesRepository;
+import com.mealgen.backend.subscription.exception.QuotaExceededException;
+import com.mealgen.backend.subscription.service.SubscriptionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +28,7 @@ public class MealPlanService {
     private final UserPreferencesRepository preferencesRepository;
     private final MealPlanRepository mealPlanRepository;
     private final RagClient ragClient;
+    private final SubscriptionService subscriptionService;
 
     public List<MealPlanResponse> listMine(String email) {
         User user = getUserByEmail(email);
@@ -104,6 +107,11 @@ public class MealPlanService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalStateException("User not found for email: " + email));
 
+        // Quota check — throws QuotaExceededException for FREE users at limit
+        if (!subscriptionService.canGenerate(user)) {
+            throw new QuotaExceededException();
+        }
+
         UserPreferences prefs = preferencesRepository.findByUserId(user.getId()).orElse(null);
 
         // Build payload for python-rag
@@ -139,6 +147,9 @@ public class MealPlanService {
                 .endDate(endDate)
                 .planJson(planJson)
                 .build());
+
+        // Atomically increment the generation counter
+        userRepository.incrementPlansGeneratedCount(user.getId());
 
         return MealPlanResponse.builder()
                 .id(saved.getId())

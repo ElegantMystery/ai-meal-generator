@@ -10,6 +10,8 @@ import com.mealgen.backend.mealplan.model.MealPlan;
 import com.mealgen.backend.mealplan.repository.MealPlanRepository;
 import com.mealgen.backend.preferences.model.UserPreferences;
 import com.mealgen.backend.preferences.repository.UserPreferencesRepository;
+import com.mealgen.backend.subscription.exception.QuotaExceededException;
+import com.mealgen.backend.subscription.service.SubscriptionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,12 +28,18 @@ public class MealPlanGenerateService {
     private final UserPreferencesRepository preferencesRepository;
     private final ItemRepository itemRepository;
     private final MealPlanRepository mealPlanRepository;
+    private final SubscriptionService subscriptionService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Transactional
     public MealPlanResponse generate(String email, String store, int days) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalStateException("User not found for email: " + email));
+
+        // Quota check — throws QuotaExceededException for FREE users at limit
+        if (!subscriptionService.canGenerate(user)) {
+            throw new QuotaExceededException();
+        }
 
         UserPreferences prefs = preferencesRepository.findByUserId(user.getId()).orElse(null);
 
@@ -122,6 +130,9 @@ public class MealPlanGenerateService {
                 .endDate(end)
                 .planJson(planJson)
                 .build());
+
+        // Atomically increment the generation counter
+        userRepository.incrementPlansGeneratedCount(user.getId());
 
         return MealPlanResponse.builder()
                 .id(saved.getId())

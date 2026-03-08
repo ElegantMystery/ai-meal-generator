@@ -6,6 +6,7 @@ import com.mealgen.backend.auth.dto.SignupRequest;
 import com.mealgen.backend.auth.model.User;
 import com.mealgen.backend.auth.repository.UserRepository;
 import com.mealgen.backend.auth.service.AuthService;
+import com.mealgen.backend.subscription.service.SubscriptionService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -35,6 +36,7 @@ public class AuthController {
 
     private final UserRepository userRepository;
     private final AuthService authService;
+    private final SubscriptionService subscriptionService;
     private static final Logger logger = LoggerFactory.getLogger(AuthController.class);
 
     @PostMapping("/signup")
@@ -117,7 +119,9 @@ public class AuthController {
                     "name", user.getName() != null ? user.getName() : "",
                     "provider", user.getProvider() != null ? user.getProvider() : "",
                     "providerId", user.getProviderId() != null ? user.getProviderId() : "",
-                    "onboardingCompleted", user.isOnboardingCompleted()
+                    "onboardingCompleted", user.isOnboardingCompleted(),
+                    "tier", subscriptionService.getTier(user.getId()).name(),
+                    "remainingQuota", subscriptionService.getRemainingQuota(user)
             ));
         }
 
@@ -132,13 +136,17 @@ public class AuthController {
                 String email = (String) securityContext.getAuthentication().getPrincipal();
                 try {
                     AuthResponse response = authService.getUserByEmail(email);
+                    User sessionUser = userRepository.findByEmail(email)
+                            .orElseThrow(() -> new IllegalStateException("User not found: " + email));
                     return ResponseEntity.ok(Map.of(
                             "id", response.getId().toString(),
                             "email", response.getEmail(),
                             "name", response.getName() != null ? response.getName() : "",
                             "provider", response.getProvider() != null ? response.getProvider() : "",
                             "providerId", "",
-                            "onboardingCompleted", response.isOnboardingCompleted()
+                            "onboardingCompleted", response.isOnboardingCompleted(),
+                            "tier", subscriptionService.getTier(sessionUser.getId()).name(),
+                            "remainingQuota", subscriptionService.getRemainingQuota(sessionUser)
                     ));
                 } catch (Exception e) {
                     logger.error("Error fetching user from session", e);
