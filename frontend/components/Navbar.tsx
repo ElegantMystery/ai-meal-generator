@@ -6,21 +6,54 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
 import { cn } from "@/lib/cn";
+import { Badge } from "@/components/ui/Badge";
+import { createPortalSession } from "@/lib/api";
+import { navigateTo } from "@/lib/navigate";
+import type { SubscriptionStatus } from "@/lib/api";
 
 interface NavbarProps {
   userName?: string;
   onLogout: () => void;
   loggingOut: boolean;
+  /** Current subscription tier — "FREE" | "PRO" | undefined (not yet loaded) */
+  subscriptionTier?: "FREE" | "PRO";
+  /** Full subscription status object (optional, for future use) */
+  subscriptionStatus?: SubscriptionStatus | null;
 }
 
-const navLinks = [
+const baseNavLinks = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/settings", label: "Settings" },
 ];
 
-export default function Navbar({ userName, onLogout, loggingOut }: NavbarProps) {
+export default function Navbar({
+  userName,
+  onLogout,
+  loggingOut,
+  subscriptionTier,
+}: NavbarProps) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
+
+  const isPro = subscriptionTier === "PRO";
+
+  const handleBillingClick = async () => {
+    setPortalLoading(true);
+    try {
+      const { url } = await createPortalSession();
+      navigateTo(url);
+    } catch (err) {
+      console.error("Failed to open billing portal:", err);
+      setPortalLoading(false);
+    }
+  };
+
+  // Build nav links — add Pricing for FREE/undefined, no Pricing for PRO
+  const navLinks = [
+    ...baseNavLinks,
+    ...(!isPro ? [{ href: "/pricing", label: "Pricing" }] : []),
+  ];
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
@@ -57,11 +90,31 @@ export default function Navbar({ userName, onLogout, loggingOut }: NavbarProps) 
 
         {/* Right side */}
         <div className="flex items-center gap-3">
+          {/* PRO badge */}
+          {isPro && (
+            <Badge variant="success" className="hidden md:inline-flex">
+              PRO
+            </Badge>
+          )}
+
           {userName && (
             <span className="hidden md:block text-sm text-gray-500 max-w-[160px] truncate">
               {userName}
             </span>
           )}
+
+          {/* Billing button for PRO users */}
+          {isPro && (
+            <button
+              onClick={handleBillingClick}
+              disabled={portalLoading}
+              aria-label="Manage billing"
+              className="hidden sm:inline-flex items-center px-3 py-1.5 rounded-md border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition"
+            >
+              {portalLoading ? "Loading…" : "Billing"}
+            </button>
+          )}
+
           <button
             onClick={onLogout}
             disabled={loggingOut}
@@ -99,6 +152,15 @@ export default function Navbar({ userName, onLogout, loggingOut }: NavbarProps) 
               {link.label}
             </Link>
           ))}
+          {isPro && (
+            <button
+              onClick={handleBillingClick}
+              disabled={portalLoading}
+              className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50 transition"
+            >
+              {portalLoading ? "Loading…" : "Billing"}
+            </button>
+          )}
           <button
             onClick={onLogout}
             disabled={loggingOut}

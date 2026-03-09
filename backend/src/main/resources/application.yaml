@@ -7,8 +7,7 @@ spring:
   
   session:
     cookie:
-      sameSite: none
-      secure: false
+      sameSite: lax
 
   datasource:
     url: jdbc:postgresql://localhost:5432/mealgen
@@ -49,6 +48,19 @@ spring:
 
 server:
   port: 8080
+  tomcat:
+    accesslog:
+      enabled: true
+      directory: /dev
+      prefix: stdout
+      buffered: false
+      suffix: ""
+      pattern: "[ACCESS] %t %s %m %U %q"
+
+logging:
+  level:
+    org.springframework.security: DEBUG
+    org.springframework.security.web.authentication: DEBUG
 
 mealgen:
   rag:

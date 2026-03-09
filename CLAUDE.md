@@ -27,6 +27,20 @@ The generated plan's `_meta` includes `recipeTemplatesOffered` (list of recipe t
 
 Two generation modes exist: rule-based (`/api/mealplans/generate`) and AI-powered (`/api/mealplans/generate-ai`).
 
+## Subscription & Quota System
+
+The app enforces a **FREE tier (3 plans/month) vs. PRO tier (unlimited)** model via Stripe:
+
+- **FREE users** can generate 3 meal plans per month; the `users.plans_generated_count` counter is incremented on each successful generation
+- **PRO users** are granted unlimited generations; status is checked via the `subscriptions` table (active or past_due statuses grant PRO access)
+- **Quota enforcement** occurs in `MealPlanGenerateService` before calling the RAG service; exceeding the limit raises `QuotaExceededException` (HTTP 429)
+- **Stripe integration** via `SubscriptionService`:
+  - Creates Stripe customers on signup (linked via `users.stripe_customer_id`)
+  - Checkout sessions redirect to Stripe Hosted Checkout (`STRIPE_PRO_PRICE_ID`); success redirects to `/dashboard?upgrade=success`
+  - Billing portal sessions allow users to manage subscriptions
+  - Webhooks (`/api/webhooks/stripe`) handle `subscription.updated` → upsert/delete `subscriptions` record, `invoice.payment_succeeded` → mark active
+- **Tier resolution** via `subscriptionService.getTier(userId)`: returns PRO if active subscription exists, else FREE
+
 ## Git Workflow
 
 **Always follow this workflow for every new feature or task:**
@@ -257,6 +271,13 @@ python scripts/spoonacular/fetch_recipes.py --total 300 --embed
 
 ## Key Configuration
 
+### Environment Variables (Backend)
+- `SPRING_DATASOURCE_PASSWORD` - PostgreSQL password
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` - Google OAuth2 credentials
+- `STRIPE_SECRET_KEY` - Stripe API secret key (sk_test_* for dev, sk_live_* for prod)
+- `STRIPE_WEBHOOK_SECRET` - Stripe webhook signing secret (whsec_*)
+- `STRIPE_PRO_PRICE_ID` - Stripe price ID for PRO subscription tier (price_*)
+
 ### Environment Variables (RAG)
 - `DATABASE_URL` - PostgreSQL connection string
 - `OPENAI_API_KEY` - OpenAI API key
@@ -268,21 +289,23 @@ python scripts/spoonacular/fetch_recipes.py --total 300 --embed
 ### Backend Config
 - `backend/src/main/resources/application.yaml` - Spring config
 - `mealgen.rag.base-url` / `mealgen.rag.secret` - RAG service connection
+- `stripe.*` - Stripe integration config (secret-key, webhook-secret, price-id, success-url, cancel-url)
 
 ### Frontend
-- API base URL hardcoded in `frontend/lib/api.ts` (localhost:8080)
+- API base URL: `NEXT_PUBLIC_API_BASE_URL` env var (defaults to http://localhost:8080)
 
 ## Project Structure
 
 ```
 backend/
 ├── src/main/java/com/mealgen/backend/
-│   ├── auth/           # OAuth2, User entity
+│   ├── auth/           # OAuth2, User entity with Stripe customer ID
 │   ├── items/          # Grocery items CRUD
-│   ├── mealplan/       # Meal plans, RagClient, ShoppingList
+│   ├── mealplan/       # Meal plans, RagClient, ShoppingList (quota-enforced)
 │   ├── preferences/    # User dietary preferences
-│   └── security/       # Spring Security config
-└── src/main/resources/db/migration/  # Flyway SQL migrations (V1-V027)
+│   ├── security/       # Spring Security config
+│   └── subscription/   # Stripe integration (SubscriptionService, SubscriptionController, StripeWebhookController)
+└── src/main/resources/db/migration/  # Flyway SQL migrations (V1-V028)
 
 frontend/
 ├── app/                # Next.js app router pages
@@ -310,30 +333,118 @@ scripts/
 ## Database Schema
 
 Key tables (managed by Flyway):
-- `users` - Users (supports OAuth2 and local email/password auth, tracks onboarding status)
+- `users` - Users (supports OAuth2 and local email/password auth, tracks onboarding status); includes `stripe_customer_id` (linked to Stripe) and `plans_generated_count` (quota enforcement)
 - `user_preferences` - Dietary restrictions, allergies, calorie targets
 - `items` - Grocery items with store, price, category
 - `mealplans` - Generated meal plans (JSON stored in `plan_json`; `_meta.recipeTemplatesOffered` lists recipes sampled at generation time)
 - `recipes` - Recipe dataset (title, ingredients, diets, cuisines, dish_types); currently 300 Spoonacular recipes; GIN indexes on `diets` and `dish_types`
 - `recipe_embeddings` - Vector embeddings for recipes (HNSW, 1536-dim); populated via `fetch_recipes.py --embed`
 - `item_embeddings`, `item_nutrition_embeddings`, `item_ingredients_embeddings` - Vector embeddings with HNSW indexes
+- `subscriptions` - Stripe subscription records (one per active subscriber); tracks status (active/past_due/canceled/unpaid), tier (PRO), billing period, and cancellation status
 
 ## API Endpoints
 
 ### Backend REST API (port 8080)
+
+#### Authentication
 - `POST /api/auth/signup` - Register with email/password
 - `POST /api/auth/login` - Login with email/password
 - `GET /api/auth/me` - Get current user
 - `POST /api/auth/logout` - Logout
 - `POST /api/auth/complete-onboarding` - Mark user onboarding as completed
 - `GET /oauth2/authorization/google` - Google OAuth2 login
+
+#### Meal Plans
 - `GET/POST/DELETE /api/mealplans` - Meal plan CRUD
-- `POST /api/mealplans/generate` - Rule-based generation
-- `POST /api/mealplans/generate-ai` - AI RAG generation
+- `POST /api/mealplans/generate` - Rule-based generation (quota-enforced for FREE tier, unlimited for PRO)
+- `POST /api/mealplans/generate-ai` - AI RAG generation (quota-enforced for FREE tier, unlimited for PRO)
 - `GET /api/mealplans/{id}/shopping-list` - Generate shopping list
+
+#### Preferences
 - `GET/PUT /api/preferences/me` - User preferences
+
+#### Subscriptions & Billing
+- `GET /api/subscription/status` - Get user's current subscription tier, remaining quota (FREE tier: -1 for unlimited PRO), and billing period end
+- `POST /api/subscription/checkout` - Create Stripe checkout session, return redirect URL
+- `POST /api/subscription/portal` - Create Stripe billing portal session, return redirect URL
+- `POST /api/webhooks/stripe` - Stripe webhook endpoint (handles subscription.updated, invoice.payment_succeeded, etc.)
 
 ### RAG Service (port 8000)
 - `POST /generate` - AI meal plan generation (requires X-RAG-SECRET header)
 - `POST /embed/backfill/*` - Populate vector embeddings
 - `GET /health` - Health check
+
+## Frontend Theme & Design System
+
+### Design System
+- **No third-party UI library** (no shadcn, Radix, Headless UI). Custom components only.
+- **Icons**: `@heroicons/react` v2 — 24px outline style
+- **Class composition**: `cn()` from `lib/cn.ts` (clsx + tailwind-merge). Always use `cn()` for conditional classes.
+
+### Color Tokens (Tailwind v4 CSS variables in `app/globals.css`)
+```
+Brand green (primary):  brand-50 … brand-900
+  Main CTA:             bg-brand-600  hover:bg-brand-700
+  Text/link:            text-brand-600  hover:text-brand-700
+  Success badge:        bg-brand-100 text-brand-700
+
+Accent amber (highlight): accent-50 … accent-600
+  Warning badge:        bg-accent-100 text-accent-600
+
+Surface (subtle backgrounds): surface-50, surface-100, surface-200
+
+Semantic (Tailwind defaults):
+  Error/destructive:    red-600 / red-700 / bg-red-50 / bg-red-100
+  Info:                 blue-500 / blue-600 / bg-blue-100
+  Neutral:              gray-50 … gray-900
+```
+
+### Typography
+- **Body/UI**: `Geist` sans-serif (`--font-geist-sans`)
+- **Monospace**: `Geist Mono` (`--font-geist-mono`)
+- **Brand/Display headings**: `Playfair Display` 700 (`--font-brand`)
+- Common sizes: `text-xs` (labels/badges) → `text-sm` (descriptions) → `text-base` (body) → `text-lg` (card titles) → `text-2xl` (page headers)
+- Weights: `font-medium` (buttons/labels), `font-semibold` (titles), `font-bold` (h1)
+
+### Component Patterns
+
+**Button** (`components/ui/Button.tsx`)
+- Variants: `primary` (bg-brand-600), `secondary` (bg-white border-gray-300), `destructive` (bg-red-600), `ghost` (transparent)
+- Sizes: `sm` (px-3 py-1.5 text-xs), `md` (px-4 py-2 text-sm, default), `lg` (px-6 py-3 text-base)
+- Always: `rounded-md border font-medium transition focus:ring-2 focus:ring-offset-2 disabled:opacity-50`
+
+**Card** (`components/ui/Card.tsx`)
+- Root: `bg-white rounded-xl border border-gray-200 shadow-sm`
+- Title: `text-lg font-semibold text-gray-900`
+- Description: `text-sm text-gray-500 mt-1`
+
+**Badge** (`components/ui/Badge.tsx`)
+- Base: `inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium`
+- Variants: `default` (gray-100/700), `success` (brand-100/700), `warning` (accent-100/600), `info` (blue-100/700), `destructive` (red-100/700)
+
+**Modal** (`components/Modal.tsx`)
+- Backdrop: `fixed inset-0 z-50 flex items-center justify-center bg-black/50`
+- Dialog: `max-w-{sm|md|lg} w-full mx-4 bg-white rounded-xl shadow-xl`
+- Header: `px-6 py-4 border-b border-gray-200`
+- Content: `px-6 py-4`
+- Supports escape key + backdrop click to close
+
+**Toast** (`components/ui/Toast.tsx`)
+- Position: `fixed bottom-4 right-4 z-50`
+- Variants: `success` (border-l-brand-500), `error` (border-l-red-500), `info` (border-l-blue-500)
+- Auto-dismiss: 4 seconds; animation: `animate-slide-up`
+- Usage: `const { showToast } = useToast()` → `showToast('message', 'success')`
+
+### Animations (`app/globals.css`)
+- `animate-fade-in` — modal open (0.2s ease-out)
+- `animate-slide-up` — toast appear (0.25s ease-out, translateY 8px → 0)
+- `animate-pulse` / `animate-spin` — skeleton / button loading spinner
+
+### Conventions
+- Light mode only (no dark mode)
+- Form labels: `text-sm font-medium text-gray-700 mb-1`
+- Form errors: `text-xs text-red-600` below field
+- Helper text: `text-xs text-gray-500`
+- Links: `text-sm font-medium text-brand-600 hover:text-brand-700 transition`
+- Page container: `max-w-4xl mx-auto py-8 px-4`
+- Section spacing: `space-y-6`

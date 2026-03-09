@@ -8,7 +8,6 @@ import com.mealgen.backend.subscription.repository.SubscriptionRepository;
 import com.stripe.Stripe;
 import com.stripe.model.Customer;
 import com.stripe.model.Event;
-import com.stripe.model.EventDataObjectDeserializer;
 import com.stripe.model.checkout.Session;
 import com.stripe.param.CustomerCreateParams;
 import com.stripe.param.CustomerSearchParams;
@@ -137,16 +136,15 @@ public class SubscriptionService {
     public void handleCheckoutCompleted(Event event) {
         Stripe.apiKey = stripeSecretKey;
         try {
-            EventDataObjectDeserializer deserializer = event.getDataObjectDeserializer();
-            if (!deserializer.getObject().isPresent()) {
-                log.warn("checkout.session.completed: failed to deserialize event data");
-                return;
-            }
-            com.stripe.model.checkout.Session session =
-                    (com.stripe.model.checkout.Session) deserializer.getObject().get();
+            // Extract IDs from raw JSON to avoid SDK/API version deserialization mismatch
+            com.fasterxml.jackson.databind.JsonNode obj = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readTree(event.toJson())
+                    .path("data").path("object");
 
-            String customerId = session.getCustomer();
-            String subscriptionId = session.getSubscription();
+            String customerId = obj.path("customer").asText(null);
+            String subscriptionId = obj.path("subscription").asText(null);
+            if ("null".equals(customerId)) customerId = null;
+            if ("null".equals(subscriptionId)) subscriptionId = null;
 
             if (subscriptionId == null || customerId == null) {
                 log.warn("checkout.session.completed missing subscription or customer id");
@@ -191,13 +189,11 @@ public class SubscriptionService {
     public void handleSubscriptionUpdated(Event event) {
         Stripe.apiKey = stripeSecretKey;
         try {
-            EventDataObjectDeserializer deserializer = event.getDataObjectDeserializer();
-            if (!deserializer.getObject().isPresent()) {
-                log.warn("customer.subscription.updated: failed to deserialize event data");
-                return;
-            }
-            com.stripe.model.Subscription stripeSub =
-                    (com.stripe.model.Subscription) deserializer.getObject().get();
+            String subscriptionId = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readTree(event.toJson())
+                    .path("data").path("object").path("id").asText();
+
+            com.stripe.model.Subscription stripeSub = com.stripe.model.Subscription.retrieve(subscriptionId);
 
             subscriptionRepository.findByStripeSubscriptionId(stripeSub.getId())
                     .ifPresent(sub -> {
@@ -215,15 +211,11 @@ public class SubscriptionService {
     public void handleSubscriptionDeleted(Event event) {
         Stripe.apiKey = stripeSecretKey;
         try {
-            EventDataObjectDeserializer deserializer = event.getDataObjectDeserializer();
-            if (!deserializer.getObject().isPresent()) {
-                log.warn("customer.subscription.deleted: failed to deserialize event data");
-                return;
-            }
-            com.stripe.model.Subscription stripeSub =
-                    (com.stripe.model.Subscription) deserializer.getObject().get();
+            String subscriptionId = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readTree(event.toJson())
+                    .path("data").path("object").path("id").asText();
 
-            subscriptionRepository.findByStripeSubscriptionId(stripeSub.getId())
+            subscriptionRepository.findByStripeSubscriptionId(subscriptionId)
                     .ifPresent(sub -> {
                         sub.setStatus("canceled");
                         subscriptionRepository.save(sub);
