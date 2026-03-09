@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthStore } from "@/lib/authStore";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
@@ -14,8 +15,12 @@ import {
 } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Select";
 import { SkeletonCard, SkeletonText } from "@/components/ui/Skeleton";
+import { useToast } from "@/components/ui/Toast";
 import { CalendarDaysIcon, SparklesIcon } from "@heroicons/react/24/outline";
 import { formatDateRange, formatCreatedAt } from "@/lib/formatters";
+import { useSubscription } from "@/hooks/useSubscription";
+import QuotaBadge from "@/components/QuotaBadge";
+import UpgradeModal from "@/components/UpgradeModal";
 
 type PreferencesDto = {
   dietaryRestrictions: string | null;
@@ -34,9 +39,28 @@ type MealPlan = {
 
 type StoreOption = "TRADER_JOES" | "COSTCO";
 
+// Type guard for quota exceeded errors
+function isQuotaExceeded(err: unknown): boolean {
+  if (err && typeof err === "object" && "response" in err) {
+    const errObj = err as {
+      response?: { status?: number; data?: { error?: string } };
+    };
+    return (
+      errObj.response?.status === 403 &&
+      errObj.response?.data?.error === "QUOTA_EXCEEDED"
+    );
+  }
+  return false;
+}
+
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
   const preferencesVersion = useAuthStore((s) => s.preferencesVersion);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { toast } = useToast();
+  const { status: subscriptionStatus, refetch: refetchSubscription } =
+    useSubscription();
 
   const [prefs, setPrefs] = useState<PreferencesDto>(null);
   const [loadingPrefs, setLoadingPrefs] = useState(true);
@@ -47,9 +71,58 @@ export default function DashboardPage() {
   const [creating, setCreating] = useState(false);
   const [creatingAi, setCreatingAi] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const [store, setStore] = useState<StoreOption>("TRADER_JOES");
   const [days, setDays] = useState<number>(7);
+
+  // Handle ?upgrade=success — poll for PRO status until webhook is processed
+  const upgradeHandledRef = useRef(false);
+
+  useEffect(() => {
+    if (upgradeHandledRef.current) return;
+    if (searchParams.get("upgrade") !== "success") return;
+
+    upgradeHandledRef.current = true;
+    router.replace("/dashboard");
+
+    let attempts = 0;
+    const MAX_ATTEMPTS = 8;
+    const INTERVAL_MS = 1500;
+
+    const poll = () => {
+      refetchSubscription();
+      attempts += 1;
+      if (attempts >= MAX_ATTEMPTS) {
+        // Webhook still hasn't fired — show a softer message and stop polling
+        toast("Upgrade successful! Your plan will update shortly.", "success");
+      }
+    };
+
+    poll();
+    const interval = setInterval(() => {
+      if (attempts >= MAX_ATTEMPTS) {
+        clearInterval(interval);
+        return;
+      }
+      poll();
+    }, INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [searchParams, router, refetchSubscription, toast]);
+
+  // Fire the "Welcome to PRO" toast once polled status confirms PRO
+  const proBadgeFiredRef = useRef(false);
+  useEffect(() => {
+    if (
+      !proBadgeFiredRef.current &&
+      subscriptionStatus?.tier === "PRO" &&
+      upgradeHandledRef.current
+    ) {
+      proBadgeFiredRef.current = true;
+      toast("Welcome to PRO! You now have unlimited meal plans.", "success");
+    }
+  }, [subscriptionStatus, toast]);
 
   const prefsSummary = useMemo(() => {
     if (!prefs) return null;
@@ -105,9 +178,14 @@ export default function DashboardPage() {
         params: { store, days },
       });
       setMealplans((prev) => [res.data, ...prev]);
+      await refetchSubscription();
     } catch (err) {
       console.error("Failed to generate meal plan:", err);
-      setError("Failed to generate meal plan.");
+      if (isQuotaExceeded(err)) {
+        setShowUpgradeModal(true);
+      } else {
+        setError("Failed to generate meal plan.");
+      }
     } finally {
       setCreating(false);
     }
@@ -121,9 +199,14 @@ export default function DashboardPage() {
         params: { store, days },
       });
       setMealplans((prev) => [res.data, ...prev]);
+      await refetchSubscription();
     } catch (err) {
       console.error("Failed to generate AI meal plan:", err);
-      setError("Failed to generate AI meal plan.");
+      if (isQuotaExceeded(err)) {
+        setShowUpgradeModal(true);
+      } else {
+        setError("Failed to generate AI meal plan.");
+      }
     } finally {
       setCreatingAi(false);
     }
@@ -190,8 +273,18 @@ export default function DashboardPage() {
         {/* Generate card */}
         <Card>
           <CardHeader>
-            <CardTitle>Generate Plan</CardTitle>
-            <CardDescription>Pick a store and duration.</CardDescription>
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <CardTitle>Generate Plan</CardTitle>
+                <CardDescription>Pick a store and duration.</CardDescription>
+              </div>
+              {subscriptionStatus && (
+                <QuotaBadge
+                  tier={subscriptionStatus.tier}
+                  remainingQuota={subscriptionStatus.remainingQuota}
+                />
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -295,6 +388,12 @@ export default function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Upgrade Modal */}
+      <UpgradeModal
+        open={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+      />
     </main>
   );
 }

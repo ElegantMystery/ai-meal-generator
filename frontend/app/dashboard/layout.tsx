@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import OnboardingModal from "@/components/OnboardingModal";
 import Navbar from "@/components/Navbar";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { useSubscription } from "@/hooks/useSubscription";
 
 export default function DashboardLayout({
   children,
@@ -19,6 +20,7 @@ export default function DashboardLayout({
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const { status: subscriptionStatus } = useSubscription();
 
   useEffect(() => {
     if (user) {
@@ -110,6 +112,8 @@ export default function DashboardLayout({
         userName={user.name || user.email}
         onLogout={handleLogout}
         loggingOut={loggingOut}
+        subscriptionTier={subscriptionStatus?.tier}
+        subscriptionStatus={subscriptionStatus}
       />
       {children}
     </div>

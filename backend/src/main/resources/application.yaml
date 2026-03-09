@@ -7,8 +7,7 @@ spring:
   
   session:
     cookie:
-      sameSite: none
-      secure: false
+      sameSite: lax
 
   datasource:
     url: jdbc:postgresql://localhost:5432/mealgen
@@ -49,9 +48,29 @@ spring:
 
 server:
   port: 8080
+  tomcat:
+    accesslog:
+      enabled: true
+      directory: /dev
+      prefix: stdout
+      buffered: false
+      suffix: ""
+      pattern: "[ACCESS] %t %s %m %U %q"
+
+logging:
+  level:
+    org.springframework.security: DEBUG
+    org.springframework.security.web.authentication: DEBUG
 
 mealgen:
-  rag:  
+  rag:
     base-url: http://localhost:8000
     secret: dev-secret
+
+stripe:
+  secret-key: ${STRIPE_SECRET_KEY:sk_test_placeholder}
+  webhook-secret: ${STRIPE_WEBHOOK_SECRET:whsec_placeholder}
+  price-id: ${STRIPE_PRO_PRICE_ID:price_placeholder}
+  success-url: ${frontend.url:http://localhost:3000}/dashboard?upgrade=success
+  cancel-url: ${frontend.url:http://localhost:3000}/pricing
 

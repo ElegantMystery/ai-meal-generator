@@ -12,4 +12,6 @@ public interface MealPlanRepository extends JpaRepository<MealPlan, Long> {
     Optional<MealPlan> findByIdAndUserId(Long id, Long userId);
 
     long deleteByIdAndUserId(Long id, Long userId);
+
+    long countByUserId(Long userId);
 }

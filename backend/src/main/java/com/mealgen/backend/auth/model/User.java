@@ -35,4 +35,11 @@ public class User {
     @Builder.Default
     @Column(name = "onboarding_completed", nullable = false)
     private boolean onboardingCompleted = false;
+
+    @Column(name = "stripe_customer_id")
+    private String stripeCustomerId;
+
+    @Builder.Default
+    @Column(name = "plans_generated_count", nullable = false)
+    private int plansGeneratedCount = 0;
 }
