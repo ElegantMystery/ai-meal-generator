@@ -143,7 +143,7 @@ export default function PricingPage() {
                 {isPro && <Badge variant="success">Current Plan</Badge>}
               </div>
               <p className="text-3xl font-bold text-gray-900 mt-2">
-                $9
+                $4.99
                 <span className="text-base font-normal text-gray-500">/mo</span>
               </p>
             </CardHeader>

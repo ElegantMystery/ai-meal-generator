@@ -34,8 +34,10 @@ const mockCreateCheckoutSession = jest.fn();
 const mockCreatePortalSession = jest.fn();
 
 jest.mock("@/lib/api", () => ({
-  getSubscriptionStatus: (...args: unknown[]) => mockGetSubscriptionStatus(...args),
-  createCheckoutSession: (...args: unknown[]) => mockCreateCheckoutSession(...args),
+  getSubscriptionStatus: (...args: unknown[]) =>
+    mockGetSubscriptionStatus(...args),
+  createCheckoutSession: (...args: unknown[]) =>
+    mockCreateCheckoutSession(...args),
   createPortalSession: (...args: unknown[]) => mockCreatePortalSession(...args),
 }));
 
@@ -55,7 +57,11 @@ import PricingPage from "@/app/pricing/page";
 describe("PricingPage — loading state", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockUseSubscription.mockReturnValue({ status: null, loading: true, refetch: jest.fn() });
+    mockUseSubscription.mockReturnValue({
+      status: null,
+      loading: true,
+      refetch: jest.fn(),
+    });
   });
 
   it("renders skeleton while loading", () => {
@@ -72,7 +78,12 @@ describe("PricingPage — FREE user", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseSubscription.mockReturnValue({
-      status: { tier: "FREE", remainingQuota: 3, cancelAtPeriodEnd: false, currentPeriodEnd: null },
+      status: {
+        tier: "FREE",
+        remainingQuota: 3,
+        cancelAtPeriodEnd: false,
+        currentPeriodEnd: null,
+      },
       loading: false,
       refetch,
     });
@@ -80,7 +91,9 @@ describe("PricingPage — FREE user", () => {
 
   it("renders the page title or 'Back to Dashboard' link", () => {
     render(<PricingPage />);
-    expect(screen.getByRole("link", { name: /back to dashboard/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /back to dashboard/i }),
+    ).toBeInTheDocument();
   });
 
   it("renders FREE card with $0/mo price", () => {
@@ -88,9 +101,9 @@ describe("PricingPage — FREE user", () => {
     expect(screen.getByText(/\$0/i)).toBeInTheDocument();
   });
 
-  it("renders PRO card with $9/mo price", () => {
+  it("renders PRO card with $4.99/mo price", () => {
     render(<PricingPage />);
-    expect(screen.getByText(/\$9/i)).toBeInTheDocument();
+    expect(screen.getByText(/\$4\.99/i)).toBeInTheDocument();
   });
 
   it("renders FREE plan features", () => {
@@ -111,11 +124,15 @@ describe("PricingPage — FREE user", () => {
 
   it("PRO card shows 'Upgrade to PRO' button for FREE user", () => {
     render(<PricingPage />);
-    expect(screen.getByRole("button", { name: /upgrade to pro/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /upgrade to pro/i }),
+    ).toBeInTheDocument();
   });
 
   it("'Upgrade to PRO' calls createCheckoutSession", async () => {
-    mockCreateCheckoutSession.mockResolvedValueOnce({ url: "https://stripe.com/checkout" });
+    mockCreateCheckoutSession.mockResolvedValueOnce({
+      url: "https://stripe.com/checkout",
+    });
     render(<PricingPage />);
 
     await act(async () => {
@@ -126,14 +143,18 @@ describe("PricingPage — FREE user", () => {
   });
 
   it("'Upgrade to PRO' redirects to checkout url", async () => {
-    mockCreateCheckoutSession.mockResolvedValueOnce({ url: "https://stripe.com/checkout/123" });
+    mockCreateCheckoutSession.mockResolvedValueOnce({
+      url: "https://stripe.com/checkout/123",
+    });
     render(<PricingPage />);
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /upgrade to pro/i }));
     });
 
-    expect(mockNavigateTo).toHaveBeenCalledWith("https://stripe.com/checkout/123");
+    expect(mockNavigateTo).toHaveBeenCalledWith(
+      "https://stripe.com/checkout/123",
+    );
   });
 });
 
@@ -154,11 +175,15 @@ describe("PricingPage — PRO user", () => {
 
   it("PRO card shows 'Manage Billing' button for PRO user", () => {
     render(<PricingPage />);
-    expect(screen.getByRole("button", { name: /manage billing/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /manage billing/i }),
+    ).toBeInTheDocument();
   });
 
   it("'Manage Billing' calls createPortalSession", async () => {
-    mockCreatePortalSession.mockResolvedValueOnce({ url: "https://billing.stripe.com/portal" });
+    mockCreatePortalSession.mockResolvedValueOnce({
+      url: "https://billing.stripe.com/portal",
+    });
     render(<PricingPage />);
 
     await act(async () => {
@@ -177,6 +202,8 @@ describe("PricingPage — PRO user", () => {
 
   it("FREE card does not show upgrade button for PRO user", () => {
     render(<PricingPage />);
-    expect(screen.queryByRole("button", { name: /upgrade to pro/i })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /upgrade to pro/i }),
+    ).toBeNull();
   });
 });
