@@ -20,9 +20,32 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "Whole Haul",
-  description: "AI-powered meal planning with your favorite grocery stores.",
+  title: {
+    default: "Whole Haul – AI Meal Planner for Trader Joe's & Costco",
+    template: "%s | Whole Haul",
+  },
+  description:
+    "Generate personalized weekly meal plans using real Trader Joe's and Costco products. AI-powered, diet-aware, with a ready-to-use shopping list.",
+  metadataBase: new URL("https://whole-haul.com"),
   icons: { icon: "/icon.png" },
+  openGraph: {
+    type: "website",
+    siteName: "Whole Haul",
+    title: "Whole Haul – AI Meal Planner for Trader Joe's & Costco",
+    description:
+      "Generate personalized weekly meal plans using real Trader Joe's and Costco products. AI-powered, diet-aware, with a ready-to-use shopping list.",
+    url: "https://whole-haul.com",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Whole Haul – AI Meal Planner for Trader Joe's & Costco",
+    description:
+      "Generate personalized weekly meal plans using real Trader Joe's and Costco products. AI-powered, diet-aware, with a ready-to-use shopping list.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({

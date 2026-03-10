@@ -1,4 +1,17 @@
+import { Metadata } from "next";
 import Image from "next/image";
+
+export const metadata: Metadata = {
+  title: "Whole Haul – AI Meal Planner for Trader Joe's & Costco",
+  description:
+    "Generate personalized weekly meal plans using real Trader Joe's and Costco products. AI-powered, diet-aware, with a ready-to-use shopping list.",
+  openGraph: {
+    title: "Whole Haul – AI Meal Planner for Trader Joe's & Costco",
+    description:
+      "Generate personalized weekly meal plans using real Trader Joe's and Costco products. AI-powered, diet-aware, with a ready-to-use shopping list.",
+    url: "https://whole-haul.com",
+  },
+};
 import Link from "next/link";
 import {
   AdjustmentsHorizontalIcon,
