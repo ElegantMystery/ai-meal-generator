@@ -131,10 +131,9 @@ Spring Boot emits structured MDC fields on every auth path — these drive Cloud
 
 | `mdc.event` value | Trigger | `mdc.provider` |
 |-------------------|---------|----------------|
-| `SIGNUP_SUCCESS` | New user registered | `local` or `google` |
-| `LOGIN_SUCCESS` | Successful local login | `local` |
+| `SIGNUP_SUCCESS` | New user registered via Google OAuth | `google` |
 | `OAUTH_LOGIN_SUCCESS` | Successful Google OAuth login | `google` |
-| `LOGIN_FAILED` | Wrong password or OAuth-only user tried local login | `local` or `google` |
+| `LOGIN_FAILED` | OAuth failure | `google` |
 
 `mdc.sourceIp` is also set (real client IP via `X-Forwarded-For`). Log messages use user **ID only** — email addresses are never written to logs.
 
@@ -143,7 +142,6 @@ Spring Boot emits structured MDC fields on every auth path — these drive Cloud
 | Metric | Namespace | Alarm |
 |--------|-----------|-------|
 | `SignupCount` | `MealGen/Auth` | — |
-| `LoginCount` | `MealGen/Auth` | — |
 | `OAuthLoginCount` | `MealGen/Auth` | — |
 | `LoginFailedCount` | `MealGen/Auth` | **MealGen-HighLoginFailures** (>10 in 5 min → SNS email) |
 | `Http2xxCount` | `MealGen/HTTP` | — |
@@ -160,7 +158,7 @@ Spring Boot emits structured MDC fields on every auth path — these drive Cloud
 # Recent auth events
 SOURCE '/meal-gen/prod/backend'
 | fields @timestamp, mdc.event, mdc.provider, message
-| filter mdc.event in ['SIGNUP_SUCCESS','LOGIN_SUCCESS','OAUTH_LOGIN_SUCCESS','LOGIN_FAILED']
+| filter mdc.event in ['SIGNUP_SUCCESS','OAUTH_LOGIN_SUCCESS','LOGIN_FAILED']
 | sort @timestamp desc | limit 50
 
 # Signups per day
@@ -333,7 +331,7 @@ scripts/
 ## Database Schema
 
 Key tables (managed by Flyway):
-- `users` - Users (supports OAuth2 and local email/password auth, tracks onboarding status); includes `stripe_customer_id` (linked to Stripe) and `plans_generated_count` (quota enforcement)
+- `users` - Users (Google OAuth2 only); includes `stripe_customer_id` (linked to Stripe) and `plans_generated_count` (quota enforcement)
 - `user_preferences` - Dietary restrictions, allergies, calorie targets
 - `items` - Grocery items with store, price, category
 - `mealplans` - Generated meal plans (JSON stored in `plan_json`; `_meta.recipeTemplatesOffered` lists recipes sampled at generation time)
@@ -347,12 +345,10 @@ Key tables (managed by Flyway):
 ### Backend REST API (port 8080)
 
 #### Authentication
-- `POST /api/auth/signup` - Register with email/password
-- `POST /api/auth/login` - Login with email/password
 - `GET /api/auth/me` - Get current user
 - `POST /api/auth/logout` - Logout
 - `POST /api/auth/complete-onboarding` - Mark user onboarding as completed
-- `GET /oauth2/authorization/google` - Google OAuth2 login
+- `GET /oauth2/authorization/google` - Google OAuth2 login (only auth method)
 
 #### Meal Plans
 - `GET/POST/DELETE /api/mealplans` - Meal plan CRUD

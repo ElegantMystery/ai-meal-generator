@@ -1,14 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
-import { api, apiBaseUrl } from "@/lib/api";
-import { useAuthStore } from "@/lib/authStore";
+import { apiBaseUrl } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
 
 function GoogleIcon() {
   return (
@@ -39,46 +35,6 @@ function GoogleIcon() {
 }
 
 export default function LoginPage() {
-  const router = useRouter();
-  const setUser = useAuthStore((s) => s.setUser);
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const handleEmailLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-
-    try {
-      const res = await api.post("/api/auth/login", { email, password });
-      setUser(res.data.user);
-      router.push("/dashboard");
-    } catch (err: unknown) {
-      console.error(err);
-      const axiosError = err as {
-        response?: { data?: { code?: string; error?: string } };
-      };
-      const errorCode = axiosError.response?.data?.code;
-      const errorMessage = axiosError.response?.data?.error;
-
-      if (errorCode === "OAUTH_USER") {
-        setError(
-          errorMessage ||
-            "This account uses Google sign-in. Please use the Google button below.",
-        );
-      } else if (errorCode === "INVALID_CREDENTIALS") {
-        setError("Invalid email or password.");
-      } else {
-        setError("Login failed. Please try again.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleGoogleSignIn = () => {
     window.location.href = `${apiBaseUrl}/oauth2/authorization/google`;
   };
@@ -117,8 +73,7 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 space-y-5">
-            {/* Google button */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
             <Button
               type="button"
               variant="secondary"
@@ -129,64 +84,6 @@ export default function LoginPage() {
               <GoogleIcon />
               Continue with Google
             </Button>
-
-            {/* Divider */}
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-gray-200" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-2 text-gray-400">or</span>
-              </div>
-            </div>
-
-            {/* Email form */}
-            <form onSubmit={handleEmailLogin} className="space-y-4">
-              <Input
-                id="email"
-                type="email"
-                label="Email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-              <Input
-                id="password"
-                type="password"
-                label="Password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-
-              {error && (
-                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
-                  {error}
-                </p>
-              )}
-
-              <Button
-                type="submit"
-                variant="primary"
-                size="lg"
-                loading={loading}
-                className="w-full"
-              >
-                {loading ? "Signing in…" : "Sign in with Email"}
-              </Button>
-            </form>
-
-            <p className="text-center text-sm text-gray-500">
-              Don&apos;t have an account?{" "}
-              <Link
-                href="/signup"
-                className="text-brand-600 font-medium hover:underline"
-              >
-                Sign up
-              </Link>
-            </p>
           </div>
         </div>
       </main>

@@ -50,7 +50,7 @@ export default function HomePage() {
               Sign in
             </Link>
             <Link
-              href="/signup"
+              href="/login"
               className="inline-flex items-center px-4 py-2 rounded-md bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition"
             >
               Get Started
@@ -88,7 +88,7 @@ export default function HomePage() {
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
             <Link
-              href="/signup"
+              href="/login"
               className="inline-flex items-center px-6 py-3 rounded-md bg-brand-600 text-white font-medium hover:bg-brand-700 transition text-sm"
             >
               Get Started Free
@@ -167,10 +167,10 @@ export default function HomePage() {
             Free to start. No credit card required.
           </p>
           <Link
-            href="/signup"
+            href="/login"
             className="inline-flex items-center px-6 py-3 rounded-md bg-white text-brand-700 font-semibold hover:bg-brand-50 transition text-sm"
           >
-            Create your free account
+            Get started free
           </Link>
         </div>
       </section>
@@ -184,9 +184,6 @@ export default function HomePage() {
           <div className="flex gap-4">
             <Link href="/login" className="hover:text-gray-600 transition">
               Sign in
-            </Link>
-            <Link href="/signup" className="hover:text-gray-600 transition">
-              Sign up
             </Link>
           </div>
         </div>
