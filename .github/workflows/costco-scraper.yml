@@ -1,16 +1,18 @@
-name: TJ Scraper Pipeline
+name: Costco Scraper Pipeline
 
 on:
   schedule:
-    - cron: '0 0 1 * *'  # First day of every month at 00:00 UTC
-  workflow_dispatch:       # Allow manual trigger
+    - cron: '0 0 15 * *'  # 15th of every month at 00:00 UTC (offset from TJ's 1st)
+  workflow_dispatch:        # Allow manual trigger
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Scrape on GitHub Actions runner (rotating IPs — not blocked by Trader Joe's)
+  # Scrape on GitHub Actions runner.
+  # NOTE: If Akamai blocks GHA IPs (same vendor as Trader Joe's), run manually:
+  #   cd scripts/costco && bash run_pipeline.sh
   # ---------------------------------------------------------------------------
   scrape:
-    name: Scrape Trader Joe's
+    name: Scrape Costco
     runs-on: ubuntu-latest
 
     steps:
@@ -32,34 +34,41 @@ jobs:
         working-directory: scripts
         run: npx playwright install chromium --with-deps
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: pip install psycopg2-binary
+
       - name: Write SSH key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY }}" > /home/runner/.ssh/meal-gen-key.pem
           chmod 600 /home/runner/.ssh/meal-gen-key.pem
 
-      - name: Run pipeline (scrape + upload to EC2)
+      - name: Run pipeline (scrape + parse + upload to EC2)
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ec2-user
           EC2_KEY: /home/runner/.ssh/meal-gen-key.pem
           EC2_DEST: /tmp
-        run: bash scripts/tj/run_pipeline.sh
+        run: bash scripts/costco/run_pipeline.sh
 
       - name: Upload scraped data as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tj-items-${{ github.run_id }}
+          name: costco-items-${{ github.run_id }}
           path: |
-            scripts/tj/tj-items.json
-            scripts/tj/tj-metadata.json
-            scripts/tj/tj-nutrition-parsed.json
-            scripts/tj/tj-ingredients-parsed.json
+            scripts/costco/costco-items.json
+            scripts/costco/costco-metadata.json
+            scripts/costco/costco-nutrition-parsed.json
+            scripts/costco/costco-ingredients-parsed.json
           retention-days: 7
 
   # ---------------------------------------------------------------------------
   # Import into RDS and backfill embeddings — runs on EC2 via SSH
-  # (EC2 has VPC access to RDS; scraping already done on GHA runner)
   # ---------------------------------------------------------------------------
   import-and-embed:
     name: Import & Backfill Embeddings
@@ -67,6 +76,9 @@ jobs:
     needs: scrape
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Import items and backfill embeddings on EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -77,9 +89,9 @@ jobs:
           script: |
             set -euo pipefail
 
-            echo "[TJ-PIPELINE] === Starting import + embed backfill ==="
+            echo "[COSTCO-PIPELINE] === Starting import + embed backfill ==="
 
-            # Source secrets and config from .env
+            # Source secrets from .env
             ENV_FILE="/opt/meal-gen/.env"
             [[ -f "$ENV_FILE" ]] || { echo "ERROR: .env not found"; exit 1; }
             set -a
@@ -104,58 +116,57 @@ jobs:
             PGDATABASE="${PGDATABASE:-mealgen}"
             export PGUSER PGPORT PGDATABASE
 
-            [[ -n "${PGHOST:-}"         ]] || { echo "ERROR: PGHOST not set"; exit 1; }
-            [[ -n "${PGPASSWORD:-}"     ]] || { echo "ERROR: PGPASSWORD not set"; exit 1; }
+            [[ -n "${PGHOST:-}"            ]] || { echo "ERROR: PGHOST not set"; exit 1; }
+            [[ -n "${PGPASSWORD:-}"        ]] || { echo "ERROR: PGPASSWORD not set"; exit 1; }
             [[ -n "${RAG_SHARED_SECRET:-}" ]] || { echo "ERROR: RAG_SHARED_SECRET not set"; exit 1; }
 
-            echo "[TJ-PIPELINE] DB host: ${PGHOST}"
+            echo "[COSTCO-PIPELINE] DB host: ${PGHOST}"
 
-            # Verify the scraped file arrived
-            ITEMS_FILE="/tmp/tj-items.json"
+            # Verify scraped file arrived
+            ITEMS_FILE="/tmp/costco-items.json"
             [[ -f "$ITEMS_FILE" ]] || { echo "ERROR: $ITEMS_FILE not found on EC2"; exit 1; }
             ITEM_COUNT=$(python3 -c "import json; print(len(json.load(open('${ITEMS_FILE}'))))")
-            echo "[TJ-PIPELINE] Item count in file: ${ITEM_COUNT}"
-            [[ "$ITEM_COUNT" -ge 100 ]] || { echo "ERROR: Too few items (${ITEM_COUNT})"; exit 1; }
+            echo "[COSTCO-PIPELINE] Item count in file: ${ITEM_COUNT}"
+            [[ "$ITEM_COUNT" -ge 200 ]] || { echo "ERROR: Too few items (${ITEM_COUNT})"; exit 1; }
 
             # Activate Python venv (has psycopg2)
             VENV_DIR="/opt/meal-gen/.venv"
             [[ -f "${VENV_DIR}/bin/activate" ]] && source "${VENV_DIR}/bin/activate"
 
             # Step 1: Import items into RDS
-            echo "[TJ-PIPELINE] === Step 1: Import items into database ==="
-            TJ_JSON_PATH="$ITEMS_FILE" \
-              TJ_NUTRITION_PARSED_PATH="/tmp/tj-nutrition-parsed.json" \
-              TJ_INGREDIENTS_PARSED_PATH="/tmp/tj-ingredients-parsed.json" \
-              python3 /opt/meal-gen/scripts/tj/import_tj.py
-            echo "[TJ-PIPELINE] Database import complete"
+            echo "[COSTCO-PIPELINE] === Step 1: Import items into database ==="
+            COSTCO_JSON_PATH="$ITEMS_FILE" \
+              COSTCO_NUTRITION_PARSED_PATH="/tmp/costco-nutrition-parsed.json" \
+              COSTCO_INGREDIENTS_PARSED_PATH="/tmp/costco-ingredients-parsed.json" \
+              python3 /opt/meal-gen/scripts/costco/import_costco.py
+            echo "[COSTCO-PIPELINE] Database import complete"
 
             # Step 2: Backfill embeddings via RAG container
-            echo "[TJ-PIPELINE] === Step 2: Backfill embeddings ==="
+            echo "[COSTCO-PIPELINE] === Step 2: Backfill embeddings ==="
             RAG_CONTAINER="python-rag"
 
             for EMBED_TYPE in items nutrition ingredients; do
-              echo "[TJ-PIPELINE] Backfilling ${EMBED_TYPE} embeddings..."
+              echo "[COSTCO-PIPELINE] Backfilling ${EMBED_TYPE} embeddings..."
               UPDATED=1
               BATCH=0
               while [[ "$UPDATED" -gt 0 ]]; do
-                # Pass secret via -e so it doesn't appear in the process listing.
-                # Use bash -c with single quotes so $_ vars are expanded inside the container.
                 RESPONSE=$(docker exec \
                   -e _RAG_SECRET="${RAG_SHARED_SECRET}" \
                   -e _EMBED_TYPE="${EMBED_TYPE}" \
                   "$RAG_CONTAINER" \
                   python3 -c "import urllib.request,os,json; etype=os.environ['_EMBED_TYPE']; req=urllib.request.Request('http://localhost:8000/embed/backfill/'+etype,data=json.dumps({'limit':200}).encode(),headers={'Content-Type':'application/json','X-RAG-SECRET':os.environ['_RAG_SECRET']},method='POST'); print(urllib.request.urlopen(req).read().decode())") || {
-                  echo "[TJ-PIPELINE] WARNING: embed backfill request failed for ${EMBED_TYPE}, skipping"
+                  echo "[COSTCO-PIPELINE] WARNING: embed backfill failed for ${EMBED_TYPE}, skipping"
                   break
                 }
                 UPDATED=$(echo "$RESPONSE" | python3 -c \
                   "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('updated',0))" 2>/dev/null || echo 0)
                 BATCH=$((BATCH + 1))
-                echo "[TJ-PIPELINE]   ${EMBED_TYPE}: batch=${BATCH} updated=${UPDATED}"
+                echo "[COSTCO-PIPELINE]   ${EMBED_TYPE}: batch=${BATCH} updated=${UPDATED}"
               done
-              echo "[TJ-PIPELINE] ${EMBED_TYPE} embeddings complete (${BATCH} batches)"
+              echo "[COSTCO-PIPELINE] ${EMBED_TYPE} embeddings complete (${BATCH} batches)"
             done
 
             # Cleanup
-            rm -f "$ITEMS_FILE" /tmp/tj-metadata.json /tmp/tj-nutrition-parsed.json /tmp/tj-ingredients-parsed.json
-            echo "[TJ-PIPELINE] === Pipeline Complete ==="
+            rm -f "$ITEMS_FILE" /tmp/costco-metadata.json \
+              /tmp/costco-nutrition-parsed.json /tmp/costco-ingredients-parsed.json
+            echo "[COSTCO-PIPELINE] === Pipeline Complete ==="
