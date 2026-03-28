@@ -18,7 +18,7 @@ Frontend (3000) → Backend (8080) → RAG Service (8000)
 ```
 
 The backend handles user auth (Google OAuth2), meal plan CRUD, and preferences. For AI generation, it calls the RAG service which:
-1. Retrieves ~120 candidate items via **category-proportional random sampling** (no vector search at generation time — randomness ensures plan variety across runs)
+1. Retrieves ~120 candidate items via **category-proportional random sampling** (no vector search at generation time — randomness ensures plan variety across runs). Category quotas are **store-aware**: TRADER_JOES uses path-based categories (e.g. "Fresh Fruits & Veggies > Veggies"), while WHOLE_FOODS uses flat labels (e.g. "Produce", "Meat") to ensure balanced representation across different store schemas.
 2. Samples 75 **recipe templates** from the `recipes` table (filtered by dietary restriction if set, with unfiltered fallback) and passes them to the LLM as dish-name inspiration
 3. Calls GPT-4.1-mini (or configured `CHAT_MODEL`) to generate a dish-centric meal plan JSON
 4. Validates item IDs exist in the store
