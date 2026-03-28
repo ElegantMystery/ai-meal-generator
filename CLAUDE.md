@@ -324,6 +324,21 @@ python scripts/spoonacular/fetch_recipes.py --total 300 --embed
 - Recipe titles + ingredient lists are injected into the LLM prompt as dish-idea inspiration
 - Sampled titles are recorded in `plan_json._meta.recipeTemplatesOffered` for traceability
 
+### LLM serving size guidance
+
+The LLM system prompt in `rag/app/llm.py` includes detailed `servingsUsed` (portion per dish) guidance to ensure realistic meal planning. Key distinctions:
+
+**Small-use fresh produce** (used sparingly):
+- Cherry/grape tomatoes: 0.2–0.3 servings (a handful from a pint)
+- Fresh herbs (basil, parsley, cilantro, rosemary): 0.1–0.2 servings (a few sprigs)
+- Garlic/shallots: 0.1–0.2 servings (1–2 cloves)
+- Bell peppers/jalapeños: 0.3–0.5 servings (half a pepper)
+
+**Bulk fresh vegetables** (used in larger quantities):
+- Broccoli, spinach, kale, cabbage, zucchini: 1–2 servings
+
+This distinction ensures that small garnish ingredients do not artificially inflate package waste, while bulk vegetables correctly reflect the full-serving consumption pattern.
+
 ## Key Configuration
 
 ### Environment Variables (Backend)
