@@ -1,0 +1,1376 @@
+{
+  "timestamp": "2026-03-27T22:35:55.391Z",
+  "totalResponsesIntercepted": 150,
+  "productApiCandidates": 3,
+  "nextDataFound": true,
+  "nextDataSnippet": "{\"props\":{\"pageProps\":{\"isWfmApp\":false,\"wfmAppPlatform\":\"\",\"hideForWfmApp\":false,\"nonce\":\"NjkwZTY3MTMtNGJmMy00MTA5LWI4ZDEtNTYxOWUwYWQxNzQ3\",\"storeTlc\":\"LMR\",\"content\":{\"data\":{\"__typename\":\"Page\",\"contentId\":\"0000016f-c506-d299-ad6f-c7dfc7360000\",\"contentType\":\"HOMEPAGE\",\"status\":\"LIVE\",\"styleType\":\"STANDARD\",\"breadcrumbs\":null,\"canonicalLink\":\"/\",\"paths\":[\"/\"],\"pathMappings\":[{\"__typename\":\"PathMap\",\"path\":\"/\",\"type\":\"PERMALINK\"}],\"seoTitle\":\"Whole Foods Market: Shop Groceries \\u0026 Weekly Sa",
+  "allResponses": [
+    {
+      "url": "https://www.wholefoodsmarket.com/",
+      "status": 200,
+      "contentType": "text/html; charset=utf-8",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/account/summary",
+      "status": 200,
+      "contentType": "application/json;charset=UTF-8",
+      "bodySnippet": "{\"customer\":{\"login_enabled\":true,\"authenticated\":false,\"anti_forgery_token\":\"g036XjzEpXb56WW5CmgBGSIwAYWaqEATzfKaXnfTNcoHAAAAAQAAAABpxwXFcmF3AAAAACr/Igfie4qiUf9rqj+gAw==\"}}",
+      "bodySize": 173,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/api/wwos/location/zip",
+      "status": 200,
+      "contentType": "application/json;charset=utf-8",
+      "bodySnippet": "\"95101\"",
+      "bodySize": 7,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/api/csrf",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "bodySnippet": "{\"token\":\"KYGEXmkR-FaZ-1INCa3vqQXHG10amPfgHdaY\"}",
+      "bodySize": 48,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/762707645/?random=1774650821456&cv=11&fst=1774650821456&bg=ffffff&guid=ON&async=1&en=gtag.config&gtm=45be63p1z89221850235za20gzb9221850235zd9221850235xec&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115616986~115938465~115938468~117266401~117484252~118128923&u_w=1280&u_h=900&url=https%3A%2F%2Fwww.wholefoodsmarket.com%2F&frm=0&tiba=Whole%20Foods%20Market%3A%20Shop%20Groceries%20%26%20Weekly%20Sales&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=971211059.1774650821&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0&uaw=0&data=event%3Dgtag.config&rfmt=3&fmt=4",
+      "status": 200,
+      "contentType": "text/javascript; charset=UTF-8",
+      "bodySnippet": "(function(){var s = {};(function(){var k=typeof Object.defineProperties==\"function\"?Object.defineProperty:function(a,d,b){if(a==Array.prototype||a==Object.prototype)return a;a[d]=b.value;return a};function l(a){a=[\"object\"==typeof globalThis&&globalThis,a,\"object\"==typeof window&&window,\"object\"==typeof self&&self,\"object\"==typeof global&&global];for(var d=0;d<a.length;++d){var b=a[d];if(b&&b.Math==Math)return b}throw Error(\"Cannot find global object\");} var p=l(this),q=typeof Symbol===\"function\"&&typeof Symbol(\"x\")===\"symbol\",r={},t={};function u(a,d,b){if(!b||a!=null){b=t[d];if(b==null)return a[d];b=a[b];return b!==void 0?b:a[d]}} function v(a,d,b){if(d)a:{var c=a.split(\".\");a=c.length===1;var e=c[0],g;!a&&e in r?g=r:g=p;for(e=0;e<c.length-1;e++){var f=c[e];if(!(f in g))break a;g=g[f]}c=",
+      "bodySize": 4186,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/api/wwos/location/store/closest",
+      "status": 200,
+      "contentType": "application/json;charset=utf-8",
+      "bodySnippet": "{\"storeCode\":\"10259\"}",
+      "bodySize": 21,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/",
+      "status": 200,
+      "contentType": "text/html; charset=utf-8",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/762707645/?random=1774650821939&cv=11&fst=1774650821939&bg=ffffff&guid=ON&async=1&en=gtag.config&gtm=45be63p1z89221850235za20gzb9221850235zd9221850235xec&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115616985~115938465~115938468~117266400~117484252&u_w=1280&u_h=900&url=https%3A%2F%2Fwww.wholefoodsmarket.com%2F&frm=0&tiba=Whole%20Foods%20Market%3A%20Shop%20Groceries%20%26%20Weekly%20Sales&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=971211059.1774650821&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0&uaw=0&data=event%3Dgtag.config&rfmt=3&fmt=4",
+      "status": 200,
+      "contentType": "text/javascript; charset=UTF-8",
+      "bodySnippet": "(function(){var s = {};(function(){var k=typeof Object.defineProperties==\"function\"?Object.defineProperty:function(a,d,b){if(a==Array.prototype||a==Object.prototype)return a;a[d]=b.value;return a};function l(a){a=[\"object\"==typeof globalThis&&globalThis,a,\"object\"==typeof window&&window,\"object\"==typeof self&&self,\"object\"==typeof global&&global];for(var d=0;d<a.length;++d){var b=a[d];if(b&&b.Math==Math)return b}throw Error(\"Cannot find global object\");} var p=l(this),q=typeof Symbol===\"function\"&&typeof Symbol(\"x\")===\"symbol\",r={},t={};function u(a,d,b){if(!b||a!=null){b=t[d];if(b==null)return a[d];b=a[b];return b!==void 0?b:a[d]}} function v(a,d,b){if(d)a:{var c=a.split(\".\");a=c.length===1;var e=c[0],g;!a&&e in r?g=r:g=p;for(e=0;e<c.length-1;e++){var f=c[e];if(!(f in g))break a;g=g[f]}c=",
+      "bodySize": 4194,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/account/summary",
+      "status": 200,
+      "contentType": "application/json;charset=UTF-8",
+      "bodySnippet": "{\"store\":{\"token\":\"sanjose\",\"display_name\":\"San Jose - on The Alameda\",\"postal_code\":\"95126\",\"location_code\":\"CA\",\"country_code\":\"USA\",\"status\":\"Open\",\"hours\":\"8 am – 10 pm today\",\"tooltip\":\"\"},\"customer\":{\"login_enabled\":true,\"authenticated\":false,\"anti_forgery_token\":\"g4EHCtyF87bC89zAQCcM5c2OP79B4Y7Zf4q3+W3AqjUtAAAAAQAAAABpxwXGcmF3AAAAACr/Igfie4qiUf9rqj+gAw==\"}}",
+      "bodySize": 366,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/api/stores/10259/summary",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{\"storeId\":10259,\"token\":\"sanjose\",\"displayName\":\"San Jose - on The Alameda\",\"status\":\"Open\",\"phone\":\"(408) 207-1126\",\"storePrimeEligibility\":true,\"storeOperationalGuidance\":\"\",\"bu\":10259,\"folder\":\"sanjose\",\"openedAt\":\"2014-12-09T12:00:00Z\",\"links\":{\"Details\":\"/stores/sanjose\",\"Directions\":\"https://www.google.com/maps/dir/?api=1&destination=37.332295,-121.904991\",\"Sales\":\"/sales-flyer?store-id=10259\",\"PrimeNowPickUpAndDelivery\":\"https://www.wholefoods.com/grocery?ref_=US_TRF_ALL_UFG_WFM_REFER_0417726\",\"MapUrlDesktop\":\"https://maps.googleapis.com/maps/api/staticmap?zoom=16&size=780x543&markers=icon:https://m.media-amazon.com/images/S/assets.wholefoodsmarket.com/storepages/map/map-icon-wf.png%7C37.332295,-121.904991&key=AIzaSyBjDr2pxL_mQ6wd7sf49-P7Q-iqf06ZiOc&signature=6DWZT9RhQgmFk-5aw_4Feu",
+      "bodySize": 1842,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.amazon.com/ax/signin/crossDomainAuthContext",
+      "status": 200,
+      "contentType": "application/json;charset=UTF-8",
+      "bodySnippet": "{\"status\":\"NO_SSO_STATE\",\"authContextToken\":null}",
+      "bodySize": 49,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/api/wwos/weblab?weblabId=WWGS_APLF_WHOLEFOODS_CONTEXT_1225777",
+      "status": 200,
+      "contentType": "application/json;charset=utf-8",
+      "bodySnippet": "{\"treatment\":\"C\"}",
+      "bodySize": 17,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/api/wwos/weblab?weblabId=SEARCH_WWGS_WFM_ARTICHOKE_LOOM_MIGRATION_1342695",
+      "status": 200,
+      "contentType": "application/json;charset=utf-8",
+      "bodySnippet": "{\"treatment\":\"C\"}",
+      "bodySize": 17,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/api/wwos/weblab?weblabId=WFMCX_STOREFRONT_SIGNIN_PROMPT_1380836",
+      "status": 200,
+      "contentType": "application/json;charset=utf-8",
+      "bodySnippet": "{\"treatment\":\"T1\"}",
+      "bodySize": 18,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.wholefoodsmarket.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/alm/category?almBrandId=VUZHIFdob2xlIEZvb2Rz&node=6506977011",
+      "status": 200,
+      "contentType": "text/html;charset=UTF-8",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/account/summary",
+      "status": 200,
+      "contentType": "application/json;charset=UTF-8",
+      "bodySnippet": "{\"store\":{\"token\":\"sanjose\",\"display_name\":\"San Jose - on The Alameda\",\"postal_code\":\"95126\",\"location_code\":\"CA\",\"country_code\":\"USA\",\"status\":\"Open\",\"hours\":\"8 am – 10 pm today\",\"tooltip\":\"\"},\"customer\":{\"login_enabled\":true,\"authenticated\":false,\"anti_forgery_token\":\"gytSbK5jwF9RdM8XGajR7Bbv5u9LDuy81C6VILt+VUEAAAAAAQAAAABpxwXQcmF3AAAAACr/Igfie4qiUf9rqj+gAw==\"}}",
+      "bodySize": 366,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/762707645/?random=1774650832411&cv=11&fst=1774650832411&bg=ffffff&guid=ON&async=1&en=gtag.config&gtm=45be63p1z89221850235za20gzb9221850235zd9221850235xec&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115938465~115938469~116991816~117484252&u_w=1280&u_h=900&url=https%3A%2F%2Fwww.wholefoodsmarket.com%2Falm%2Fcategory%3FalmBrandId%3DVUZHIFdob2xlIEZvb2Rz%26node%3D6506977011&frm=0&tiba=Amazon.com%3A%20Produce%3A%20Whole%20Foods%20Market&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=971211059.1774650821&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0&uaw=0&data=event%3Dgtag.config&rfmt=3&fmt=4",
+      "status": 200,
+      "contentType": "text/javascript; charset=UTF-8",
+      "bodySnippet": "(function(){var s = {};(function(){var k=typeof Object.defineProperties==\"function\"?Object.defineProperty:function(a,d,b){if(a==Array.prototype||a==Object.prototype)return a;a[d]=b.value;return a};function l(a){a=[\"object\"==typeof globalThis&&globalThis,a,\"object\"==typeof window&&window,\"object\"==typeof self&&self,\"object\"==typeof global&&global];for(var d=0;d<a.length;++d){var b=a[d];if(b&&b.Math==Math)return b}throw Error(\"Cannot find global object\");} var p=l(this),q=typeof Symbol===\"function\"&&typeof Symbol(\"x\")===\"symbol\",r={},t={};function u(a,d,b){if(!b||a!=null){b=t[d];if(b==null)return a[d];b=a[b];return b!==void 0?b:a[d]}} function v(a,d,b){if(d)a:{var c=a.split(\".\");a=c.length===1;var e=c[0],g;!a&&e in r?g=r:g=p;for(e=0;e<c.length-1;e++){var f=c[e];if(!(f in g))break a;g=g[f]}c=",
+      "bodySize": 4238,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/api/stores/10259/summary",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{\"storeId\":10259,\"token\":\"sanjose\",\"displayName\":\"San Jose - on The Alameda\",\"status\":\"Open\",\"phone\":\"(408) 207-1126\",\"storePrimeEligibility\":true,\"storeOperationalGuidance\":\"\",\"bu\":10259,\"folder\":\"sanjose\",\"openedAt\":\"2014-12-09T12:00:00Z\",\"links\":{\"Details\":\"/stores/sanjose\",\"Directions\":\"https://www.google.com/maps/dir/?api=1&destination=37.332295,-121.904991\",\"Sales\":\"/sales-flyer?store-id=10259\",\"PrimeNowPickUpAndDelivery\":\"https://www.wholefoods.com/grocery?ref_=US_TRF_ALL_UFG_WFM_REFER_0417726\",\"MapUrlDesktop\":\"https://maps.googleapis.com/maps/api/staticmap?zoom=16&size=780x543&markers=icon:https://m.media-amazon.com/images/S/assets.wholefoodsmarket.com/storepages/map/map-icon-wf.png%7C37.332295,-121.904991&key=AIzaSyBjDr2pxL_mQ6wd7sf49-P7Q-iqf06ZiOc&signature=6DWZT9RhQgmFk-5aw_4Feu",
+      "bodySize": 1842,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.wholefoodsmarket.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/api/wwos/subnav?programType=DELIVERY_AND_PICKUP&deviceType=DESKTOP&wfmStoreId=10259",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "[{\"node\":\"\",\"name\":\"Past Purchases\",\"url\":\"/afx/lists/pastpurchases/whole-foods-market?almBrandId=VUZHIFdob2xlIEZvb2Rz&ref=wf_dsk_sn_pastPurchases-d9ad7\",\"image\":\"\",\"imageLabel\":\"\",\"overrides\":[],\"additionalData\":null,\"children\":[],\"type\":\"CORE_NAVIGATION\"},{\"node\":\"lumyn4g3\",\"name\":\"Save\",\"url\":\"/fmc/deals?almBrandId=VUZHIFdob2xlIEZvb2Rz&ref=wf_dsk_sn_Save-4c0a5\",\"image\":\"\",\"imageLabel\":\"\",\"overrides\":[{\"startTime\":\"2022/01/01 00:00\",\"endTime\":\"2099/01/01 00:00\",\"type\":\"time\"}],\"additionalData\":null,\"children\":[{\"node\":\"m47jlpst\",\"name\":\"Shop Sales\",\"url\":\"/fmc/deals?almBrandId=VUZHIFdob2xlIEZvb2Rz&ref=wf_dsk_sn_ShopSales-ec7df\",\"image\":\"https://m.media-amazon.com/images/G/01/composer/uploads/FreshStoreSub-navfamily-pack/subnav/filename_bxjoazf.png\",\"imageLabel\":null,\"overrides\":[{\"startT",
+      "bodySize": 12093,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/api/wwos/subnav?programType=DELIVERY_AND_PICKUP&deviceType=DESKTOP&wfmStoreId=10259",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "[{\"node\":\"\",\"name\":\"Past Purchases\",\"url\":\"/afx/lists/pastpurchases/whole-foods-market?almBrandId=VUZHIFdob2xlIEZvb2Rz&ref=wf_dsk_sn_pastPurchases-d9ad7\",\"image\":\"\",\"imageLabel\":\"\",\"overrides\":[],\"additionalData\":null,\"children\":[],\"type\":\"CORE_NAVIGATION\"},{\"node\":\"lumyn4g3\",\"name\":\"Save\",\"url\":\"/fmc/deals?almBrandId=VUZHIFdob2xlIEZvb2Rz&ref=wf_dsk_sn_Save-4c0a5\",\"image\":\"\",\"imageLabel\":\"\",\"overrides\":[{\"startTime\":\"2022/01/01 00:00\",\"endTime\":\"2099/01/01 00:00\",\"type\":\"time\"}],\"additionalData\":null,\"children\":[{\"node\":\"m47jlpst\",\"name\":\"Shop Sales\",\"url\":\"/fmc/deals?almBrandId=VUZHIFdob2xlIEZvb2Rz&ref=wf_dsk_sn_ShopSales-ec7df\",\"image\":\"https://m.media-amazon.com/images/G/01/composer/uploads/FreshStoreSub-navfamily-pack/subnav/filename_bxjoazf.png\",\"imageLabel\":null,\"overrides\":[{\"startT",
+      "bodySize": 12093,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.nexusclient.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.nexusclient.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.customsg.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.wholefoodsmarket.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/acp/alm-carousel-desktop/alm-carousel-desktop-6f47209c-52a9-4fe4-9de8-6a3b2bca20c2-1774587045042/getCarouselItems?page-type=FreshMerchandisedContent&pd_rd_w=ArrfQ&content-id=amzn1.sym.b85f9698-cba5-470f-a29e-c2017d74b89c&pf_rd_p=b85f9698-cba5-470f-a29e-c2017d74b89c&pf_rd_r=WV7ZZCVVP2A2JFHQJAW3&pd_rd_wg=23tgs&pd_rd_r=1a32864d-5ed3-4439-a68f-04b4bdccfca8&ref_=6506977011_ai_6507187011&stamp=1774650832403",
+      "status": 200,
+      "contentType": "text/html",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/acp/alm-carousel-desktop/alm-carousel-desktop-6f47209c-52a9-4fe4-9de8-6a3b2bca20c2-1774587045042/getCarouselItems?page-type=FreshMerchandisedContent&pd_rd_w=Rxpay&content-id=amzn1.sym.e9ec2020-3339-4b42-9cda-15fc848e077d&pf_rd_p=e9ec2020-3339-4b42-9cda-15fc848e077d&pf_rd_r=WV7ZZCVVP2A2JFHQJAW3&pd_rd_wg=23tgs&pd_rd_r=1a32864d-5ed3-4439-a68f-04b4bdccfca8&ref_=6506977011_ai_6507194011&stamp=1774650832381",
+      "status": 200,
+      "contentType": "text/html",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.wholefoodsmarket.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/products/meat-seafood",
+      "status": 200,
+      "contentType": "text/html;charset=utf-8",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "",
+      "bodySize": 0,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "",
+      "bodySize": 0,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.wholefoodsmarket.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "",
+      "bodySize": 0,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/account/summary",
+      "status": 200,
+      "contentType": "application/json;charset=UTF-8",
+      "bodySnippet": "{\"store\":{\"token\":\"sanjose\",\"display_name\":\"San Jose - on The Alameda\",\"postal_code\":\"95126\",\"location_code\":\"CA\",\"country_code\":\"USA\",\"status\":\"Open\",\"hours\":\"8 am – 10 pm today\",\"tooltip\":\"\"},\"customer\":{\"login_enabled\":true,\"authenticated\":false,\"anti_forgery_token\":\"gy6c/qS/U3+l/GpVhV1qDyXLK3Y3kaPoQszkLbIx+MjiAAAAAQAAAABpxwXncmF3AAAAACr/Igfie4qiUf9rqj+gAw==\"}}",
+      "bodySize": 366,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/762707645/?random=1774650855059&cv=11&fst=1774650855059&bg=ffffff&guid=ON&async=1&en=gtag.config&gtm=45be63p1z89221850235za20gzb9221850235zd9221850235xec&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115938466~115938468~117384406~117484252&u_w=1280&u_h=900&url=https%3A%2F%2Fwww.wholefoodsmarket.com%2Fproducts%2Fmeat-seafood&frm=0&tiba=Whole%20Foods%20Market%3A%20Browse%20Products%20by%20Aisle%20and%20Section&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=971211059.1774650821&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0&uaw=0&data=event%3Dgtag.config&rfmt=3&fmt=4",
+      "status": 200,
+      "contentType": "text/javascript; charset=UTF-8",
+      "bodySnippet": "(function(){var s = {};(function(){var k=typeof Object.defineProperties==\"function\"?Object.defineProperty:function(a,d,b){if(a==Array.prototype||a==Object.prototype)return a;a[d]=b.value;return a};function l(a){a=[\"object\"==typeof globalThis&&globalThis,a,\"object\"==typeof window&&window,\"object\"==typeof self&&self,\"object\"==typeof global&&global];for(var d=0;d<a.length;++d){var b=a[d];if(b&&b.Math==Math)return b}throw Error(\"Cannot find global object\");} var p=l(this),q=typeof Symbol===\"function\"&&typeof Symbol(\"x\")===\"symbol\",r={},t={};function u(a,d,b){if(!b||a!=null){b=t[d];if(b==null)return a[d];b=a[b];return b!==void 0?b:a[d]}} function v(a,d,b){if(d)a:{var c=a.split(\".\");a=c.length===1;var e=c[0],g;!a&&e in r?g=r:g=p;for(e=0;e<c.length-1;e++){var f=c[e];if(!(f in g))break a;g=g[f]}c=",
+      "bodySize": 4214,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/api/products/category/meat-seafood?leafCategory=meat-seafood&store=10259&limit=60&offset=0",
+      "status": 200,
+      "contentType": "application/json;charset=utf-8",
+      "bodySnippet": "{\"facets\":[{\"label\":\"Category\",\"slug\":\"category\",\"type\":\"single-select\",\"refinements\":[{\"label\":\"All Products\",\"slug\":\"all-products\",\"count\":12925,\"isSelected\":false,\"disabled\":false},{\"label\":\"Produce\",\"slug\":\"produce\",\"count\":288,\"isSelected\":false,\"disabled\":false,\"refinements\":[{\"label\":\"Fresh Fruit\",\"slug\":\"fresh-fruit\",\"count\":103,\"isSelected\":false,\"disabled\":false},{\"label\":\"Fresh Herbs\",\"slug\":\"fresh-herbs\",\"count\":28,\"isSelected\":false,\"disabled\":false},{\"label\":\"Fresh Vegetables\",\"slug\":\"fresh-vegetables\",\"count\":156,\"isSelected\":false,\"disabled\":false}]},{\"label\":\"Dairy & Eggs\",\"slug\":\"dairy-eggs\",\"count\":1051,\"isSelected\":false,\"disabled\":false,\"refinements\":[{\"label\":\"Butter & Margarine\",\"slug\":\"butter-margarine\",\"count\":42,\"isSelected\":false,\"disabled\":false},{\"label\":\"Chees",
+      "bodySize": 12743,
+      "hasProducts": true,
+      "productCount": 0
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://ara.paa-reporting-advertising.amazon/aat?pid=4a02e892-34ca-4cb5-9487-8a2e02760063&event=PageView-PIE&gtmVersion=3.5&ts=1774650855124&eventSource=amzn.js&uuid=851a180d-1d25-42a9-82cf-2094cbd47dc5",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.wholefoodsmarket.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.wholefoodsmarket.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/alm/category?almBrandId=VUZHIFdob2xlIEZvb2Rz&node=371460011",
+      "status": 200,
+      "contentType": "text/html;charset=UTF-8",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/762707645/?random=1774650878275&cv=11&fst=1774650878275&bg=ffffff&guid=ON&async=1&en=gtag.config&gtm=45be63p1z89221850235za20gzb9221850235zd9221850235xec&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115938466~115938469~116133312~117266402~117484252&u_w=1280&u_h=900&url=https%3A%2F%2Fwww.wholefoodsmarket.com%2Falm%2Fcategory%3FalmBrandId%3DVUZHIFdob2xlIEZvb2Rz%26node%3D371460011&frm=0&tiba=Amazon.com%3A%20Dairy%2C%20Cheese%20%26%20Eggs%3A%20Whole%20Foods%20Market&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=971211059.1774650821&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0&uaw=0&data=event%3Dgtag.config&rfmt=3&fmt=4",
+      "status": 200,
+      "contentType": "text/javascript; charset=UTF-8",
+      "bodySnippet": "(function(){var s = {};(function(){var k=typeof Object.defineProperties==\"function\"?Object.defineProperty:function(a,d,b){if(a==Array.prototype||a==Object.prototype)return a;a[d]=b.value;return a};function l(a){a=[\"object\"==typeof globalThis&&globalThis,a,\"object\"==typeof window&&window,\"object\"==typeof self&&self,\"object\"==typeof global&&global];for(var d=0;d<a.length;++d){var b=a[d];if(b&&b.Math==Math)return b}throw Error(\"Cannot find global object\");} var p=l(this),q=typeof Symbol===\"function\"&&typeof Symbol(\"x\")===\"symbol\",r={},t={};function u(a,d,b){if(!b||a!=null){b=t[d];if(b==null)return a[d];b=a[b];return b!==void 0?b:a[d]}} function v(a,d,b){if(d)a:{var c=a.split(\".\");a=c.length===1;var e=c[0],g;!a&&e in r?g=r:g=p;for(e=0;e<c.length-1;e++){var f=c[e];if(!(f in g))break a;g=g[f]}c=",
+      "bodySize": 4270,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/api/stores/10259/summary",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{\"storeId\":10259,\"token\":\"sanjose\",\"displayName\":\"San Jose - on The Alameda\",\"status\":\"Open\",\"phone\":\"(408) 207-1126\",\"storePrimeEligibility\":true,\"storeOperationalGuidance\":\"\",\"bu\":10259,\"folder\":\"sanjose\",\"openedAt\":\"2014-12-09T12:00:00Z\",\"links\":{\"Details\":\"/stores/sanjose\",\"Directions\":\"https://www.google.com/maps/dir/?api=1&destination=37.332295,-121.904991\",\"Sales\":\"/sales-flyer?store-id=10259\",\"PrimeNowPickUpAndDelivery\":\"https://www.wholefoods.com/grocery?ref_=US_TRF_ALL_UFG_WFM_REFER_0417726\",\"MapUrlDesktop\":\"https://maps.googleapis.com/maps/api/staticmap?zoom=16&size=780x543&markers=icon:https://m.media-amazon.com/images/S/assets.wholefoodsmarket.com/storepages/map/map-icon-wf.png%7C37.332295,-121.904991&key=AIzaSyBjDr2pxL_mQ6wd7sf49-P7Q-iqf06ZiOc&signature=6DWZT9RhQgmFk-5aw_4Feu",
+      "bodySize": 1842,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/account/summary",
+      "status": 200,
+      "contentType": "application/json;charset=UTF-8",
+      "bodySnippet": "{\"store\":{\"token\":\"sanjose\",\"display_name\":\"San Jose - on The Alameda\",\"postal_code\":\"95126\",\"location_code\":\"CA\",\"country_code\":\"USA\",\"status\":\"Open\",\"hours\":\"8 am – 10 pm today\",\"tooltip\":\"\"},\"customer\":{\"login_enabled\":true,\"authenticated\":false,\"anti_forgery_token\":\"g10TLM83/PFmA98/PyL7R6FH2wvbQIztGaIqg748Y526AAAAAQAAAABpxwX+cmF3AAAAACr/Igfie4qiUf9rqj+gAw==\"}}",
+      "bodySize": 366,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/api/wwos/subnav?programType=DELIVERY_AND_PICKUP&deviceType=DESKTOP&wfmStoreId=10259",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "[{\"node\":\"\",\"name\":\"Past Purchases\",\"url\":\"/afx/lists/pastpurchases/whole-foods-market?almBrandId=VUZHIFdob2xlIEZvb2Rz&ref=wf_dsk_sn_pastPurchases-d9ad7\",\"image\":\"\",\"imageLabel\":\"\",\"overrides\":[],\"additionalData\":null,\"children\":[],\"type\":\"CORE_NAVIGATION\"},{\"node\":\"lumyn4g3\",\"name\":\"Save\",\"url\":\"/fmc/deals?almBrandId=VUZHIFdob2xlIEZvb2Rz&ref=wf_dsk_sn_Save-4c0a5\",\"image\":\"\",\"imageLabel\":\"\",\"overrides\":[{\"startTime\":\"2022/01/01 00:00\",\"endTime\":\"2099/01/01 00:00\",\"type\":\"time\"}],\"additionalData\":null,\"children\":[{\"node\":\"m47jlpst\",\"name\":\"Shop Sales\",\"url\":\"/fmc/deals?almBrandId=VUZHIFdob2xlIEZvb2Rz&ref=wf_dsk_sn_ShopSales-ec7df\",\"image\":\"https://m.media-amazon.com/images/G/01/composer/uploads/FreshStoreSub-navfamily-pack/subnav/filename_bxjoazf.png\",\"imageLabel\":null,\"overrides\":[{\"startT",
+      "bodySize": 12093,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/api/wwos/subnav?programType=DELIVERY_AND_PICKUP&deviceType=DESKTOP&wfmStoreId=10259",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "[{\"node\":\"\",\"name\":\"Past Purchases\",\"url\":\"/afx/lists/pastpurchases/whole-foods-market?almBrandId=VUZHIFdob2xlIEZvb2Rz&ref=wf_dsk_sn_pastPurchases-d9ad7\",\"image\":\"\",\"imageLabel\":\"\",\"overrides\":[],\"additionalData\":null,\"children\":[],\"type\":\"CORE_NAVIGATION\"},{\"node\":\"lumyn4g3\",\"name\":\"Save\",\"url\":\"/fmc/deals?almBrandId=VUZHIFdob2xlIEZvb2Rz&ref=wf_dsk_sn_Save-4c0a5\",\"image\":\"\",\"imageLabel\":\"\",\"overrides\":[{\"startTime\":\"2022/01/01 00:00\",\"endTime\":\"2099/01/01 00:00\",\"type\":\"time\"}],\"additionalData\":null,\"children\":[{\"node\":\"m47jlpst\",\"name\":\"Shop Sales\",\"url\":\"/fmc/deals?almBrandId=VUZHIFdob2xlIEZvb2Rz&ref=wf_dsk_sn_ShopSales-ec7df\",\"image\":\"https://m.media-amazon.com/images/G/01/composer/uploads/FreshStoreSub-navfamily-pack/subnav/filename_bxjoazf.png\",\"imageLabel\":null,\"overrides\":[{\"startT",
+      "bodySize": 12093,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.nexusclient.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.wholefoodsmarket.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.nexusclient.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.Vowels.ClientMetrics",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.Vowels.ClientMetrics",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.Vowels.PageWeightMetrics",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.customsg.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/acp/alm-carousel-desktop/alm-carousel-desktop-6f47209c-52a9-4fe4-9de8-6a3b2bca20c2-1774587045042/getCarouselItems?page-type=FreshMerchandisedContent&pd_rd_w=N7n7H&content-id=amzn1.sym.e9ec2020-3339-4b42-9cda-15fc848e077d&pf_rd_p=e9ec2020-3339-4b42-9cda-15fc848e077d&pf_rd_r=HX55K8P1SSSHZNF1G6G9&pd_rd_wg=4JFEn&pd_rd_r=1d777005-c9b1-48f4-8621-ba12b7c3693a&ref_=371460011_ai_6520506011&stamp=1774650877769",
+      "status": 200,
+      "contentType": "text/html",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.wholefoodsmarket.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/dram/renderLazyLoaded",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{\"cards\":[{\"content\":\"<div class=\\\"celwidget pf_rd_p-895357d8-3472-49e1-aeec-c9fd14675251 pf_rd_r-HX55K8P1SSSHZNF1G6G9 c-f\\\" cel_widget_id=\\\"content-grid-card_desktop-alm-category-dram-amabot_4\\\" data-csa-op-log-render=\\\"\\\" data-csa-c-content-id=\\\"amzn1.sym.895357d8-3472-49e1-aeec-c9fd14675251\\\" data-csa-c-slot-id=\\\"DsUnknown-5\\\" data-csa-c-type=\\\"widget\\\" data-csa-c-painter=\\\"content-grid-card-cards\\\"><script>if(window.mix_csa){window.mix_csa('[cel_widget_id=\\\"content-grid-card_desktop-alm-category-dram-amabot_4\\\"]', '#CardInstancesak7NTf4UrhpG6ml3FwJ6Q')('mark', 'bb')}</script>\\n<script>if(window.uet){window.uet('bb','content-grid-card_desktop-alm-category-dram-amabot_4',{wb: 1})}</script>\\n<style>._Y29ud_acsUxWidgetMobile_3Xwn2{-webkit-text-size-adjust:none;font-family:Amazon Ember,Aria",
+      "bodySize": 25820,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/acp/alm-carousel-desktop/alm-carousel-desktop-6f47209c-52a9-4fe4-9de8-6a3b2bca20c2-1774587045042/getCarouselItems?page-type=FreshMerchandisedContent&pd_rd_w=DSveq&content-id=amzn1.sym.c799102d-d6fe-42ca-8be3-308edc7b5ebc&pf_rd_p=c799102d-d6fe-42ca-8be3-308edc7b5ebc&pf_rd_r=HX55K8P1SSSHZNF1G6G9&pd_rd_wg=4JFEn&pd_rd_r=1d777005-c9b1-48f4-8621-ba12b7c3693a&ref_=371460011_ai_6520429011&stamp=1774650877647",
+      "status": 200,
+      "contentType": "text/html",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/acp/alm-carousel-desktop/alm-carousel-desktop-6f47209c-52a9-4fe4-9de8-6a3b2bca20c2-1774587045042/getCarouselItems?page-type=FreshMerchandisedContent&pd_rd_w=GhUBS&content-id=amzn1.sym.c799102d-d6fe-42ca-8be3-308edc7b5ebc&pf_rd_p=c799102d-d6fe-42ca-8be3-308edc7b5ebc&pf_rd_r=HX55K8P1SSSHZNF1G6G9&pd_rd_wg=4JFEn&pd_rd_r=1d777005-c9b1-48f4-8621-ba12b7c3693a&ref_=371460011_ai_6520504011&stamp=1774650877621",
+      "status": 200,
+      "contentType": "text/html",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/acp/alm-carousel-desktop/alm-carousel-desktop-6f47209c-52a9-4fe4-9de8-6a3b2bca20c2-1774587045042/getCarouselItems?page-type=FreshMerchandisedContent&pd_rd_w=fUVbY&content-id=amzn1.sym.e30df3d5-42f6-41a5-b896-0d8c382f3f87&pf_rd_p=e30df3d5-42f6-41a5-b896-0d8c382f3f87&pf_rd_r=HX55K8P1SSSHZNF1G6G9&pd_rd_wg=4JFEn&pd_rd_r=1d777005-c9b1-48f4-8621-ba12b7c3693a&ref_=371460011_ai_6520428011&stamp=1774650877643",
+      "status": 200,
+      "contentType": "text/html",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/acp/alm-carousel-desktop/alm-carousel-desktop-6f47209c-52a9-4fe4-9de8-6a3b2bca20c2-1774587045042/getCarouselItems?page-type=FreshMerchandisedContent&pd_rd_w=E5tNT&content-id=amzn1.sym.b85f9698-cba5-470f-a29e-c2017d74b89c&pf_rd_p=b85f9698-cba5-470f-a29e-c2017d74b89c&pf_rd_r=HX55K8P1SSSHZNF1G6G9&pd_rd_wg=4JFEn&pd_rd_r=1d777005-c9b1-48f4-8621-ba12b7c3693a&ref_=371460011_ai_6520421011&stamp=1774650877797",
+      "status": 200,
+      "contentType": "text/html",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.wholefoodsmarket.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/products/snacks-chips-salsas",
+      "status": 200,
+      "contentType": "text/html;charset=utf-8",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "",
+      "bodySize": 0,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.wholefoodsmarket.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "",
+      "bodySize": 0,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "",
+      "bodySize": 0,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/account/summary",
+      "status": 200,
+      "contentType": "application/json;charset=UTF-8",
+      "bodySnippet": "{\"store\":{\"token\":\"sanjose\",\"display_name\":\"San Jose - on The Alameda\",\"postal_code\":\"95126\",\"location_code\":\"CA\",\"country_code\":\"USA\",\"status\":\"Open\",\"hours\":\"8 am – 10 pm today\",\"tooltip\":\"\"},\"customer\":{\"login_enabled\":true,\"authenticated\":false,\"anti_forgery_token\":\"g84KMwXfOT9XhxunffSrt4fakA4g23qsoLZoDOptt5p4AAAAAQAAAABpxwYUcmF3AAAAACr/Igfie4qiUf9rqj+gAw==\"}}",
+      "bodySize": 366,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/762707645/?random=1774650900033&cv=11&fst=1774650900033&bg=ffffff&guid=ON&async=1&en=gtag.config&gtm=45be63p1z89221850235za20gzb9221850235zd9221850235xec&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115616986~115938465~115938469~117484252~118128923&u_w=1280&u_h=900&url=https%3A%2F%2Fwww.wholefoodsmarket.com%2Fproducts%2Fsnacks-chips-salsas&frm=0&tiba=Whole%20Foods%20Market%3A%20Browse%20Products%20by%20Aisle%20and%20Section&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=971211059.1774650821&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0&uaw=0&data=event%3Dgtag.config&rfmt=3&fmt=4",
+      "status": 200,
+      "contentType": "text/javascript; charset=UTF-8",
+      "bodySnippet": "(function(){var s = {};(function(){var k=typeof Object.defineProperties==\"function\"?Object.defineProperty:function(a,d,b){if(a==Array.prototype||a==Object.prototype)return a;a[d]=b.value;return a};function l(a){a=[\"object\"==typeof globalThis&&globalThis,a,\"object\"==typeof window&&window,\"object\"==typeof self&&self,\"object\"==typeof global&&global];for(var d=0;d<a.length;++d){var b=a[d];if(b&&b.Math==Math)return b}throw Error(\"Cannot find global object\");} var p=l(this),q=typeof Symbol===\"function\"&&typeof Symbol(\"x\")===\"symbol\",r={},t={};function u(a,d,b){if(!b||a!=null){b=t[d];if(b==null)return a[d];b=a[b];return b!==void 0?b:a[d]}} function v(a,d,b){if(d)a:{var c=a.split(\".\");a=c.length===1;var e=c[0],g;!a&&e in r?g=r:g=p;for(e=0;e<c.length-1;e++){var f=c[e];if(!(f in g))break a;g=g[f]}c=",
+      "bodySize": 4231,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/api/products/category/snacks-chips-salsas?leafCategory=snacks-chips-salsas&store=10259&limit=60&offset=0",
+      "status": 200,
+      "contentType": "application/json;charset=utf-8",
+      "bodySnippet": "{\"facets\":[{\"label\":\"Category\",\"slug\":\"category\",\"type\":\"single-select\",\"refinements\":[{\"label\":\"All Products\",\"slug\":\"all-products\",\"count\":12925,\"isSelected\":false,\"disabled\":false},{\"label\":\"Produce\",\"slug\":\"produce\",\"count\":288,\"isSelected\":false,\"disabled\":false,\"refinements\":[{\"label\":\"Fresh Fruit\",\"slug\":\"fresh-fruit\",\"count\":103,\"isSelected\":false,\"disabled\":false},{\"label\":\"Fresh Herbs\",\"slug\":\"fresh-herbs\",\"count\":28,\"isSelected\":false,\"disabled\":false},{\"label\":\"Fresh Vegetables\",\"slug\":\"fresh-vegetables\",\"count\":156,\"isSelected\":false,\"disabled\":false}]},{\"label\":\"Dairy & Eggs\",\"slug\":\"dairy-eggs\",\"count\":1051,\"isSelected\":false,\"disabled\":false,\"refinements\":[{\"label\":\"Butter & Margarine\",\"slug\":\"butter-margarine\",\"count\":42,\"isSelected\":false,\"disabled\":false},{\"label\":\"Chees",
+      "bodySize": 12743,
+      "hasProducts": true,
+      "productCount": 0
+    },
+    {
+      "url": "https://ara.paa-reporting-advertising.amazon/aat?pid=4a02e892-34ca-4cb5-9487-8a2e02760063&event=PageView-PIE&gtmVersion=3.5&ts=1774650900043&eventSource=amzn.js&uuid=3e7a01f7-733d-4928-a3ad-1f2e59b9b5ef",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.amazon.com/ax/signin/crossDomainAuthContext",
+      "status": 200,
+      "contentType": "application/json;charset=UTF-8",
+      "bodySnippet": "{\"status\":\"NO_SSO_STATE\",\"authContextToken\":null}",
+      "bodySize": 49,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.wholefoodsmarket.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.wholefoodsmarket.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/alm/category?almBrandId=VUZHIFdob2xlIEZvb2Rz&node=16310231",
+      "status": 200,
+      "contentType": "text/html;charset=UTF-8",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/account/summary",
+      "status": 200,
+      "contentType": "application/json;charset=UTF-8",
+      "bodySnippet": "{\"store\":{\"token\":\"sanjose\",\"display_name\":\"San Jose - on The Alameda\",\"postal_code\":\"95126\",\"location_code\":\"CA\",\"country_code\":\"USA\",\"status\":\"Open\",\"hours\":\"8 am – 10 pm today\",\"tooltip\":\"\"},\"customer\":{\"login_enabled\":true,\"authenticated\":false,\"anti_forgery_token\":\"g3rZephFPBD1NK8xqox5L6TmXRpPIm4tJi4z6jGRrNOJAAAAAQAAAABpxwYrcmF3AAAAACr/Igfie4qiUf9rqj+gAw==\"}}",
+      "bodySize": 366,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/762707645/?random=1774650922977&cv=11&fst=1774650922977&bg=ffffff&guid=ON&async=1&en=gtag.config&gtm=45be63p1z89221850235za20gzb9221850235zd9221850235xec&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115938465~115938468~117484252&u_w=1280&u_h=900&url=https%3A%2F%2Fwww.wholefoodsmarket.com%2Falm%2Fcategory%3FalmBrandId%3DVUZHIFdob2xlIEZvb2Rz%26node%3D16310231&frm=0&tiba=Amazon.com%3A%20Beverages%3A%20Whole%20Foods%20Market&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=971211059.1774650821&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0&uaw=0&data=event%3Dgtag.config&rfmt=3&fmt=4",
+      "status": 200,
+      "contentType": "text/javascript; charset=UTF-8",
+      "bodySnippet": "(function(){var s = {};(function(){var k=typeof Object.defineProperties==\"function\"?Object.defineProperty:function(a,d,b){if(a==Array.prototype||a==Object.prototype)return a;a[d]=b.value;return a};function l(a){a=[\"object\"==typeof globalThis&&globalThis,a,\"object\"==typeof window&&window,\"object\"==typeof self&&self,\"object\"==typeof global&&global];for(var d=0;d<a.length;++d){var b=a[d];if(b&&b.Math==Math)return b}throw Error(\"Cannot find global object\");} var p=l(this),q=typeof Symbol===\"function\"&&typeof Symbol(\"x\")===\"symbol\",r={},t={};function u(a,d,b){if(!b||a!=null){b=t[d];if(b==null)return a[d];b=a[b];return b!==void 0?b:a[d]}} function v(a,d,b){if(d)a:{var c=a.split(\".\");a=c.length===1;var e=c[0],g;!a&&e in r?g=r:g=p;for(e=0;e<c.length-1;e++){var f=c[e];if(!(f in g))break a;g=g[f]}c=",
+      "bodySize": 4228,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/api/stores/10259/summary",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{\"storeId\":10259,\"token\":\"sanjose\",\"displayName\":\"San Jose - on The Alameda\",\"status\":\"Open\",\"phone\":\"(408) 207-1126\",\"storePrimeEligibility\":true,\"storeOperationalGuidance\":\"\",\"bu\":10259,\"folder\":\"sanjose\",\"openedAt\":\"2014-12-09T12:00:00Z\",\"links\":{\"Details\":\"/stores/sanjose\",\"Directions\":\"https://www.google.com/maps/dir/?api=1&destination=37.332295,-121.904991\",\"Sales\":\"/sales-flyer?store-id=10259\",\"PrimeNowPickUpAndDelivery\":\"https://www.wholefoods.com/grocery?ref_=US_TRF_ALL_UFG_WFM_REFER_0417726\",\"MapUrlDesktop\":\"https://maps.googleapis.com/maps/api/staticmap?zoom=16&size=780x543&markers=icon:https://m.media-amazon.com/images/S/assets.wholefoodsmarket.com/storepages/map/map-icon-wf.png%7C37.332295,-121.904991&key=AIzaSyBjDr2pxL_mQ6wd7sf49-P7Q-iqf06ZiOc&signature=6DWZT9RhQgmFk-5aw_4Feu",
+      "bodySize": 1842,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.wholefoodsmarket.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/api/wwos/subnav?programType=DELIVERY_AND_PICKUP&deviceType=DESKTOP&wfmStoreId=10259",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "[{\"node\":\"\",\"name\":\"Past Purchases\",\"url\":\"/afx/lists/pastpurchases/whole-foods-market?almBrandId=VUZHIFdob2xlIEZvb2Rz&ref=wf_dsk_sn_pastPurchases-d9ad7\",\"image\":\"\",\"imageLabel\":\"\",\"overrides\":[],\"additionalData\":null,\"children\":[],\"type\":\"CORE_NAVIGATION\"},{\"node\":\"lumyn4g3\",\"name\":\"Save\",\"url\":\"/fmc/deals?almBrandId=VUZHIFdob2xlIEZvb2Rz&ref=wf_dsk_sn_Save-4c0a5\",\"image\":\"\",\"imageLabel\":\"\",\"overrides\":[{\"startTime\":\"2022/01/01 00:00\",\"endTime\":\"2099/01/01 00:00\",\"type\":\"time\"}],\"additionalData\":null,\"children\":[{\"node\":\"m47jlpst\",\"name\":\"Shop Sales\",\"url\":\"/fmc/deals?almBrandId=VUZHIFdob2xlIEZvb2Rz&ref=wf_dsk_sn_ShopSales-ec7df\",\"image\":\"https://m.media-amazon.com/images/G/01/composer/uploads/FreshStoreSub-navfamily-pack/subnav/filename_bxjoazf.png\",\"imageLabel\":null,\"overrides\":[{\"startT",
+      "bodySize": 12093,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/api/wwos/subnav?programType=DELIVERY_AND_PICKUP&deviceType=DESKTOP&wfmStoreId=10259",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "[{\"node\":\"\",\"name\":\"Past Purchases\",\"url\":\"/afx/lists/pastpurchases/whole-foods-market?almBrandId=VUZHIFdob2xlIEZvb2Rz&ref=wf_dsk_sn_pastPurchases-d9ad7\",\"image\":\"\",\"imageLabel\":\"\",\"overrides\":[],\"additionalData\":null,\"children\":[],\"type\":\"CORE_NAVIGATION\"},{\"node\":\"lumyn4g3\",\"name\":\"Save\",\"url\":\"/fmc/deals?almBrandId=VUZHIFdob2xlIEZvb2Rz&ref=wf_dsk_sn_Save-4c0a5\",\"image\":\"\",\"imageLabel\":\"\",\"overrides\":[{\"startTime\":\"2022/01/01 00:00\",\"endTime\":\"2099/01/01 00:00\",\"type\":\"time\"}],\"additionalData\":null,\"children\":[{\"node\":\"m47jlpst\",\"name\":\"Shop Sales\",\"url\":\"/fmc/deals?almBrandId=VUZHIFdob2xlIEZvb2Rz&ref=wf_dsk_sn_ShopSales-ec7df\",\"image\":\"https://m.media-amazon.com/images/G/01/composer/uploads/FreshStoreSub-navfamily-pack/subnav/filename_bxjoazf.png\",\"imageLabel\":null,\"overrides\":[{\"startT",
+      "bodySize": 12093,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.nexusclient.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.nexusclient.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.customsg.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.wholefoodsmarket.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/acp/alm-carousel-desktop/alm-carousel-desktop-6f47209c-52a9-4fe4-9de8-6a3b2bca20c2-1774587045042/getCarouselItems?page-type=FreshMerchandisedContent&pd_rd_w=Xogsh&content-id=amzn1.sym.cbe6841f-16f3-4a73-acd7-5cfeb2456d82&pf_rd_p=cbe6841f-16f3-4a73-acd7-5cfeb2456d82&pf_rd_r=419PFPKPDV32G1GCT2SG&pd_rd_wg=qV00P&pd_rd_r=036196b3-8616-4b0b-a337-ffb8e632daf4&ref_=16310231_ai_19609257011&stamp=1774650922724",
+      "status": 200,
+      "contentType": "text/html",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/acp/alm-carousel-desktop/alm-carousel-desktop-6f47209c-52a9-4fe4-9de8-6a3b2bca20c2-1774587045042/getCarouselItems?page-type=FreshMerchandisedContent&pd_rd_w=VxdWT&content-id=amzn1.sym.b85f9698-cba5-470f-a29e-c2017d74b89c&pf_rd_p=b85f9698-cba5-470f-a29e-c2017d74b89c&pf_rd_r=419PFPKPDV32G1GCT2SG&pd_rd_wg=qV00P&pd_rd_r=036196b3-8616-4b0b-a337-ffb8e632daf4&ref_=16310231_ai_119342011&stamp=1774650922785",
+      "status": 200,
+      "contentType": "text/html",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/acp/alm-carousel-desktop/alm-carousel-desktop-6f47209c-52a9-4fe4-9de8-6a3b2bca20c2-1774587045042/getCarouselItems?page-type=FreshMerchandisedContent&pd_rd_w=F9EOj&content-id=amzn1.sym.e30df3d5-42f6-41a5-b896-0d8c382f3f87&pf_rd_p=e30df3d5-42f6-41a5-b896-0d8c382f3f87&pf_rd_r=419PFPKPDV32G1GCT2SG&pd_rd_wg=qV00P&pd_rd_r=036196b3-8616-4b0b-a337-ffb8e632daf4&ref_=16310231_ai_121227011011&stamp=1774650922718",
+      "status": 200,
+      "contentType": "text/html",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/acp/alm-carousel-desktop/alm-carousel-desktop-6f47209c-52a9-4fe4-9de8-6a3b2bca20c2-1774587045042/getCarouselItems?page-type=FreshMerchandisedContent&pd_rd_w=NcJAn&content-id=amzn1.sym.e9ec2020-3339-4b42-9cda-15fc848e077d&pf_rd_p=e9ec2020-3339-4b42-9cda-15fc848e077d&pf_rd_r=419PFPKPDV32G1GCT2SG&pd_rd_wg=qV00P&pd_rd_r=036196b3-8616-4b0b-a337-ffb8e632daf4&ref_=16310231_ai_16318401&stamp=1774650922774",
+      "status": 200,
+      "contentType": "text/html",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.wholefoodsmarket.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/acp/alm-carousel-desktop/alm-carousel-desktop-6f47209c-52a9-4fe4-9de8-6a3b2bca20c2-1774587045042/getCarouselItems?page-type=FreshMerchandisedContent&pd_rd_w=VvUlf&content-id=amzn1.sym.c799102d-d6fe-42ca-8be3-308edc7b5ebc&pf_rd_p=c799102d-d6fe-42ca-8be3-308edc7b5ebc&pf_rd_r=419PFPKPDV32G1GCT2SG&pd_rd_wg=qV00P&pd_rd_r=036196b3-8616-4b0b-a337-ffb8e632daf4&ref_=16310231_ai_18774117011&stamp=1774650922728",
+      "status": 200,
+      "contentType": "text/html",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/acp/alm-carousel-desktop/alm-carousel-desktop-6f47209c-52a9-4fe4-9de8-6a3b2bca20c2-1774587045042/getCarouselItems?page-type=FreshMerchandisedContent&pd_rd_w=Xfai0&content-id=amzn1.sym.cbe6841f-16f3-4a73-acd7-5cfeb2456d82&pf_rd_p=cbe6841f-16f3-4a73-acd7-5cfeb2456d82&pf_rd_r=419PFPKPDV32G1GCT2SG&pd_rd_wg=qV00P&pd_rd_r=036196b3-8616-4b0b-a337-ffb8e632daf4&ref_=16310231_ai_16318031&stamp=1774650922725",
+      "status": 200,
+      "contentType": "text/html",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/acp/alm-carousel-desktop/alm-carousel-desktop-6f47209c-52a9-4fe4-9de8-6a3b2bca20c2-1774587045042/getCarouselItems?page-type=FreshMerchandisedContent&pd_rd_w=HILUL&content-id=amzn1.sym.e9ec2020-3339-4b42-9cda-15fc848e077d&pf_rd_p=e9ec2020-3339-4b42-9cda-15fc848e077d&pf_rd_r=419PFPKPDV32G1GCT2SG&pd_rd_wg=qV00P&pd_rd_r=036196b3-8616-4b0b-a337-ffb8e632daf4&ref_=16310231_ai_16318371&stamp=1774650922766",
+      "status": 200,
+      "contentType": "text/html",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/products/bananas",
+      "status": 200,
+      "contentType": "text/html;charset=utf-8",
+      "bodySnippet": null,
+      "bodySize": -1,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "",
+      "bodySize": 0,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.amazon.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "",
+      "bodySize": 0,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.wholefoodsmarket.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "",
+      "bodySize": 0,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/account/summary",
+      "status": 200,
+      "contentType": "application/json;charset=UTF-8",
+      "bodySnippet": "{\"store\":{\"token\":\"sanjose\",\"display_name\":\"San Jose - on The Alameda\",\"postal_code\":\"95126\",\"location_code\":\"CA\",\"country_code\":\"USA\",\"status\":\"Open\",\"hours\":\"8 am – 10 pm today\",\"tooltip\":\"\"},\"customer\":{\"login_enabled\":true,\"authenticated\":false,\"anti_forgery_token\":\"g8WJ+r6gDpD8A3MCv3t0bJ9LsjYkyIbjmQgMMexPbxjIAAAAAQAAAABpxwZBcmF3AAAAACr/Igfie4qiUf9rqj+gAw==\"}}",
+      "bodySize": 366,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/762707645/?random=1774650945488&cv=11&fst=1774650945488&bg=ffffff&guid=ON&async=1&en=gtag.config&gtm=45be63p1z89221850235za20gzb9221850235zd9221850235xec&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115938466~115938469~117266400~117384405~117484252~118131810&u_w=1280&u_h=900&url=https%3A%2F%2Fwww.wholefoodsmarket.com%2Fproducts%2Fbananas&frm=0&tiba=Whole%20Foods%20Market%3A%20Browse%20Products%20by%20Aisle%20and%20Section&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=971211059.1774650821&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0&uaw=0&data=event%3Dgtag.config&rfmt=3&fmt=4",
+      "status": 200,
+      "contentType": "text/javascript; charset=UTF-8",
+      "bodySnippet": "(function(){var s = {};(function(){var k=typeof Object.defineProperties==\"function\"?Object.defineProperty:function(a,d,b){if(a==Array.prototype||a==Object.prototype)return a;a[d]=b.value;return a};function l(a){a=[\"object\"==typeof globalThis&&globalThis,a,\"object\"==typeof window&&window,\"object\"==typeof self&&self,\"object\"==typeof global&&global];for(var d=0;d<a.length;++d){var b=a[d];if(b&&b.Math==Math)return b}throw Error(\"Cannot find global object\");} var p=l(this),q=typeof Symbol===\"function\"&&typeof Symbol(\"x\")===\"symbol\",r={},t={};function u(a,d,b){if(!b||a!=null){b=t[d];if(b==null)return a[d];b=a[b];return b!==void 0?b:a[d]}} function v(a,d,b){if(d)a:{var c=a.split(\".\");a=c.length===1;var e=c[0],g;!a&&e in r?g=r:g=p;for(e=0;e<c.length-1;e++){var f=c[e];if(!(f in g))break a;g=g[f]}c=",
+      "bodySize": 4228,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/api/products/category/bananas?leafCategory=bananas&store=10259&limit=60&offset=0",
+      "status": 200,
+      "contentType": "application/json;charset=utf-8",
+      "bodySnippet": "{\"facets\":[{\"label\":\"Category\",\"slug\":\"category\",\"type\":\"single-select\",\"refinements\":[{\"label\":\"All Products\",\"slug\":\"all-products\",\"count\":12925,\"isSelected\":false,\"disabled\":false},{\"label\":\"Produce\",\"slug\":\"produce\",\"count\":288,\"isSelected\":false,\"disabled\":false,\"refinements\":[{\"label\":\"Fresh Fruit\",\"slug\":\"fresh-fruit\",\"count\":103,\"isSelected\":false,\"disabled\":false},{\"label\":\"Fresh Herbs\",\"slug\":\"fresh-herbs\",\"count\":28,\"isSelected\":false,\"disabled\":false},{\"label\":\"Fresh Vegetables\",\"slug\":\"fresh-vegetables\",\"count\":156,\"isSelected\":false,\"disabled\":false}]},{\"label\":\"Dairy & Eggs\",\"slug\":\"dairy-eggs\",\"count\":1051,\"isSelected\":false,\"disabled\":false,\"refinements\":[{\"label\":\"Butter & Margarine\",\"slug\":\"butter-margarine\",\"count\":42,\"isSelected\":false,\"disabled\":false},{\"label\":\"Chees",
+      "bodySize": 12743,
+      "hasProducts": true,
+      "productCount": 0
+    },
+    {
+      "url": "https://unagi.wholefoodsmarket.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://ara.paa-reporting-advertising.amazon/aat?pid=4a02e892-34ca-4cb5-9487-8a2e02760063&event=PageView-PIE&gtmVersion=3.5&ts=1774650945500&eventSource=amzn.js&uuid=346223a1-e7c1-4b0e-bd24-b6a0e9fbe057",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi-na.amazon.com/1/events/com.amazon.eel.katal.metrics.core.nexus",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    },
+    {
+      "url": "https://unagi.wholefoodsmarket.com/1/events/com.amazon.csm.csa.prod",
+      "status": 200,
+      "contentType": "application/json",
+      "bodySnippet": "{}",
+      "bodySize": 2,
+      "hasProducts": false,
+      "productCount": null
+    }
+  ],
+  "productCandidates": [
+    {
+      "url": "https://www.wholefoodsmarket.com/api/products/category/meat-seafood?leafCategory=meat-seafood&store=10259&limit=60&offset=0",
+      "status": 200,
+      "bodySnippet": "{\"facets\":[{\"label\":\"Category\",\"slug\":\"category\",\"type\":\"single-select\",\"refinements\":[{\"label\":\"All Products\",\"slug\":\"all-products\",\"count\":12925,\"isSelected\":false,\"disabled\":false},{\"label\":\"Produce\",\"slug\":\"produce\",\"count\":288,\"isSelected\":false,\"disabled\":false,\"refinements\":[{\"label\":\"Fresh Fruit\",\"slug\":\"fresh-fruit\",\"count\":103,\"isSelected\":false,\"disabled\":false},{\"label\":\"Fresh Herbs\",\"slug\":\"fresh-herbs\",\"count\":28,\"isSelected\":false,\"disabled\":false},{\"label\":\"Fresh Vegetables\",\"slug\":\"fresh-vegetables\",\"count\":156,\"isSelected\":false,\"disabled\":false}]},{\"label\":\"Dairy & Eggs\",\"slug\":\"dairy-eggs\",\"count\":1051,\"isSelected\":false,\"disabled\":false,\"refinements\":[{\"label\":\"Butter & Margarine\",\"slug\":\"butter-margarine\",\"count\":42,\"isSelected\":false,\"disabled\":false},{\"label\":\"Cheese\",\"slug\":\"cheese\",\"count\":333,\"isSelected\":false,\"disabled\":false},{\"label\":\"Yogurt\",\"slug\":\"yogurt\",\"count\":310,\"isSelected\":false,\"disabled\":false},{\"label\":\"Dairy Alternatives\",\"slug\":\"dairy-alternatives\",\"count\":72,\"isSelected\":false,\"disabled\":false,\"refinements\":[{\"label\":\"Almond\",\"slug\":\"almond\",\"count\":16,\"isSelected\":false,\"disabled\":false},{\"label\":\"Cashew\",\"slug\":\"cashew\",\"count\":2,\"is"
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/api/products/category/snacks-chips-salsas?leafCategory=snacks-chips-salsas&store=10259&limit=60&offset=0",
+      "status": 200,
+      "bodySnippet": "{\"facets\":[{\"label\":\"Category\",\"slug\":\"category\",\"type\":\"single-select\",\"refinements\":[{\"label\":\"All Products\",\"slug\":\"all-products\",\"count\":12925,\"isSelected\":false,\"disabled\":false},{\"label\":\"Produce\",\"slug\":\"produce\",\"count\":288,\"isSelected\":false,\"disabled\":false,\"refinements\":[{\"label\":\"Fresh Fruit\",\"slug\":\"fresh-fruit\",\"count\":103,\"isSelected\":false,\"disabled\":false},{\"label\":\"Fresh Herbs\",\"slug\":\"fresh-herbs\",\"count\":28,\"isSelected\":false,\"disabled\":false},{\"label\":\"Fresh Vegetables\",\"slug\":\"fresh-vegetables\",\"count\":156,\"isSelected\":false,\"disabled\":false}]},{\"label\":\"Dairy & Eggs\",\"slug\":\"dairy-eggs\",\"count\":1051,\"isSelected\":false,\"disabled\":false,\"refinements\":[{\"label\":\"Butter & Margarine\",\"slug\":\"butter-margarine\",\"count\":42,\"isSelected\":false,\"disabled\":false},{\"label\":\"Cheese\",\"slug\":\"cheese\",\"count\":333,\"isSelected\":false,\"disabled\":false},{\"label\":\"Yogurt\",\"slug\":\"yogurt\",\"count\":310,\"isSelected\":false,\"disabled\":false},{\"label\":\"Dairy Alternatives\",\"slug\":\"dairy-alternatives\",\"count\":72,\"isSelected\":false,\"disabled\":false,\"refinements\":[{\"label\":\"Almond\",\"slug\":\"almond\",\"count\":16,\"isSelected\":false,\"disabled\":false},{\"label\":\"Cashew\",\"slug\":\"cashew\",\"count\":2,\"is"
+    },
+    {
+      "url": "https://www.wholefoodsmarket.com/api/products/category/bananas?leafCategory=bananas&store=10259&limit=60&offset=0",
+      "status": 200,
+      "bodySnippet": "{\"facets\":[{\"label\":\"Category\",\"slug\":\"category\",\"type\":\"single-select\",\"refinements\":[{\"label\":\"All Products\",\"slug\":\"all-products\",\"count\":12925,\"isSelected\":false,\"disabled\":false},{\"label\":\"Produce\",\"slug\":\"produce\",\"count\":288,\"isSelected\":false,\"disabled\":false,\"refinements\":[{\"label\":\"Fresh Fruit\",\"slug\":\"fresh-fruit\",\"count\":103,\"isSelected\":false,\"disabled\":false},{\"label\":\"Fresh Herbs\",\"slug\":\"fresh-herbs\",\"count\":28,\"isSelected\":false,\"disabled\":false},{\"label\":\"Fresh Vegetables\",\"slug\":\"fresh-vegetables\",\"count\":156,\"isSelected\":false,\"disabled\":false}]},{\"label\":\"Dairy & Eggs\",\"slug\":\"dairy-eggs\",\"count\":1051,\"isSelected\":false,\"disabled\":false,\"refinements\":[{\"label\":\"Butter & Margarine\",\"slug\":\"butter-margarine\",\"count\":42,\"isSelected\":false,\"disabled\":false},{\"label\":\"Cheese\",\"slug\":\"cheese\",\"count\":333,\"isSelected\":false,\"disabled\":false},{\"label\":\"Yogurt\",\"slug\":\"yogurt\",\"count\":310,\"isSelected\":false,\"disabled\":false},{\"label\":\"Dairy Alternatives\",\"slug\":\"dairy-alternatives\",\"count\":72,\"isSelected\":false,\"disabled\":false,\"refinements\":[{\"label\":\"Almond\",\"slug\":\"almond\",\"count\":16,\"isSelected\":false,\"disabled\":false},{\"label\":\"Cashew\",\"slug\":\"cashew\",\"count\":2,\"is"
+    }
+  ]
+}
