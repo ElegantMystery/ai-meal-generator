@@ -139,7 +139,7 @@ def _fetch_by_category(cur, store: str, category_keyword: str, limit: int) -> Li
 # Category quotas for proportional random sampling.
 # Order matters: higher-priority categories are listed first so they are not
 # crowded out during deduplication.
-_CATEGORY_QUOTAS: List[tuple] = [
+_CATEGORY_QUOTAS_TJ: List[tuple] = [
     ("Fresh Fruits & Veggies > Veggies",        20),
     ("Fresh Fruits & Veggies > Fruits",          10),
     ("Meat, Seafood",                            20),
@@ -154,6 +154,25 @@ _CATEGORY_QUOTAS: List[tuple] = [
     ("Dressing & Seasoning",                      4),
     ("Dip/Spread",                                4),
 ]
+
+# WF uses flat category labels (e.g. "Produce", "Meat", "Pantry Essentials")
+_CATEGORY_QUOTAS_WF: List[tuple] = [
+    ("Produce",                                  25),
+    ("Meat",                                     20),
+    ("Seafood",                                   8),
+    ("Dairy & Eggs",                             12),
+    ("Pantry Essentials",                        20),
+    ("Frozen Foods",                             10),
+    ("Prepared Foods",                           10),
+    ("Breads, Rolls & Bakery",                    8),
+    ("Snacks, Chips & Salsas",                    7),
+]
+
+def _get_category_quotas(store: str) -> List[tuple]:
+    if store.upper() == "WHOLE_FOODS":
+        return _CATEGORY_QUOTAS_WF
+    return _CATEGORY_QUOTAS_TJ
+
 _FILL_LIMIT = 10
 _MAX_CANDIDATES = 120
 
@@ -175,7 +194,7 @@ def retrieve_candidates(
             seen_ids: set = set()
             items: List[Dict[str, Any]] = []
 
-            for category_keyword, quota in _CATEGORY_QUOTAS:
+            for category_keyword, quota in _get_category_quotas(store):
                 rows = _fetch_by_category(cur, store, category_keyword, quota)
                 for row in rows:
                     if row["id"] not in seen_ids:
