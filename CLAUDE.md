@@ -193,7 +193,11 @@ cd infra && terraform apply
 
 To change the alert email only: `terraform apply -target=aws_sns_topic_subscription.alerts_email`
 
-## TJ Scraper Pipeline
+## Grocery Item Scrapers
+
+The database is populated via two grocery store scraper pipelines: Trader Joe's (manual) and Whole Foods (automated). Both use the same pattern: local/GHA scrape → transfer to EC2 → import to RDS → backfill embeddings.
+
+### TJ Scraper Pipeline
 
 Manual pipeline that scrapes Trader Joe's catalog and keeps the database fresh.
 Must be run from a local machine — Akamai blocks datacenter/GHA IPs and only returns ~15 items.
@@ -231,6 +235,59 @@ bash run_pipeline.sh
 ```
 
 This runs the full pipeline: scrape → transfer to EC2 → import to RDS → backfill embeddings.
+
+## Whole Foods Scraper Pipeline
+
+Automated pipeline that scrapes Whole Foods grocery store catalog (store ID: 10259, San Jose CA) and keeps the database fresh.
+Runs via GitHub Actions on the 20th of each month. Unlike TJ (blocked by Akamai), GHA runners can access Whole Foods without restrictions.
+
+### Architecture
+
+```
+GitHub Actions Runner (monthly on 20th):
+  node scripts/wholefoods/scrape_wholefoods.js  → calls Whole Foods API + Playwright for pagination
+    → wholefoods-items.json
+
+  python3 scripts/wholefoods/parse_nutrition.py
+    → wholefoods-nutrition-parsed.json
+
+  python3 scripts/wholefoods/parse_ingredients.py
+    → wholefoods-ingredients-parsed.json
+
+  EC2 (via SSH):
+    python3 import_wholefoods.py  → upserts items into RDS (items, item_nutrition, item_ingredients)
+    docker exec python-rag curl /embed/backfill/{items,nutrition,ingredients}
+```
+
+### Key files
+
+| File | Purpose |
+|------|---------|
+| `scripts/wholefoods/scrape_wholefoods.js` | Playwright scraper — fetches Whole Foods catalog (store 10259), outputs `wholefoods-items.json` |
+| `scripts/wholefoods/parse_nutrition.py` | Parses nutrition data from scraped JSON → `wholefoods-nutrition-parsed.json` |
+| `scripts/wholefoods/parse_ingredients.py` | Parses ingredient lists → `wholefoods-ingredients-parsed.json` |
+| `scripts/wholefoods/import_wholefoods.py` | Upserts items into RDS (`items`, `item_nutrition`, `item_ingredients`) |
+| `scripts/wholefoods/run_pipeline.sh` | End-to-end pipeline: scrape → parse → scp to EC2 → import → embed |
+| `.github/workflows/wholefoods-scraper.yml` | GHA workflow — runs 20th of month (monthly refresh) |
+
+### Running the pipeline manually
+
+```bash
+cd scripts/wholefoods
+bash run_pipeline.sh
+```
+
+This runs the full pipeline: scrape → parse → transfer to EC2 → import to RDS → backfill embeddings.
+
+### Automation
+
+The workflow `.github/workflows/wholefoods-scraper.yml` automatically runs on the 20th of each month (via cron schedule `0 0 20 * *`). It:
+1. Runs the complete scraper pipeline
+2. Transfers parsed data to EC2 via SCP
+3. Imports to RDS
+4. Backfills vector embeddings
+
+No manual intervention required unless the workflow fails.
 
 ## Spoonacular Recipes Pipeline
 
@@ -303,7 +360,7 @@ backend/
 │   ├── preferences/    # User dietary preferences
 │   ├── security/       # Spring Security config
 │   └── subscription/   # Stripe integration (SubscriptionService, SubscriptionController, StripeWebhookController)
-└── src/main/resources/db/migration/  # Flyway SQL migrations (V1-V028)
+└── src/main/resources/db/migration/  # Flyway SQL migrations (V1-V030)
 
 frontend/
 ├── app/                # Next.js app router pages
@@ -323,7 +380,8 @@ rag/app/
 └── validators.py      # JSON validation, float servingsUsed, ID extraction
 
 scripts/
-├── tj/                 # Trader Joe's scraper pipeline
+├── tj/                 # Trader Joe's scraper pipeline (manual, local machine only)
+├── wholefoods/         # Whole Foods scraper pipeline (automated, GHA monthly)
 └── spoonacular/
     └── fetch_recipes.py  # Import popular recipes from Spoonacular API
 ```
@@ -333,7 +391,9 @@ scripts/
 Key tables (managed by Flyway):
 - `users` - Users (Google OAuth2 only); includes `stripe_customer_id` (linked to Stripe) and `plans_generated_count` (quota enforcement)
 - `user_preferences` - Dietary restrictions, allergies, calorie targets
-- `items` - Grocery items with store, price, category
+- `items` - Grocery items with store, price, category, image_url (TEXT). Stores: TRADER_JOES (2,057 items) and WHOLE_FOODS (7,327 items from San Jose store #10259)
+- `item_nutrition` - Nutrition facts per item (calories, macros, etc.)
+- `item_ingredients` - Ingredient lists per item
 - `mealplans` - Generated meal plans (JSON stored in `plan_json`; `_meta.recipeTemplatesOffered` lists recipes sampled at generation time)
 - `recipes` - Recipe dataset (title, ingredients, diets, cuisines, dish_types); currently 300 Spoonacular recipes; GIN indexes on `diets` and `dish_types`
 - `recipe_embeddings` - Vector embeddings for recipes (HNSW, 1536-dim); populated via `fetch_recipes.py --embed`
