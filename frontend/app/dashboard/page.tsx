@@ -37,7 +37,7 @@ type MealPlan = {
   createdAt: string | null;
 };
 
-type StoreOption = "TRADER_JOES" | "COSTCO";
+type StoreOption = "TRADER_JOES" | "WHOLE_FOODS";
 
 // Type guard for quota exceeded errors
 function isQuotaExceeded(err: unknown): boolean {
@@ -296,7 +296,7 @@ export default function DashboardPage() {
                 disabled={creating || creatingAi}
               >
                 <option value="TRADER_JOES">Trader Joe&apos;s</option>
-                <option value="COSTCO">Costco</option>
+                <option value="WHOLE_FOODS">Whole Foods</option>
               </Select>
 
               <Select
