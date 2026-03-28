@@ -2,13 +2,13 @@ import { Metadata } from "next";
 import Image from "next/image";
 
 export const metadata: Metadata = {
-  title: "Whole Haul – AI Meal Planner for Trader Joe's & Costco",
+  title: "Whole Haul – AI Meal Planner for Trader Joe's & Whole Foods",
   description:
-    "Generate personalized weekly meal plans using real Trader Joe's and Costco products. AI-powered, diet-aware, with a ready-to-use shopping list.",
+    "Generate personalized weekly meal plans using real Trader Joe's and Whole Foods products. AI-powered, diet-aware, with a ready-to-use shopping list.",
   openGraph: {
-    title: "Whole Haul – AI Meal Planner for Trader Joe's & Costco",
+    title: "Whole Haul – AI Meal Planner for Trader Joe's & Whole Foods",
     description:
-      "Generate personalized weekly meal plans using real Trader Joe's and Costco products. AI-powered, diet-aware, with a ready-to-use shopping list.",
+      "Generate personalized weekly meal plans using real Trader Joe's and Whole Foods products. AI-powered, diet-aware, with a ready-to-use shopping list.",
     url: "https://whole-haul.com",
   },
 };
@@ -30,7 +30,7 @@ const steps = [
     icon: SparklesIcon,
     title: "AI builds your meal plan",
     description:
-      "Our AI picks meals from real Trader Joe's and Costco items — balanced, realistic, and within budget.",
+      "Our AI picks meals from real Trader Joe's and Whole Foods items — balanced, realistic, and within budget.",
   },
   {
     icon: ShoppingCartIcon,
@@ -96,8 +96,8 @@ export default function HomePage() {
           </h1>
           <p className="text-lg text-gray-600 max-w-xl mx-auto">
             Generate personalized weekly meal plans using real items from Trader
-            Joe&apos;s and Costco — with a ready-to-use shopping list and prices
-            included.
+            Joe&apos;s and Whole Foods — with a ready-to-use shopping list and
+            prices included.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
             <Link
@@ -164,7 +164,7 @@ export default function HomePage() {
               🛒 Trader Joe&apos;s
             </span>
             <span className="px-4 py-2 rounded-lg bg-white border border-gray-200 shadow-sm">
-              📦 Costco
+              🌿 Whole Foods
             </span>
           </div>
         </div>
