@@ -51,7 +51,12 @@ A dish should have at least one TIER 1 ingredient. Tier 4 items should be rare a
 ## servingsUsed — how much of the package is used in ONE dish preparation:
 Think about how much of that product a real cook would actually use for one meal:
 - Fresh proteins (chicken breast, salmon, ground beef): 1–2 servings (the actual portion)
-- Fresh vegetables (broccoli, spinach, tomatoes): 1–2 servings
+- Bulk fresh vegetables (broccoli, spinach, kale, cabbage, zucchini): 1–2 servings
+- Small-use fresh produce — use a small fraction of the package:
+  - Cherry / grape tomatoes: 0.2–0.3 servings (a handful from a pint)
+  - Fresh herbs (basil, parsley, cilantro, rosemary): 0.1–0.2 servings (a few sprigs)
+  - Garlic / shallots: 0.1–0.2 servings (1–2 cloves)
+  - Bell peppers / jalapeños: 0.3–0.5 servings (half a pepper)
 - Eggs: 2–3 (you crack 2-3 eggs per omelette)
 - Dairy / cheese: 0.5–1 serving (a handful of shredded cheese, a dollop of yogurt)
 - Pasta / rice / grains (dry): 2–4 servings (you cook multiple servings at once)
