@@ -21,6 +21,7 @@ import { formatDateRange, formatCreatedAt } from "@/lib/formatters";
 import { useSubscription } from "@/hooks/useSubscription";
 import QuotaBadge from "@/components/QuotaBadge";
 import UpgradeModal from "@/components/UpgradeModal";
+import GeneratingModal from "@/components/GeneratingModal";
 
 type PreferencesDto = {
   dietaryRestrictions: string | null;
@@ -394,6 +395,9 @@ export default function DashboardPage() {
         open={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
       />
+
+      {/* AI Generation Progress Modal */}
+      <GeneratingModal isOpen={creatingAi} />
     </main>
   );
 }
