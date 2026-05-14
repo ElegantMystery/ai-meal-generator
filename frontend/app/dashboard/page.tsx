@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthStore } from "@/lib/authStore";
 import { api } from "@/lib/api";
+import { streamMealPlan } from "@/lib/sse";
 import { Button } from "@/components/ui/Button";
 import {
   Card,
@@ -40,16 +41,31 @@ type MealPlan = {
 
 type StoreOption = "TRADER_JOES" | "WHOLE_FOODS";
 
-// Type guard for quota exceeded errors
+// Type guard for quota exceeded errors — handles both Axios and fetch/SSE error shapes
 function isQuotaExceeded(err: unknown): boolean {
-  if (err && typeof err === "object" && "response" in err) {
+  if (!err || typeof err !== "object") return false;
+  // Axios shape: err.response.status / err.response.data.error
+  if ("response" in err) {
     const errObj = err as {
       response?: { status?: number; data?: { error?: string } };
     };
-    return (
+    if (
       errObj.response?.status === 403 &&
       errObj.response?.data?.error === "QUOTA_EXCEEDED"
-    );
+    ) {
+      return true;
+    }
+  }
+  // fetch/SSE shape from sse.ts: err.status / err.body
+  if ("status" in err && "body" in err) {
+    const errObj = err as { status?: number; body?: string };
+    if (
+      errObj.status === 403 &&
+      typeof errObj.body === "string" &&
+      errObj.body.includes("QUOTA_EXCEEDED")
+    ) {
+      return true;
+    }
   }
   return false;
 }
@@ -71,11 +87,22 @@ export default function DashboardPage() {
 
   const [creating, setCreating] = useState(false);
   const [creatingAi, setCreatingAi] = useState(false);
+  const [aiStatus, setAiStatus] = useState<string>("");
+  const [aiProgress, setAiProgress] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const [store, setStore] = useState<StoreOption>("TRADER_JOES");
   const [days, setDays] = useState<number>(7);
+
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Cancel any in-flight SSE stream when the component unmounts
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   // Handle ?upgrade=success — poll for PRO status until webhook is processed
   const upgradeHandledRef = useRef(false);
@@ -193,23 +220,82 @@ export default function DashboardPage() {
   };
 
   const generateMealPlanAi = async () => {
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setCreatingAi(true);
+    setAiStatus("Connecting to the planner…");
+    setAiProgress(0);
     setError(null);
+
+    // Heuristic progress: each tool call nudges the bar forward up to 89 %.
+    let toolCalls = 0;
+    let saved: MealPlan | null = null;
+
     try {
-      const res = await api.post<MealPlan>("/api/mealplans/generate-ai", null, {
-        params: { store, days },
+      await streamMealPlan({
+        store,
+        days,
+        signal: controller.signal,
+        onEvent: (ev) => {
+          const data = (ev.data ?? {}) as {
+            phase?: string;
+            message?: string;
+            name?: string;
+            summary?: string;
+            code?: string;
+          };
+
+          switch (ev.event) {
+            case "phase":
+              if (data.message) setAiStatus(data.message);
+              break;
+            case "tool_call":
+              toolCalls += 1;
+              setAiProgress(Math.min(89, 10 + toolCalls * 5));
+              if (data.name) setAiStatus(`Calling ${data.name}…`);
+              break;
+            case "tool_result":
+              if (data.summary) setAiStatus(`${data.name}: ${data.summary}`);
+              break;
+            case "assistant_text":
+              // intentionally ignored — keeps the modal calm
+              break;
+            case "complete":
+              setAiProgress(95);
+              setAiStatus("Saving your meal plan…");
+              break;
+            case "mealplan_saved":
+              saved = ev.data as MealPlan;
+              setAiProgress(100);
+              setAiStatus("Done!");
+              break;
+            case "error":
+              throw new Error(
+                data.message ?? `Agent error (${data.code ?? "unknown"})`,
+              );
+          }
+        },
       });
-      setMealplans((prev) => [res.data, ...prev]);
-      await refetchSubscription();
+
+      if (saved) {
+        setMealplans((prev) => [saved as MealPlan, ...prev]);
+        await refetchSubscription();
+      } else {
+        throw new Error("Stream ended without a saved meal plan");
+      }
     } catch (err) {
-      console.error("Failed to generate AI meal plan:", err);
+      if (err instanceof Error && err.name === "AbortError") return;
       if (isQuotaExceeded(err)) {
         setShowUpgradeModal(true);
       } else {
         setError("Failed to generate AI meal plan.");
       }
     } finally {
+      abortControllerRef.current = null;
       setCreatingAi(false);
+      setAiStatus("");
+      setAiProgress(0);
     }
   };
 
@@ -397,7 +483,11 @@ export default function DashboardPage() {
       />
 
       {/* AI Generation Progress Modal */}
-      <GeneratingModal isOpen={creatingAi} />
+      <GeneratingModal
+        isOpen={creatingAi}
+        status={aiStatus}
+        progressPercent={creatingAi ? aiProgress : undefined}
+      />
     </main>
   );
 }

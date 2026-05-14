@@ -17,15 +17,67 @@ Frontend (3000) → Backend (8080) → RAG Service (8000)
                   PostgreSQL (5432) with pgvector
 ```
 
-The backend handles user auth (Google OAuth2), meal plan CRUD, and preferences. For AI generation, it calls the RAG service which:
-1. Retrieves ~120 candidate items via **category-proportional random sampling** (no vector search at generation time — randomness ensures plan variety across runs). Category quotas are **store-aware**: TRADER_JOES uses path-based categories (e.g. "Fresh Fruits & Veggies > Veggies"), while WHOLE_FOODS uses flat labels (e.g. "Produce", "Meat") to ensure balanced representation across different store schemas.
-2. Samples 75 **recipe templates** from the `recipes` table (filtered by dietary restriction if set, with unfiltered fallback) and passes them to the LLM as dish-name inspiration
-3. Calls GPT-4.1-mini (or configured `CHAT_MODEL`) to generate a dish-centric meal plan JSON
-4. Validates item IDs exist in the store
+The backend handles user auth (Google OAuth2), meal plan CRUD, and preferences. AI generation is an **agentic tool-use loop** that streams progress over SSE.
 
-The generated plan's `_meta` includes `recipeTemplatesOffered` (list of recipe titles offered to the LLM) for traceability.
+### AI generation flow (`/api/mealplans/generate-ai`)
 
-Two generation modes exist: rule-based (`/api/mealplans/generate`) and AI-powered (`/api/mealplans/generate-ai`).
+The whole path is Server-Sent Events end to end:
+
+```
+Browser  (fetch + ReadableStream SSE parser in frontend/lib/sse.ts)
+  │
+  ▼ POST /api/mealplans/generate-ai (Accept: text/event-stream)
+Spring Backend  (MealPlanController + MealPlanService.streamGenerateAi)
+  │  Quota check upfront → 403 QUOTA_EXCEEDED for FREE users at limit
+  │  RagClient.streamGenerate → WebClient.bodyToFlux(ServerSentEvent)
+  │  On 'complete' event: persist MealPlan, increment plans_generated_count,
+  │                       then emit synthesised 'mealplan_saved' event
+  ▼
+RAG /generate  (FastAPI StreamingResponse, media_type=text/event-stream)
+  │
+  ▼
+agent.runner.run_agent()  — hand-rolled Anthropic tool-use loop
+   ├─ tool: list_categories(store)
+   ├─ tool: search_items(category, limit)
+   ├─ tool: get_item_details(item_id)
+   ├─ tool: list_recipes(limit, dietary_restriction?, cuisine?)
+   ├─ tool: validate_item_ids(item_ids)
+   └─ tool: submit_plan(plan_json)   ← terminal; runs Pydantic + ID verify
+```
+
+The agent is **cold-start**: it sees only the user's brief (store, days, preferences) and discovers everything by calling tools. Phases (`discover` → `select` → `validate` → `submit` → `repair`) are emitted as SSE `phase` events so the frontend's `GeneratingModal` can show live status. Each tool call and result is also forwarded for visibility.
+
+The LLM is **MiniMax-M2.7** reached via the Anthropic-compatible endpoint at `https://api.minimax.io/anthropic`. `rag/app/config.py` maps `MINIMAX_API_KEY` → `ANTHROPIC_API_KEY` at import time so the standard `anthropic` Python SDK picks it up unchanged.
+
+The plan's `_meta` includes `generatedBy: "python-rag-agent"`, `agentModel`, `turnsUsed`, and `toolCallCount` for traceability.
+
+Two generation modes exist: rule-based (`/api/mealplans/generate`) and agentic AI (`/api/mealplans/generate-ai`).
+
+#### MiniMax-M2.7 quirks
+
+The agent runner in `rag/app/agent/runner.py` handles two MiniMax-M2.7 specific behaviours:
+
+1. **XML tool-call fallback** — When the `submit_plan` payload is large, MiniMax-M2.7 sometimes emits the tool call as plain text in its own XML format (`<minimax:tool_call><invoke name="submit_plan"><parameter name="plan_json">...`) instead of using the native Anthropic `tool_use` block. The runner detects this and converts it into synthetic `tool_use` blocks via `_parse_xml_tool_calls()` / `_normalize_blocks()` so the rest of the loop is unaffected.
+
+2. **`max_tokens=16384`** — A 7-day plan in XML text form can easily exceed 4 K tokens. The token budget is set high (16384) to let the model finish a single-shot plan, with a best-effort JSON-repair fallback (`_try_repair_truncated_json`) for any remaining truncation.
+
+The backend `RagClient` consumes SSE as `ServerSentEvent<String>` (raw JSON strings, parsed via `ObjectMapper.readTree`) — Jackson 3.x in Spring Boot 4 (`tools.jackson.*` namespace) cannot deserialise `com.fasterxml.jackson.databind.JsonNode` directly through the SSE codec.
+
+### Minimax env vars
+
+| Var | Purpose |
+|---|---|
+| `MINIMAX_API_KEY` | Required for AI generation. Mapped to `ANTHROPIC_API_KEY` at startup. |
+| `ANTHROPIC_BASE_URL` | Defaults to `https://api.minimax.io/anthropic`. |
+| `AGENT_MODEL` | Defaults to `MiniMax-M2.7`. |
+| `AGENT_MAX_TURNS` | Safety cap on the tool loop. Defaults to `25`. |
+
+To validate the upstream is alive and supports Anthropic tool use:
+```bash
+source .venv/bin/activate
+set -a; source .env; set +a
+python rag/scripts/smoke_minimax_agent.py
+```
 
 ## Subscription & Quota System
 
@@ -62,9 +114,12 @@ Never commit new features directly to `main`. Each feature gets its own branch.
 
 ### Full Stack (Docker Compose)
 ```bash
-export OPENAI_API_KEY=<your-key>
+export OPENAI_API_KEY=<your-key>        # backfill only
+export MINIMAX_API_KEY=<your-key>       # agentic /generate
 docker-compose up --build
 ```
+
+The full required env set is in `.env.example`. Copy to `.env` and fill in.
 
 ### Backend (Java 21 / Maven)
 ```bash
@@ -318,15 +373,15 @@ python scripts/spoonacular/fetch_recipes.py --total 300 --embed
 
 ### How recipes are used at generation time
 
-`retrieval.retrieve_recipes(limit=75, dietary_restriction=...)` is called on every `/generate` request:
-- If `dietary_restriction` is set (e.g. `vegetarian`), queries `WHERE diets @> ARRAY['vegetarian']`
-- Falls back to random unfiltered sample if no matching recipes found (warns to CloudWatch)
-- Recipe titles + ingredient lists are injected into the LLM prompt as dish-idea inspiration
-- Sampled titles are recorded in `plan_json._meta.recipeTemplatesOffered` for traceability
+The agent calls the `list_recipes` tool when it wants dish-idea inspiration. The tool wraps the same query used by the legacy `retrieval.retrieve_recipes(...)` helper:
+- If a `dietary_restriction` is set, queries `WHERE diets @> ARRAY[...]::text[]`
+- Optional `cuisine` filter (e.g. `italian`) further narrows the sample
+- Random sample, returning compact dicts with `dishName`, `ingredients`, `diets`, `cuisines`, `dishTypes`
+- Unlike the old single-shot path, recipes are pulled on demand by the agent — there is no fixed `_meta.recipeTemplatesOffered` list anymore. The plan's `_meta` instead records `agentModel`, `turnsUsed`, and `toolCallCount`.
 
 ### LLM serving size guidance
 
-The LLM system prompt in `rag/app/llm.py` includes detailed `servingsUsed` (portion per dish) guidance to ensure realistic meal planning. Key distinctions:
+The agent system prompt in `rag/app/agent/prompt.py` includes detailed `servingsUsed` (portion per dish) guidance to ensure realistic meal planning. Key distinctions:
 
 **Small-use fresh produce** (used sparingly):
 - Cherry/grape tomatoes: 0.2–0.3 servings (a handful from a pint)
@@ -350,10 +405,13 @@ This distinction ensures that small garnish ingredients do not artificially infl
 
 ### Environment Variables (RAG)
 - `DATABASE_URL` - PostgreSQL connection string
-- `OPENAI_API_KEY` - OpenAI API key
+- `OPENAI_API_KEY` - OpenAI API key — used **only** by `/embed/backfill/*`; not used at generation time
 - `RAG_SHARED_SECRET` - Shared secret for backend→RAG auth (header: `X-RAG-SECRET`)
 - `EMBED_MODEL` - Embedding model (default: `text-embedding-3-small`) — used for backfill only
-- `CHAT_MODEL` - Chat model (default: `gpt-4.1-mini`)
+- `MINIMAX_API_KEY` - Minimax key driving the agentic `/generate` loop; mapped to `ANTHROPIC_API_KEY` at startup
+- `ANTHROPIC_BASE_URL` - Minimax Anthropic-compatible endpoint (default: `https://api.minimax.io/anthropic`)
+- `AGENT_MODEL` - Agent model identifier (default: `MiniMax-M2.7`)
+- `AGENT_MAX_TURNS` - Safety cap on the tool loop (default: `25`)
 - `SPOONACULAR_API_KEY` - Spoonacular API key — only needed to run `scripts/spoonacular/fetch_recipes.py`
 
 ### Backend Config
@@ -387,12 +445,19 @@ frontend/
 
 rag/app/
 ├── routes/
-│   ├── generate_routes.py   # POST /generate endpoint
+│   ├── generate_routes.py   # POST /generate — SSE streaming endpoint
 │   └── embed_routes.py      # Embedding backfill endpoints
+├── agent/
+│   ├── tools.py        # search_items, get_item_details, list_recipes, validate_item_ids, submit_plan
+│   ├── prompt.py       # Phased system prompt (discover/select/validate/submit/repair)
+│   └── runner.py       # Async generator running the Anthropic tool-use loop
 ├── embedding.py        # OpenAI embedding calls (backfill only)
-├── retrieval.py        # Category-proportional sampling + retrieve_recipes
-├── llm.py             # Dish-centric meal plan generation (GPT)
-└── validators.py      # JSON validation, float servingsUsed, ID extraction
+├── retrieval.py        # Helpers reused by agent tools (compact nutrition, _fetch_by_category)
+├── validators.py       # JSON validation, float servingsUsed, ID extraction
+└── verify.py           # Item-id verification used by submit_plan
+
+rag/scripts/
+└── smoke_minimax_agent.py  # Gate-0 smoke test for Minimax tool-use compatibility
 
 scripts/
 ├── tj/                 # Trader Joe's scraper pipeline (manual, local machine only)
@@ -428,7 +493,7 @@ Key tables (managed by Flyway):
 #### Meal Plans
 - `GET/POST/DELETE /api/mealplans` - Meal plan CRUD
 - `POST /api/mealplans/generate` - Rule-based generation (quota-enforced for FREE tier, unlimited for PRO)
-- `POST /api/mealplans/generate-ai` - AI RAG generation (quota-enforced for FREE tier, unlimited for PRO)
+- `POST /api/mealplans/generate-ai` - Agentic AI generation, streamed as **Server-Sent Events** (`text/event-stream`). Events: `phase`, `tool_call`, `tool_result`, `assistant_text`, `complete`, `mealplan_saved`, `error`. Quota-enforced upfront (FREE tier 429 before the stream opens; PRO unlimited).
 - `GET /api/mealplans/{id}/shopping-list` - Generate shopping list
 
 #### Preferences

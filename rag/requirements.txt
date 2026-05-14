@@ -6,3 +6,4 @@ python-dotenv
 openai
 pgvector
 tqdm
+anthropic
