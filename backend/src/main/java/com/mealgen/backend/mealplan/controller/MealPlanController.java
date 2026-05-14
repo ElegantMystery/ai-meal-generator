@@ -7,10 +7,13 @@ import com.mealgen.backend.mealplan.service.MealPlanGenerateService;
 import com.mealgen.backend.mealplan.service.MealPlanService;
 import com.mealgen.backend.mealplan.service.ShoppingListService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 
@@ -65,13 +68,13 @@ public class MealPlanController {
         return mealPlanGenerateService.generate(getEmail(authentication), store, days);
     }
 
-    @PostMapping("/generate-ai")
-    public MealPlanResponse generateAi(
+    @PostMapping(value = "/generate-ai", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> generateAi(
             Authentication authentication,
             @RequestParam(defaultValue = "TRADER_JOES") String store,
             @RequestParam(defaultValue = "7") int days
     ) {
-        return mealPlanService.generateAi(getEmail(authentication), store, days);
+        return mealPlanService.streamGenerateAi(getEmail(authentication), store, days);
     }
 
     @GetMapping("/{id}/shopping-list")

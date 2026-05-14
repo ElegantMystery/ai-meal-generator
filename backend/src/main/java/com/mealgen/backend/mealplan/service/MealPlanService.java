@@ -1,5 +1,9 @@
 package com.mealgen.backend.mealplan.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mealgen.backend.auth.model.User;
 import com.mealgen.backend.auth.repository.UserRepository;
 import com.mealgen.backend.mealplan.dto.MealPlanCreateRequest;
@@ -12,15 +16,20 @@ import com.mealgen.backend.preferences.repository.UserPreferencesRepository;
 import com.mealgen.backend.subscription.exception.QuotaExceededException;
 import com.mealgen.backend.subscription.service.SubscriptionService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Flux;
 
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class MealPlanService {
 
@@ -29,6 +38,9 @@ public class MealPlanService {
     private final MealPlanRepository mealPlanRepository;
     private final RagClient ragClient;
     private final SubscriptionService subscriptionService;
+    private final MealPlanPersistenceService mealPlanPersistenceService;
+    // ObjectMapper is not exposed as a bean in this Spring Boot 4 setup — instantiate directly.
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public List<MealPlanResponse> listMine(String email) {
         User user = getUserByEmail(email);
@@ -98,8 +110,17 @@ public class MealPlanService {
                 .build();
     }
 
-    @Transactional
-    public MealPlanResponse generateAi(String email, String store, int days) {
+    /**
+     * Streaming agentic generation. Forwards SSE events from the RAG service;
+     * on the terminal 'complete' event, persists the meal plan and increments
+     * the user's quota counter, then emits a synthesised 'mealplan_saved' event
+     * carrying the saved entity.
+     *
+     * Quota check runs eagerly before the stream is subscribed -- a FREE-tier
+     * user at limit gets QuotaExceededException synchronously from the
+     * controller, not buried in a stream error.
+     */
+    public Flux<ServerSentEvent<String>> streamGenerateAi(String email, String store, int days) {
         if (days < 1 || days > 14) {
             throw new IllegalArgumentException("days must be between 1 and 14");
         }
@@ -107,14 +128,12 @@ public class MealPlanService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalStateException("User not found for email: " + email));
 
-        // Quota check — throws QuotaExceededException for FREE users at limit
         if (!subscriptionService.canGenerate(user)) {
             throw new QuotaExceededException();
         }
 
         UserPreferences prefs = preferencesRepository.findByUserId(user.getId()).orElse(null);
 
-        // Build payload for python-rag
         Map<String, Object> preferences = new LinkedHashMap<>();
         preferences.put("dietaryRestrictions", prefs == null ? null : prefs.getDietaryRestrictions());
         preferences.put("allergies", prefs == null ? null : prefs.getAllergies());
@@ -126,38 +145,68 @@ public class MealPlanService {
         payload.put("days", days);
         payload.put("preferences", preferences);
 
-        // Call python-rag /generate
-        Map result = ragClient.callGenerate(payload);
-        if (result == null) {
-            throw new IllegalStateException("RAG service returned null");
-        }
+        AtomicReference<ServerSentEvent<String>> savedEvent = new AtomicReference<>();
 
-        String title = (String) result.getOrDefault("title", "AI Meal Plan");
-        String startDateStr = (String) result.get("startDate");
-        String endDateStr = (String) result.get("endDate");
-        String planJson = (String) result.get("planJson");
+        return ragClient.streamGenerate(payload)
+                .map(sse -> {
+                    String eventName = sse.event();
+                    String rawData = sse.data();
+                    if ("complete".equals(eventName) && rawData != null) {
+                        try {
+                            JsonNode data = objectMapper.readTree(rawData);
+                            MealPlanResponse response = mealPlanPersistenceService.persistFromComplete(user, data);
+                            savedEvent.set(buildSavedEvent(response));
+                        } catch (Exception e) {
+                            throw new IllegalStateException("Failed to parse complete event data", e);
+                        }
+                    }
+                    return forwardSse(sse);
+                })
+                .concatWith(Flux.defer(() -> {
+                    ServerSentEvent<String> saved = savedEvent.get();
+                    return saved == null ? Flux.empty() : Flux.just(saved);
+                }))
+                .onErrorResume(err -> {
+                    log.error("Streaming generate-ai failed", err);
+                    return Flux.just(errorEvent(err));
+                });
+    }
 
-        LocalDate startDate = (startDateStr == null || startDateStr.isBlank()) ? null : LocalDate.parse(startDateStr);
-        LocalDate endDate = (endDateStr == null || endDateStr.isBlank()) ? null : LocalDate.parse(endDateStr);
-
-        MealPlan saved = mealPlanRepository.save(MealPlan.builder()
-                .user(user)
-                .title(title)
-                .startDate(startDate)
-                .endDate(endDate)
-                .planJson(planJson)
-                .build());
-
-        // Atomically increment the generation counter
-        userRepository.incrementPlansGeneratedCount(user.getId());
-
-        return MealPlanResponse.builder()
-                .id(saved.getId())
-                .title(saved.getTitle())
-                .startDate(saved.getStartDate() == null ? null : saved.getStartDate().toString())
-                .endDate(saved.getEndDate() == null ? null : saved.getEndDate().toString())
-                .planJson(saved.getPlanJson())
-                .createdAt(saved.getCreatedAt() == null ? null : saved.getCreatedAt().toString())
+    private ServerSentEvent<String> forwardSse(ServerSentEvent<String> sse) {
+        return ServerSentEvent.<String>builder()
+                .event(sse.event())
+                .data(sse.data() == null ? "{}" : sse.data())
                 .build();
+    }
+
+    private ServerSentEvent<String> buildSavedEvent(MealPlanResponse response) {
+        try {
+            return ServerSentEvent.<String>builder()
+                    .event("mealplan_saved")
+                    .data(objectMapper.writeValueAsString(response))
+                    .build();
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to serialise mealplan_saved event", e);
+        }
+    }
+
+    private ServerSentEvent<String> errorEvent(Throwable err) {
+        ObjectNode node = JsonNodeFactory.instance.objectNode();
+        node.put("code", "stream_error");
+        node.put("message", safeErrorMessage(err));
+        return ServerSentEvent.<String>builder()
+                .event("error")
+                .data(node.toString())
+                .build();
+    }
+
+    private static String safeErrorMessage(Throwable err) {
+        if (err instanceof org.springframework.web.reactive.function.client.WebClientResponseException wce) {
+            return "Upstream service error (" + wce.getStatusCode().value() + ")";
+        }
+        if (err instanceof IllegalArgumentException) {
+            return err.getMessage();
+        }
+        return "An unexpected error occurred. Please try again.";
     }
 }

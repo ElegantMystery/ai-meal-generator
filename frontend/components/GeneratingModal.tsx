@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { SparklesIcon } from "@heroicons/react/24/outline";
 import Modal from "./Modal";
 
-const STATUS_MESSAGES = [
+const FALLBACK_STATUS_MESSAGES = [
   "Analyzing your preferences…",
   "Selecting ingredients…",
   "Crafting your meal plan…",
@@ -14,40 +14,60 @@ const STATUS_MESSAGES = [
 const PROGRESS_INTERVAL_MS = 1500;
 const STATUS_INTERVAL_MS = 12_000;
 const PROGRESS_CAP = 89;
+const CLOSE_DELAY_MS = 800;
 
 interface GeneratingModalProps {
   isOpen: boolean;
+  /**
+   * Optional real-time status driven by SSE events. When provided, it
+   * overrides the rotating fallback messages.
+   */
+  status?: string;
+  /**
+   * 0-100 — when provided, takes over the simulated progress bar.
+   */
+  progressPercent?: number;
 }
 
-const CLOSE_DELAY_MS = 800;
-
-export default function GeneratingModal({ isOpen }: GeneratingModalProps) {
+export default function GeneratingModal({
+  isOpen,
+  status,
+  progressPercent,
+}: GeneratingModalProps) {
   const [progress, setProgress] = useState(0);
   const [statusIndex, setStatusIndex] = useState(0);
   const [visible, setVisible] = useState(isOpen);
 
-  // Drive progress simulation while open
+  // Drive simulated progress / status rotation while open, only when
+  // real values are not supplied.
   useEffect(() => {
     if (!isOpen) return;
 
-    const progressTimer = setInterval(() => {
-      setProgress((prev) => {
-        const increment = (PROGRESS_CAP - prev) * 0.04;
-        return Math.min(prev + increment, PROGRESS_CAP);
-      });
-    }, PROGRESS_INTERVAL_MS);
+    let progressTimer: ReturnType<typeof setInterval> | undefined;
+    let statusTimer: ReturnType<typeof setInterval> | undefined;
 
-    const statusTimer = setInterval(() => {
-      setStatusIndex((prev) => (prev + 1) % STATUS_MESSAGES.length);
-    }, STATUS_INTERVAL_MS);
+    if (progressPercent === undefined) {
+      progressTimer = setInterval(() => {
+        setProgress((prev) => {
+          const increment = (PROGRESS_CAP - prev) * 0.04;
+          return Math.min(prev + increment, PROGRESS_CAP);
+        });
+      }, PROGRESS_INTERVAL_MS);
+    }
+
+    if (!status) {
+      statusTimer = setInterval(() => {
+        setStatusIndex((prev) => (prev + 1) % FALLBACK_STATUS_MESSAGES.length);
+      }, STATUS_INTERVAL_MS);
+    }
 
     return () => {
-      clearInterval(progressTimer);
-      clearInterval(statusTimer);
+      if (progressTimer) clearInterval(progressTimer);
+      if (statusTimer) clearInterval(statusTimer);
     };
-  }, [isOpen]);
+  }, [isOpen, status, progressPercent]);
 
-  // Handle open → close transition: animate to 100%, then unmount
+  // Open / close lifecycle: animate to 100 % then unmount
   useEffect(() => {
     if (isOpen) {
       setVisible(true);
@@ -60,7 +80,15 @@ export default function GeneratingModal({ isOpen }: GeneratingModalProps) {
     }
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const displayedProgress = Math.round(progress);
+  const liveProgress =
+    progressPercent !== undefined
+      ? Math.max(0, Math.min(100, progressPercent))
+      : progress;
+  const displayedProgress = Math.round(liveProgress);
+  const displayedStatus =
+    status && status.trim().length > 0
+      ? status
+      : FALLBACK_STATUS_MESSAGES[statusIndex];
 
   return (
     <Modal isOpen={visible} preventClose size="sm">
@@ -74,7 +102,7 @@ export default function GeneratingModal({ isOpen }: GeneratingModalProps) {
             Generating Your Meal Plan
           </h2>
           <p aria-live="polite" className="text-sm text-gray-500">
-            {STATUS_MESSAGES[statusIndex]}
+            {displayedStatus}
           </p>
         </div>
 

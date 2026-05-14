@@ -25,6 +25,10 @@ services:
       DATABASE_URL: postgresql://meal_user:${POSTGRES_PASSWORD}@mealgen-db:5432/mealgen
       OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY must be set}
       RAG_SHARED_SECRET: ${RAG_SHARED_SECRET:?RAG_SHARED_SECRET must be set}
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY:?MINIMAX_API_KEY must be set}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://api.minimax.io/anthropic}
+      AGENT_MODEL: ${AGENT_MODEL:-MiniMax-M2.7}
+      AGENT_MAX_TURNS: ${AGENT_MAX_TURNS:-25}
     ports:
       - "8000:8000"
     depends_on:
