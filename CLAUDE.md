@@ -233,7 +233,7 @@ Runs on the EC2 host; config at `cloudwatch/amazon-cloudwatch-agent.json` (deplo
 
 Check agent status on EC2:
 ```bash
-ssh -i ~/.ssh/meal-gen-key.pem ec2-user@54.205.145.93
+ssh -i ~/.ssh/meal-gen-key.pem ec2-user@<EC2_PUBLIC_IP>
 sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a status
 ```
 
@@ -271,7 +271,7 @@ echo | openssl s_client -servername whole-haul.com -connect whole-haul.com:443 2
 
 Force a renewal + reload manually (e.g. after an outage):
 ```bash
-ssh -i ~/.ssh/meal-gen-key.pem ec2-user@54.205.145.93
+ssh -i ~/.ssh/meal-gen-key.pem ec2-user@<EC2_PUBLIC_IP>
 cd /opt/meal-gen
 sudo docker exec meal-gen-certbot certbot renew --force-renewal
 sudo docker exec meal-gen-nginx nginx -s reload
