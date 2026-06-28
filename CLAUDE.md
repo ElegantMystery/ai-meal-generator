@@ -233,7 +233,7 @@ Runs on the EC2 host; config at `cloudwatch/amazon-cloudwatch-agent.json` (deplo
 
 Check agent status on EC2:
 ```bash
-ssh -i ~/.ssh/meal-gen-key.pem ec2-user@54.205.145.93
+ssh -i ~/.ssh/meal-gen-key.pem ec2-user@<EC2_PUBLIC_IP>
 sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a status
 ```
 
@@ -247,6 +247,35 @@ cd infra && terraform apply
 ```
 
 To change the alert email only: `terraform apply -target=aws_sns_topic_subscription.alerts_email`
+
+## Production TLS / HTTPS
+
+Production serves **https://whole-haul.com** (and `www.`) with a Let's Encrypt certificate, terminated by the `meal-gen-nginx` container. Two services in `docker-compose.prod.yml` cooperate:
+
+- **certbot** (`meal-gen-certbot`) — runs `certbot renew --quiet` every 12h using the **webroot** authenticator. nginx serves the ACME challenge at `/.well-known/acme-challenge/` → `/var/www/certbot`. Renewed certs land in the shared volume `./nginx/certbot/conf` (`/etc/letsencrypt`).
+- **nginx** (`meal-gen-nginx`) — reads certs from the same volume. Its `command:` runs `nginx -s reload` every 6h in a loop alongside the server.
+
+> **Why the periodic reload matters:** nginx caches certificates in memory at startup. certbot can renew the files on disk, but until nginx reloads it keeps serving the **old** cert — which presents to browsers as `net::ERR_CERT_DATE_INVALID` once it expires. The 6h self-reload guarantees a renewed cert is loaded well within Let's Encrypt's renewal window. The certbot sidecar cannot reach into the nginx container, so nginx reloads itself.
+
+Initial issuance (one-time):
+```bash
+docker compose -f docker-compose.prod.yml run --rm certbot certonly \
+  --webroot --webroot-path /var/www/certbot -d whole-haul.com -d www.whole-haul.com
+```
+
+Check the live cert expiry:
+```bash
+echo | openssl s_client -servername whole-haul.com -connect whole-haul.com:443 2>/dev/null \
+  | openssl x509 -noout -dates
+```
+
+Force a renewal + reload manually (e.g. after an outage):
+```bash
+ssh -i ~/.ssh/meal-gen-key.pem ec2-user@<EC2_PUBLIC_IP>
+cd /opt/meal-gen
+sudo docker exec meal-gen-certbot certbot renew --force-renewal
+sudo docker exec meal-gen-nginx nginx -s reload
+```
 
 ## Grocery Item Scrapers
 

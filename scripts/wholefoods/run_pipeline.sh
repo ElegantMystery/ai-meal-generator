@@ -4,8 +4,8 @@
 # Usage:
 #   ./run_pipeline.sh
 #
-# Environment variables (all have defaults):
-#   EC2_HOST  — EC2 public IP or hostname  (default: 54.205.145.93)
+# Environment variables:
+#   EC2_HOST  — EC2 public IP or hostname  (required)
 #   EC2_USER  — SSH user                   (default: ec2-user)
 #   EC2_KEY   — path to .pem key           (default: ~/.ssh/meal-gen-key.pem)
 #   EC2_DEST  — destination path on EC2    (default: /tmp)
@@ -17,7 +17,7 @@
 
 set -euo pipefail
 
-EC2_HOST="${EC2_HOST:-54.205.145.93}"
+EC2_HOST="${EC2_HOST:?set EC2_HOST to the EC2 public IP/hostname}"
 EC2_USER="${EC2_USER:-ec2-user}"
 EC2_KEY="${EC2_KEY:-$HOME/.ssh/meal-gen-key.pem}"
 EC2_DEST="${EC2_DEST:-/tmp}"
@@ -79,7 +79,7 @@ ssh $SSH_OPTS "${EC2_USER}@${EC2_HOST}" bash <<EOF
     export PGPASSWORD="\${SPRING_DATASOURCE_PASSWORD:-}"
   fi
 
-  export PGHOST="${PGHOST:-meal-gen-prod-postgres.cupuqoo8szpf.us-east-1.rds.amazonaws.com}"
+  export PGHOST="${PGHOST:?set PGHOST to the RDS endpoint}"
   export PGPORT="${PGPORT:-5432}"
   export PGDATABASE="${PGDATABASE:-mealgen}"
   export PGUSER="${PGUSER:-meal_user}"

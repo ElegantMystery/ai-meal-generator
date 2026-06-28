@@ -4,15 +4,15 @@
 # Usage:
 #   ./run_pipeline.sh
 #
-# Environment variables (all have defaults):
-#   EC2_HOST  — EC2 public IP or hostname  (default: 54.205.145.93)
+# Environment variables:
+#   EC2_HOST  — EC2 public IP or hostname  (required)
 #   EC2_USER  — SSH user                   (default: ec2-user)
 #   EC2_KEY   — path to .pem key           (default: ~/.ssh/meal-gen-key.pem)
 #   EC2_DEST  — destination path on EC2    (default: /tmp)
 
 set -euo pipefail
 
-EC2_HOST="${EC2_HOST:-54.205.145.93}"
+EC2_HOST="${EC2_HOST:?set EC2_HOST to the EC2 public IP/hostname}"
 EC2_USER="${EC2_USER:-ec2-user}"
 EC2_KEY="${EC2_KEY:-$HOME/.ssh/meal-gen-key.pem}"
 EC2_DEST="${EC2_DEST:-/tmp}"
