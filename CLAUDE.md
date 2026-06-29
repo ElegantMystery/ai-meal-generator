@@ -155,7 +155,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000   # Run dev server
 PostgreSQL 18 with pgvector extension. Run via Docker:
 ```bash
 docker run --name postgres-mealgen -e POSTGRES_DB=mealgen \
-  -e POSTGRES_USER=meal_user -e POSTGRES_PASSWORD=236810 \
+  -e POSTGRES_USER=meal_user -e POSTGRES_PASSWORD=<your-db-password> \
   -p 5432:5432 pgvector/pgvector:pg18
 ```
 
