@@ -5,6 +5,9 @@ on:
     - cron: '0 0 1 * *'  # First day of every month at 00:00 UTC
   workflow_dispatch:       # Allow manual trigger
 
+env:
+  AWS_REGION: us-east-1
+
 jobs:
   # ---------------------------------------------------------------------------
   # Scrape on GitHub Actions runner (rotating IPs — not blocked by Trader Joe's)
@@ -32,18 +35,40 @@ jobs:
         working-directory: scripts
         run: npx playwright install chromium --with-deps
 
-      - name: Write SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > /home/runner/.ssh/meal-gen-key.pem
-          chmod 600 /home/runner/.ssh/meal-gen-key.pem
+      # Reach EC2 through SSM Session Manager (no inbound :22). See deploy.yml.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Run pipeline (scrape + upload to EC2)
+      - name: Install session-manager-plugin
+        run: |
+          curl -fsSL "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o /tmp/smp.deb
+          sudo dpkg -i /tmp/smp.deb
+
+      - name: Write SSH key + resolve instance
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > /home/runner/.ssh/meal-gen-key.pem
+          chmod 600 /home/runner/.ssh/meal-gen-key.pem
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=meal-gen-prod-app" \
+                      "Name=instance-state-name,Values=running" \
+            --query "Reservations[].Instances[].InstanceId" --output text)
+          if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then
+            echo "Could not resolve prod instance ID"; exit 1
+          fi
+          echo "INSTANCE_ID=$INSTANCE_ID" >> "$GITHUB_ENV"
+
+      - name: Run pipeline (scrape + upload to EC2 over SSM)
         env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_INSTANCE_ID: ${{ env.INSTANCE_ID }}
           EC2_USER: ec2-user
           EC2_KEY: /home/runner/.ssh/meal-gen-key.pem
           EC2_DEST: /tmp
+          AWS_REGION: ${{ env.AWS_REGION }}
         run: bash scripts/tj/run_pipeline.sh
 
       - name: Upload scraped data as artifact
@@ -58,7 +83,7 @@ jobs:
           retention-days: 7
 
   # ---------------------------------------------------------------------------
-  # Import into RDS and backfill embeddings — runs on EC2 via SSH
+  # Import into RDS and backfill embeddings — runs on EC2 via SSH-over-SSM
   # (EC2 has VPC access to RDS; scraping already done on GHA runner)
   # ---------------------------------------------------------------------------
   import-and-embed:
@@ -67,14 +92,43 @@ jobs:
     needs: scrape
 
     steps:
-      - name: Import items and backfill embeddings on EC2
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
-          command_timeout: 60m
-          script: |
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install session-manager-plugin
+        run: |
+          curl -fsSL "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o /tmp/smp.deb
+          sudo dpkg -i /tmp/smp.deb
+
+      - name: Resolve instance + configure SSH-over-SSM
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=meal-gen-prod-app" \
+                      "Name=instance-state-name,Values=running" \
+            --query "Reservations[].Instances[].InstanceId" --output text)
+          if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then
+            echo "Could not resolve prod instance ID"; exit 1
+          fi
+          echo "INSTANCE_ID=$INSTANCE_ID" >> "$GITHUB_ENV"
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key
+          chmod 600 ~/.ssh/ec2_key
+          cat > ~/.ssh/config <<EOF
+          Host $INSTANCE_ID
+            User ec2-user
+            IdentityFile ~/.ssh/ec2_key
+            StrictHostKeyChecking accept-new
+            ServerAliveInterval 60
+            ProxyCommand sh -c "aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters 'portNumber=%p' --region ${{ env.AWS_REGION }}"
+          EOF
+
+      - name: Import items and backfill embeddings on EC2
+        run: |
+          ssh "$INSTANCE_ID" 'bash -s' <<'SCRIPT'
             set -euo pipefail
 
             echo "[TJ-PIPELINE] === Starting import + embed backfill ==="
@@ -159,3 +213,4 @@ jobs:
             # Cleanup
             rm -f "$ITEMS_FILE" /tmp/tj-metadata.json /tmp/tj-nutrition-parsed.json /tmp/tj-ingredients-parsed.json
             echo "[TJ-PIPELINE] === Pipeline Complete ==="
+          SCRIPT

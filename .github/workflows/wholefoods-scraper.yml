@@ -5,6 +5,9 @@ on:
     - cron: '0 0 20 * *'  # 20th of every month at 00:00 UTC
   workflow_dispatch:       # Allow manual trigger
 
+env:
+  AWS_REGION: us-east-1
+
 jobs:
   # ---------------------------------------------------------------------------
   # Scrape + parse on GitHub Actions runner
@@ -38,11 +41,40 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Write SSH key
+      # Reach EC2 through SSM Session Manager (no inbound :22). See deploy.yml.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install session-manager-plugin
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > /home/runner/.ssh/meal-gen-key.pem
-          chmod 600 /home/runner/.ssh/meal-gen-key.pem
+          curl -fsSL "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o /tmp/smp.deb
+          sudo dpkg -i /tmp/smp.deb
+
+      - name: Resolve instance + configure SSH-over-SSM
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=meal-gen-prod-app" \
+                      "Name=instance-state-name,Values=running" \
+            --query "Reservations[].Instances[].InstanceId" --output text)
+          if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then
+            echo "Could not resolve prod instance ID"; exit 1
+          fi
+          echo "INSTANCE_ID=$INSTANCE_ID" >> "$GITHUB_ENV"
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key
+          chmod 600 ~/.ssh/ec2_key
+          cat > ~/.ssh/config <<EOF
+          Host $INSTANCE_ID
+            User ec2-user
+            IdentityFile ~/.ssh/ec2_key
+            StrictHostKeyChecking accept-new
+            ServerAliveInterval 60
+            ProxyCommand sh -c "aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters 'portNumber=%p' --region ${{ env.AWS_REGION }}"
+          EOF
 
       - name: Step 1 — Scrape Whole Foods
         working-directory: scripts
@@ -59,18 +91,14 @@ jobs:
         working-directory: scripts/wholefoods
         run: python3 parse_ingredients.py wholefoods-items.json wholefoods-ingredients-parsed.json
 
-      - name: Step 4 — Upload to EC2
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
+      - name: Step 4 — Upload to EC2 (over SSM)
         run: |
-          scp -i /home/runner/.ssh/meal-gen-key.pem \
-            -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
-            scripts/wholefoods/wholefoods-items.json \
+          scp scripts/wholefoods/wholefoods-items.json \
             scripts/wholefoods/wholefoods-metadata.json \
             scripts/wholefoods/wholefoods-nutrition-parsed.json \
             scripts/wholefoods/wholefoods-ingredients-parsed.json \
             scripts/wholefoods/import_wholefoods.py \
-            ec2-user@${EC2_HOST}:/tmp/
+            "$INSTANCE_ID:/tmp/"
 
       - name: Upload scraped data as artifact
         uses: actions/upload-artifact@v4
@@ -84,7 +112,7 @@ jobs:
           retention-days: 7
 
   # ---------------------------------------------------------------------------
-  # Import into RDS and backfill embeddings — runs on EC2 via SSH
+  # Import into RDS and backfill embeddings — runs on EC2 via SSH-over-SSM
   # (EC2 has VPC access to RDS; scraping already done on GHA runner)
   # ---------------------------------------------------------------------------
   import-and-embed:
@@ -93,14 +121,43 @@ jobs:
     needs: scrape
 
     steps:
-      - name: Import items and backfill embeddings on EC2
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
-          command_timeout: 60m
-          script: |
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install session-manager-plugin
+        run: |
+          curl -fsSL "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o /tmp/smp.deb
+          sudo dpkg -i /tmp/smp.deb
+
+      - name: Resolve instance + configure SSH-over-SSM
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=meal-gen-prod-app" \
+                      "Name=instance-state-name,Values=running" \
+            --query "Reservations[].Instances[].InstanceId" --output text)
+          if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then
+            echo "Could not resolve prod instance ID"; exit 1
+          fi
+          echo "INSTANCE_ID=$INSTANCE_ID" >> "$GITHUB_ENV"
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key
+          chmod 600 ~/.ssh/ec2_key
+          cat > ~/.ssh/config <<EOF
+          Host $INSTANCE_ID
+            User ec2-user
+            IdentityFile ~/.ssh/ec2_key
+            StrictHostKeyChecking accept-new
+            ServerAliveInterval 60
+            ProxyCommand sh -c "aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters 'portNumber=%p' --region ${{ env.AWS_REGION }}"
+          EOF
+
+      - name: Import items and backfill embeddings on EC2
+        run: |
+          ssh "$INSTANCE_ID" 'bash -s' <<'SCRIPT'
             set -euo pipefail
 
             echo "[WF-PIPELINE] === Starting import + embed backfill ==="
@@ -185,3 +242,4 @@ jobs:
                   /tmp/wholefoods-nutrition-parsed.json /tmp/wholefoods-ingredients-parsed.json \
                   /tmp/import_wholefoods.py
             echo "[WF-PIPELINE] === Pipeline Complete ==="
+          SCRIPT
