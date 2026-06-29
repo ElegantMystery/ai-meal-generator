@@ -80,29 +80,62 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Copy compose file + nginx config + cloudwatch config + scraper scripts to EC2
-      - name: Copy config files to EC2
-        uses: appleboy/scp-action@v0.1.7
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "docker-compose.prod.yml,nginx/,cloudwatch/,scripts/tj/"
-          exclude: "scripts/tj/*.json,scripts/tj/*.png"
-          target: /opt/meal-gen/
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-      # SSH in, pull new images, rolling restart
+      # Reach EC2 through SSM Session Manager (SSH-over-SSM) instead of a
+      # public SSH port. The security group has no inbound :22 rule; the SSM
+      # agent dials out to AWS, so connections are tunnelled over that channel.
+      - name: Install session-manager-plugin
+        run: |
+          curl -fsSL "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o /tmp/smp.deb
+          sudo dpkg -i /tmp/smp.deb
+
+      - name: Resolve instance + configure SSH-over-SSM
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=meal-gen-prod-app" \
+                      "Name=instance-state-name,Values=running" \
+            --query "Reservations[].Instances[].InstanceId" --output text)
+          if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then
+            echo "Could not resolve prod instance ID"; exit 1
+          fi
+          echo "INSTANCE_ID=$INSTANCE_ID" >> "$GITHUB_ENV"
+          echo "Resolved instance: $INSTANCE_ID"
+
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key
+          chmod 600 ~/.ssh/ec2_key
+          cat > ~/.ssh/config <<EOF
+          Host $INSTANCE_ID
+            User ec2-user
+            IdentityFile ~/.ssh/ec2_key
+            StrictHostKeyChecking accept-new
+            ProxyCommand sh -c "aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters 'portNumber=%p' --region ${{ env.AWS_REGION }}"
+          EOF
+
+      # Copy compose file + nginx config + cloudwatch config + scraper scripts to EC2.
+      # Use tar-over-ssh (rsync is not installed on Amazon Linux 2023); relative
+      # paths are preserved and extracted under /opt/meal-gen. No clobbering of
+      # runtime-only dirs (nginx/certbot certs, nginx-logs) since we only overlay.
+      - name: Copy config files to EC2
+        run: |
+          tar czf - \
+            --exclude='scripts/tj/*.json' --exclude='scripts/tj/*.png' \
+            docker-compose.prod.yml nginx cloudwatch scripts/tj \
+            | ssh "$INSTANCE_ID" 'mkdir -p /opt/meal-gen && tar xzf - -C /opt/meal-gen'
+
+      # SSH in (over SSM), pull new images, rolling restart
       - name: Deploy
-        uses: appleboy/ssh-action@v1.0.3
         env:
           ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
           IMAGE_TAG: ${{ github.sha }}
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
-          envs: ECR_REGISTRY,IMAGE_TAG
-          script: |
+        run: |
+          ssh "$INSTANCE_ID" "ECR_REGISTRY='$ECR_REGISTRY' IMAGE_TAG='$IMAGE_TAG' bash -s" <<'SCRIPT'
             set -euo pipefail
             cd /opt/meal-gen
 
@@ -150,6 +183,7 @@ jobs:
             docker image prune -f
 
             echo "==> Deploy complete ($IMAGE_TAG)"
+          SCRIPT
 
   # ---------------------------------------------------------------------------
   # Smoke test — verify the backend health endpoint responds
