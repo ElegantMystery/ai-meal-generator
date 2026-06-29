@@ -4,11 +4,15 @@
 # Usage:
 #   ./run_pipeline.sh
 #
-# Environment variables:
-#   EC2_HOST  — EC2 public IP or hostname  (required)
+# Connection (set one of EC2_INSTANCE_ID or EC2_HOST):
+#   EC2_INSTANCE_ID — EC2 instance id (e.g. i-0123…); connect via SSM Session
+#                     Manager — no public :22 needed. Requires AWS CLI +
+#                     session-manager-plugin + AWS credentials. (preferred)
+#   EC2_HOST        — public IP/hostname; legacy direct SSH (needs :22 open)
 #   EC2_USER  — SSH user                   (default: ec2-user)
 #   EC2_KEY   — path to .pem key           (default: ~/.ssh/meal-gen-key.pem)
 #   EC2_DEST  — destination path on EC2    (default: /tmp)
+#   AWS_REGION — region for SSM            (default: us-east-1)
 #
 # After uploading, SSH into EC2 and run:
 #   cd /tmp
@@ -17,18 +21,25 @@
 
 set -euo pipefail
 
-EC2_HOST="${EC2_HOST:?set EC2_HOST to the EC2 public IP/hostname}"
 EC2_USER="${EC2_USER:-ec2-user}"
 EC2_KEY="${EC2_KEY:-$HOME/.ssh/meal-gen-key.pem}"
 EC2_DEST="${EC2_DEST:-/tmp}"
+AWS_REGION="${AWS_REGION:-us-east-1}"
+
+# Prefer SSM (tunnels SSH with no inbound :22); fall back to a direct public host.
+SSH_OPTS=(-i "$EC2_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30)
+if [[ -n "${EC2_INSTANCE_ID:-}" ]]; then
+  EC2_TARGET="$EC2_INSTANCE_ID"
+  SSH_OPTS+=(-o "ProxyCommand=aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p --region $AWS_REGION")
+else
+  EC2_TARGET="${EC2_HOST:?set EC2_INSTANCE_ID (SSM, preferred) or EC2_HOST}"
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ITEMS_FILE="$SCRIPT_DIR/wholefoods-items.json"
 META_FILE="$SCRIPT_DIR/wholefoods-metadata.json"
 NUTRITION_FILE="$SCRIPT_DIR/wholefoods-nutrition-parsed.json"
 INGREDIENTS_FILE="$SCRIPT_DIR/wholefoods-ingredients-parsed.json"
-
-SSH_OPTS="-i $EC2_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10"
 
 # ---------------------------------------------------------------------------
 # Step 1: Scrape
@@ -54,18 +65,18 @@ python3 "$SCRIPT_DIR/parse_ingredients.py" "$ITEMS_FILE" "$INGREDIENTS_FILE"
 # ---------------------------------------------------------------------------
 # Step 4: SCP to EC2
 # ---------------------------------------------------------------------------
-echo "[pipeline] === Step 4: Uploading to EC2 ($EC2_HOST) ==="
-scp $SSH_OPTS \
+echo "[pipeline] === Step 4: Uploading to EC2 ($EC2_TARGET) ==="
+scp "${SSH_OPTS[@]}" \
   "$ITEMS_FILE" "$META_FILE" "$NUTRITION_FILE" "$INGREDIENTS_FILE" \
   "$SCRIPT_DIR/import_wholefoods.py" \
-  "${EC2_USER}@${EC2_HOST}:${EC2_DEST}/"
-echo "[pipeline] Uploaded to ${EC2_USER}@${EC2_HOST}:${EC2_DEST}/"
+  "${EC2_USER}@${EC2_TARGET}:${EC2_DEST}/"
+echo "[pipeline] Uploaded to ${EC2_USER}@${EC2_TARGET}:${EC2_DEST}/"
 
 # ---------------------------------------------------------------------------
 # Step 5: Import on EC2
 # ---------------------------------------------------------------------------
 echo "[pipeline] === Step 5: Importing into RDS on EC2 ==="
-ssh $SSH_OPTS "${EC2_USER}@${EC2_HOST}" bash <<EOF
+ssh "${SSH_OPTS[@]}" "${EC2_USER}@${EC2_TARGET}" bash <<EOF
   set -e
   cd ${EC2_DEST}
 

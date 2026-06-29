@@ -139,7 +139,8 @@
                 <configuration>
                     <url>jdbc:postgresql://localhost:5432/mealgen</url>
                     <user>meal_user</user>
-                    <password>236810</password>
+                    <!-- Local Flyway runs: export DB_PASSWORD before `mvn flyway:migrate` -->
+                    <password>${env.DB_PASSWORD}</password>
                 </configuration>
             </plugin>
         </plugins>

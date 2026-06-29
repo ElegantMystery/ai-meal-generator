@@ -30,7 +30,9 @@ output "ecr_rag_url" {
   value       = aws_ecr_repository.rag.repository_url
 }
 
-output "ssh_command" {
-  description = "SSH command to connect to the EC2 instance"
-  value       = "ssh -i ~/.ssh/${var.ec2_key_name}.pem ec2-user@${aws_eip.app.public_ip}"
+# Admin access is via SSM Session Manager (no public SSH port). For SSH/scp
+# tooling, add an SSH-over-SSM ProxyCommand to ~/.ssh/config (see CLAUDE.md).
+output "ssm_session_command" {
+  description = "Open a shell on the EC2 instance via SSM Session Manager"
+  value       = "aws ssm start-session --target ${aws_instance.app.id} --region ${var.aws_region}"
 }

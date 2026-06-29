@@ -1,6 +1,13 @@
-# EC2 security group — allow HTTP, HTTPS, SSH inbound; all outbound
+# EC2 security group — allow HTTP/HTTPS inbound; all outbound.
+# No inbound SSH (:22): administrative access is via AWS SSM Session Manager
+# (SSH-over-SSM), which tunnels over the SSM agent's outbound channel and needs
+# no open port. See deploy.yml / scraper workflows and the "Production access
+# (SSM)" section in CLAUDE.md.
 resource "aws_security_group" "ec2" {
-  name        = "${var.project}-${var.env}-ec2-sg"
+  name = "${var.project}-${var.env}-ec2-sg"
+  # NOTE: description is immutable in AWS — changing it forces SG replacement
+  # (and a cascading re-attach to the instance + RDS SG). Left as-is on purpose;
+  # SSH is no longer open despite the wording (admin access is via SSM).
   description = "Allow HTTP, HTTPS, SSH inbound traffic"
   vpc_id      = aws_vpc.main.id
 
@@ -16,14 +23,6 @@ resource "aws_security_group" "ec2" {
     description = "HTTPS"
     from_port   = 443
     to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    description = "SSH"
-    from_port   = 22
-    to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }

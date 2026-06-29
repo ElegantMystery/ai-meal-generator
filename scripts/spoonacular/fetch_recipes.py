@@ -3,7 +3,7 @@ Fetch popular recipes from Spoonacular and upsert into the `recipes` table.
 
 Usage:
     source .venv/bin/activate
-    export DATABASE_URL=postgresql://meal_user:236810@localhost:5432/mealgen
+    export DATABASE_URL=postgresql://meal_user:<your-db-password>@localhost:5432/mealgen
     export SPOONACULAR_API_KEY=<your-key>
     export OPENAI_API_KEY=<your-key>   # only needed with --embed
 

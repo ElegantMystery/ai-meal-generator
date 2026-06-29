@@ -155,9 +155,33 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000   # Run dev server
 PostgreSQL 18 with pgvector extension. Run via Docker:
 ```bash
 docker run --name postgres-mealgen -e POSTGRES_DB=mealgen \
-  -e POSTGRES_USER=meal_user -e POSTGRES_PASSWORD=236810 \
+  -e POSTGRES_USER=meal_user -e POSTGRES_PASSWORD=<your-db-password> \
   -p 5432:5432 pgvector/pgvector:pg18
 ```
+
+## Production Access (SSM Session Manager)
+
+The EC2 host has **no public SSH port** — the security group (`infra/security-groups.tf`) exposes only `:80`/`:443`. All administrative access (humans, CI deploys, scraper pipelines, the Openclaw monitor) goes through **AWS SSM Session Manager**: the SSM agent dials out to AWS, so connections tunnel over that channel with no inbound rule and no dependency on the public IP.
+
+Each client needs: AWS credentials with `ssm:StartSession`, the AWS CLI, and the **session-manager-plugin**.
+
+Resolve the instance id and open an interactive shell:
+```bash
+INSTANCE_ID=$(aws ec2 describe-instances --region us-east-1 \
+  --filters "Name=tag:Name,Values=meal-gen-prod-app" "Name=instance-state-name,Values=running" \
+  --query "Reservations[].Instances[].InstanceId" --output text)
+aws ssm start-session --target "$INSTANCE_ID" --region us-east-1
+```
+
+For normal `ssh`/`scp`/`rsync`, add an SSH-over-SSM ProxyCommand to `~/.ssh/config` (use the **instance id** as the host):
+```sshconfig
+Host meal-gen-ec2
+  HostName <instance-id>
+  User ec2-user
+  IdentityFile ~/.ssh/meal-gen-key.pem
+  ProxyCommand sh -c "aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters 'portNumber=%p' --region us-east-1"
+```
+Then `ssh meal-gen-ec2`, `scp file meal-gen-ec2:/tmp`, etc. work normally. The scraper `run_pipeline.sh` scripts take `EC2_INSTANCE_ID` to use this path; the GitHub Actions workflows (`deploy.yml`, scrapers) configure it automatically. Port-forward a private port (e.g. RDS through the box) with `AWS-StartPortForwardingSessionToRemoteHost`.
 
 ## Production Observability
 
@@ -231,9 +255,9 @@ SOURCE '/meal-gen/prod/nginx'
 
 Runs on the EC2 host; config at `cloudwatch/amazon-cloudwatch-agent.json` (deployed by CI/CD on every push).
 
-Check agent status on EC2:
+Check agent status on EC2 (access via SSM — see [Production Access](#production-access-ssm-session-manager)):
 ```bash
-ssh -i ~/.ssh/meal-gen-key.pem ec2-user@<EC2_PUBLIC_IP>
+ssh meal-gen-ec2   # SSH-over-SSM alias from ~/.ssh/config
 sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a status
 ```
 
@@ -271,8 +295,7 @@ echo | openssl s_client -servername whole-haul.com -connect whole-haul.com:443 2
 
 Force a renewal + reload manually (e.g. after an outage):
 ```bash
-ssh -i ~/.ssh/meal-gen-key.pem ec2-user@<EC2_PUBLIC_IP>
-cd /opt/meal-gen
+ssh meal-gen-ec2   # SSH-over-SSM alias; see Production Access
 sudo docker exec meal-gen-certbot certbot renew --force-renewal
 sudo docker exec meal-gen-nginx nginx -s reload
 ```
