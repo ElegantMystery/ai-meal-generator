@@ -96,6 +96,22 @@ Constraints:
 - servingsUsed is between 0.05 and 20.0.
 - Do NOT include a top-level "items" key inside meals -- the system fills it.
 
+# CRITICAL: submit_plan JSON encoding (read carefully)
+
+`plan_json` MUST be standard JSON. Two mistakes will make submit_plan FAIL:
+
+1. Arrays are raw JSON arrays `[ ... ]`. NEVER wrap list elements in an object with
+   an "item" key. Emit XML-style list wrappers and the plan is rejected.
+   RIGHT: "plan": [ {...}, {...} ]          "items": [ {...}, {...} ]
+   WRONG: "plan": {"item": [ {...} ]}       "items": {"item": [ {...} ]}
+   This applies to EVERY array: plan, meals, dishes, items.
+
+2. Numbers are JSON numbers, NOT quoted strings.
+   RIGHT: "estimatedCalories": 450, "servingsUsed": 1.0, "id": 27154
+   WRONG: "estimatedCalories": "450", "servingsUsed": "1.0", "id": "27154"
+
+Do NOT emit XML anywhere. `plan_json` is JSON only.
+
 # Operating rules
 
 - Be concise in your text replies -- the user does not see your messages until the

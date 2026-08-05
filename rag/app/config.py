@@ -12,7 +12,7 @@ RETRIEVAL_K = int(os.getenv("RETRIEVAL_K", "200"))
 
 MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY")
 ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL", "https://api.minimax.io/anthropic")
-AGENT_MODEL = os.getenv("AGENT_MODEL", "MiniMax-M2.7")
+AGENT_MODEL = os.getenv("AGENT_MODEL", "MiniMax-M3")
 AGENT_MAX_TURNS = int(os.getenv("AGENT_MAX_TURNS", "25"))
 
 if MINIMAX_API_KEY and not os.environ.get("ANTHROPIC_API_KEY"):

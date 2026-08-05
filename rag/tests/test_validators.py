@@ -16,6 +16,7 @@ from app.validators import (
     flatten_dishes_to_items,
     parse_and_validate_plan_json,
     extract_item_ids,
+    _unwrap_xml_item_wrappers,
 )
 
 
@@ -468,3 +469,64 @@ class TestParseAndValidatePlanJsonWithDishes:
         with pytest.raises(HTTPException) as exc_info:
             parse_and_validate_plan_json(bad)
         assert exc_info.value.status_code == 500
+
+
+# ---------------------------------------------------------------------------
+# MiniMax-M3 {"item": [...]} XML-wrapping normalization
+# ---------------------------------------------------------------------------
+
+class TestUnwrapXmlItemWrappers:
+    def test_collapses_item_list_wrapper(self):
+        assert _unwrap_xml_item_wrappers({"item": [1, 2, 3]}) == [1, 2, 3]
+
+    def test_wraps_single_item_object_into_list(self):
+        assert _unwrap_xml_item_wrappers({"item": {"a": 1}}) == [{"a": 1}]
+
+    def test_recurses_into_nested_wrappers(self):
+        wrapped = {"plan": {"item": [{"meals": {"item": [{"name": "Lunch"}]}}]}}
+        assert _unwrap_xml_item_wrappers(wrapped) == {
+            "plan": [{"meals": [{"name": "Lunch"}]}]
+        }
+
+    def test_leaves_normal_dicts_untouched(self):
+        obj = {"id": 1, "name": "Oats", "servingsUsed": 1.0}
+        assert _unwrap_xml_item_wrappers(obj) == obj
+
+    def test_parse_accepts_fully_m3_wrapped_and_stringified_plan(self):
+        # Exact shape MiniMax-M3 emits: every array wrapped in {"item": ...},
+        # single element as {"item": {...}}, numbers as strings.
+        wrapped = json.dumps({
+            "title": "T", "startDate": "2026-08-04", "endDate": "2026-08-04",
+            "plan": {"item": [
+                {"date": "2026-08-04", "meals": {"item": [
+                    {"name": "Breakfast", "dishes": {"item": {
+                        "dishName": "Yogurt Bowl", "estimatedCalories": "480",
+                        "items": {"item": [
+                            {"id": "4153", "name": "Greek Yogurt", "servingsUsed": "1.5"},
+                            {"id": "4011", "name": "Blueberries", "servingsUsed": "1"},
+                            {"id": "5486", "name": "Granola", "servingsUsed": "0.5"},
+                        ]},
+                    }}}
+                ]}}
+            ]},
+        })
+        doc = parse_and_validate_plan_json(wrapped)
+        dish = doc.plan[0].meals[0].dishes[0]
+        assert dish.dishName == "Yogurt Bowl"
+        assert dish.estimatedCalories == 480          # str -> int coerced
+        assert dish.items[0].id == 4153               # str -> int coerced
+        assert dish.items[0].servingsUsed == 1.5      # str -> float coerced
+
+    def test_parse_still_accepts_clean_plain_plan(self):
+        clean = json.dumps({
+            "title": "T", "startDate": "2026-08-04", "endDate": "2026-08-04",
+            "plan": [{"date": "2026-08-04", "meals": [{"name": "Lunch", "dishes": [
+                {"dishName": "D", "items": [
+                    {"id": 1, "name": "a", "servingsUsed": 1.0},
+                    {"id": 2, "name": "b", "servingsUsed": 1.0},
+                    {"id": 3, "name": "c", "servingsUsed": 1.0},
+                ]},
+            ]}]}],
+        })
+        doc = parse_and_validate_plan_json(clean)
+        assert doc.plan[0].meals[0].dishes[0].items[1].id == 2
