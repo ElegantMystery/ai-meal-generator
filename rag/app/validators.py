@@ -85,6 +85,31 @@ def flatten_dishes_to_items(doc: MealPlanDoc) -> MealPlanDoc:
     return doc
 
 
+def _unwrap_xml_item_wrappers(obj):
+    """
+    Normalize an XML-serialization artifact from MiniMax-M3.
+
+    M3 intermittently emits JSON arrays as ``{"item": [...]}`` (and a single-element
+    array as ``{"item": {...}}``) instead of a plain list -- an XML-to-JSON quirk that
+    the strict ``MealPlanDoc`` schema rejects (``list_type`` on ``plan``/``meals``/
+    ``dishes``/``items``). Recursively collapse any lone ``{"item": X}`` node back into
+    a list so validation passes on the first submit instead of relying on the repair
+    loop. No legitimate object in the schema has a sole ``item`` key, so this is safe.
+    (Stringified numbers like ``"1.5"``/``"450"`` need no handling -- Pydantic coerces
+    them in lax mode.)
+    """
+    if isinstance(obj, dict):
+        if set(obj.keys()) == {"item"}:
+            inner = obj["item"]
+            if isinstance(inner, list):
+                return [_unwrap_xml_item_wrappers(e) for e in inner]
+            return [_unwrap_xml_item_wrappers(inner)]
+        return {k: _unwrap_xml_item_wrappers(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_unwrap_xml_item_wrappers(e) for e in obj]
+    return obj
+
+
 def parse_and_validate_plan_json(content: str) -> MealPlanDoc:
     """
     Parse JSON text and validate against the strict schema.
@@ -97,6 +122,8 @@ def parse_and_validate_plan_json(content: str) -> MealPlanDoc:
         raw = json.loads(content)
     except Exception:
         raise HTTPException(status_code=500, detail="LLM did not return valid JSON")
+
+    raw = _unwrap_xml_item_wrappers(raw)
 
     try:
         return MealPlanDoc.model_validate(raw)

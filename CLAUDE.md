@@ -47,19 +47,21 @@ agent.runner.run_agent()  — hand-rolled Anthropic tool-use loop
 
 The agent is **cold-start**: it sees only the user's brief (store, days, preferences) and discovers everything by calling tools. Phases (`discover` → `select` → `validate` → `submit` → `repair`) are emitted as SSE `phase` events so the frontend's `GeneratingModal` can show live status. Each tool call and result is also forwarded for visibility.
 
-The LLM is **MiniMax-M2.7** reached via the Anthropic-compatible endpoint at `https://api.minimax.io/anthropic`. `rag/app/config.py` maps `MINIMAX_API_KEY` → `ANTHROPIC_API_KEY` at import time so the standard `anthropic` Python SDK picks it up unchanged.
+The LLM is **MiniMax-M3** reached via the Anthropic-compatible endpoint at `https://api.minimax.io/anthropic`. `rag/app/config.py` maps `MINIMAX_API_KEY` → `ANTHROPIC_API_KEY` at import time so the standard `anthropic` Python SDK picks it up unchanged.
 
 The plan's `_meta` includes `generatedBy: "python-rag-agent"`, `agentModel`, `turnsUsed`, and `toolCallCount` for traceability.
 
 Two generation modes exist: rule-based (`/api/mealplans/generate`) and agentic AI (`/api/mealplans/generate-ai`).
 
-#### MiniMax-M2.7 quirks
+#### MiniMax-M3 quirks
 
-The agent runner in `rag/app/agent/runner.py` handles two MiniMax-M2.7 specific behaviours:
+The agent runner in `rag/app/agent/runner.py` (and the validator in `rag/app/validators.py`) handle three MiniMax-M3 specific behaviours:
 
-1. **XML tool-call fallback** — When the `submit_plan` payload is large, MiniMax-M2.7 sometimes emits the tool call as plain text in its own XML format (`<minimax:tool_call><invoke name="submit_plan"><parameter name="plan_json">...`) instead of using the native Anthropic `tool_use` block. The runner detects this and converts it into synthetic `tool_use` blocks via `_parse_xml_tool_calls()` / `_normalize_blocks()` so the rest of the loop is unaffected.
+1. **XML tool-call fallback** — When the `submit_plan` payload is large, MiniMax-M3 sometimes emits the tool call as plain text in its own XML format (`<minimax:tool_call><invoke name="submit_plan"><parameter name="plan_json">...`) instead of using the native Anthropic `tool_use` block. The runner detects this and converts it into synthetic `tool_use` blocks via `_parse_xml_tool_calls()` / `_normalize_blocks()` so the rest of the loop is unaffected.
 
-2. **`max_tokens=16384`** — A 7-day plan in XML text form can easily exceed 4 K tokens. The token budget is set high (16384) to let the model finish a single-shot plan, with a best-effort JSON-repair fallback (`_try_repair_truncated_json`) for any remaining truncation.
+2. **`{"item": [...]}` array wrapping** — M3 intermittently serialises JSON arrays in an XML-derived shape: `"plan": {"item": [...]}` (a single element as `{"item": {...}}`) instead of a plain list, and stringifies numbers (`"servingsUsed": "1.5"`). The strict `MealPlanDoc` schema rejects this (`list_type` on `plan`/`meals`/`dishes`/`items`). `parse_and_validate_plan_json` runs `_unwrap_xml_item_wrappers()` to recursively collapse any lone `{"item": X}` node back into a list before validation (Pydantic then coerces the stringified scalars), so the **first** `submit_plan` succeeds deterministically instead of relying on the repair loop. The system prompt (`prompt.py`) also explicitly forbids the wrapping, which reduces how often it happens.
+
+3. **`max_tokens=16384`** — A 7-day plan in XML text form can easily exceed 4 K tokens. The token budget is set high (16384) to let the model finish a single-shot plan, with a best-effort JSON-repair fallback (`_try_repair_truncated_json`) for any remaining truncation.
 
 The backend `RagClient` consumes SSE as `ServerSentEvent<String>` (raw JSON strings, parsed via `ObjectMapper.readTree`) — Jackson 3.x in Spring Boot 4 (`tools.jackson.*` namespace) cannot deserialise `com.fasterxml.jackson.databind.JsonNode` directly through the SSE codec.
 
@@ -69,7 +71,7 @@ The backend `RagClient` consumes SSE as `ServerSentEvent<String>` (raw JSON stri
 |---|---|
 | `MINIMAX_API_KEY` | Required for AI generation. Mapped to `ANTHROPIC_API_KEY` at startup. |
 | `ANTHROPIC_BASE_URL` | Defaults to `https://api.minimax.io/anthropic`. |
-| `AGENT_MODEL` | Defaults to `MiniMax-M2.7`. |
+| `AGENT_MODEL` | Defaults to `MiniMax-M3`. |
 | `AGENT_MAX_TURNS` | Safety cap on the tool loop. Defaults to `25`. |
 
 To validate the upstream is alive and supports Anthropic tool use:
@@ -462,7 +464,7 @@ This distinction ensures that small garnish ingredients do not artificially infl
 - `EMBED_MODEL` - Embedding model (default: `text-embedding-3-small`) — used for backfill only
 - `MINIMAX_API_KEY` - Minimax key driving the agentic `/generate` loop; mapped to `ANTHROPIC_API_KEY` at startup
 - `ANTHROPIC_BASE_URL` - Minimax Anthropic-compatible endpoint (default: `https://api.minimax.io/anthropic`)
-- `AGENT_MODEL` - Agent model identifier (default: `MiniMax-M2.7`)
+- `AGENT_MODEL` - Agent model identifier (default: `MiniMax-M3`)
 - `AGENT_MAX_TURNS` - Safety cap on the tool loop (default: `25`)
 - `SPOONACULAR_API_KEY` - Spoonacular API key — only needed to run `scripts/spoonacular/fetch_recipes.py`
 

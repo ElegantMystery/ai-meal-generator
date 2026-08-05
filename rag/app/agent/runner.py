@@ -34,7 +34,7 @@ _PHASE_SELECT_TOOLS = {"get_item_details"}
 _PHASE_VALIDATE_TOOLS = {"validate_item_ids"}
 _PHASE_SUBMIT_TOOLS = {"submit_plan"}
 
-# MiniMax-M2.7 sometimes emits tool calls as XML text instead of native tool_use blocks.
+# MiniMax-M3 sometimes emits tool calls as XML text instead of native tool_use blocks.
 # Closed form (preferred when complete) and open form (when truncated by max_tokens).
 _XML_INVOKE_OPEN_RE = re.compile(r'<invoke\s+name="([^"]+)">', re.DOTALL)
 _XML_PARAM_RE = re.compile(r'<parameter\s+name="([^"]+)">(.*?)(?:</parameter>|$)', re.DOTALL)
