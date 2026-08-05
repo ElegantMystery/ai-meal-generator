@@ -37,13 +37,13 @@ class TestPlanItemServingsUsed:
         with pytest.raises(ValidationError):
             PlanItem(id=3, name="Eggs", servingsUsed=0)
 
-    def test_plan_item_servings_used_capped_at_10(self):
+    def test_plan_item_servings_used_capped_at_20(self):
         with pytest.raises(ValidationError):
-            PlanItem(id=4, name="Bread", servingsUsed=11)
+            PlanItem(id=4, name="Bread", servingsUsed=21)
 
-    def test_plan_item_servings_used_boundary_10_is_valid(self):
-        item = PlanItem(id=5, name="Granola", servingsUsed=10)
-        assert item.servingsUsed == 10
+    def test_plan_item_servings_used_boundary_20_is_valid(self):
+        item = PlanItem(id=5, name="Granola", servingsUsed=20)
+        assert item.servingsUsed == 20
 
     def test_plan_item_servings_used_boundary_1_is_valid(self):
         item = PlanItem(id=6, name="Yogurt", servingsUsed=1)
