@@ -76,15 +76,18 @@ Relevant code:
 Problem: service handlers swallow exceptions, after which the controller returns
 HTTP 200 and Stripe will consider the failed delivery successful.
 
-- [ ] Stop swallowing retryable handler failures; return a non-2xx response.
-- [ ] Store processed Stripe event IDs behind a unique constraint.
-- [ ] Make duplicate delivery a successful no-op.
-- [ ] Avoid unnecessary Stripe retrieval where the signed event contains adequate
+- [x] Stop swallowing retryable handler failures; return a non-2xx response.
+- [x] Store processed Stripe event IDs behind a unique constraint.
+- [x] Make duplicate delivery a successful no-op.
+- [x] Avoid unnecessary Stripe retrieval where the signed event contains adequate
       data, or clearly handle retrieval failures as retryable.
-- [ ] Handle out-of-order subscription events deterministically.
-- [ ] Test transient failure, duplicate events, invalid signatures, deletion,
-      update-before-checkout, and replay after partial processing.
-- [ ] Add an operator procedure for replaying failed events.
+- [x] Handle out-of-order subscription events deterministically.
+- [ ] Add a PostgreSQL-backed transaction test for concurrent duplicate delivery
+      and replay after rollback. Unit tests cover transient failure propagation,
+      duplicate claim results, invalid signatures, deletion, and
+      update-before-checkout.
+- [x] Add an operator procedure for replaying failed events in
+      `docs/stripe-webhook-operations.md`.
 
 Acceptance criteria:
 

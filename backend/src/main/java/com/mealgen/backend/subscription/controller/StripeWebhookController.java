@@ -1,6 +1,6 @@
 package com.mealgen.backend.subscription.controller;
 
-import com.mealgen.backend.subscription.service.SubscriptionService;
+import com.mealgen.backend.subscription.service.StripeWebhookService;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.model.Event;
 import com.stripe.net.Webhook;
@@ -18,7 +18,7 @@ public class StripeWebhookController {
 
     private static final Logger log = LoggerFactory.getLogger(StripeWebhookController.class);
 
-    private final SubscriptionService subscriptionService;
+    private final StripeWebhookService stripeWebhookService;
 
     @Value("${stripe.webhook-secret}")
     String webhookSecret;
@@ -43,19 +43,9 @@ public class StripeWebhookController {
             return ResponseEntity.badRequest().body("Invalid signature");
         }
 
-        // Dispatch based on event type
-        switch (event.getType()) {
-            case "checkout.session.completed" ->
-                subscriptionService.handleCheckoutCompleted(event);
-            case "customer.subscription.updated" ->
-                subscriptionService.handleSubscriptionUpdated(event);
-            case "customer.subscription.deleted" ->
-                subscriptionService.handleSubscriptionDeleted(event);
-            default ->
-                log.debug("Unhandled Stripe event type: {}", event.getType());
-        }
+        // Processing failures intentionally propagate as 5xx so Stripe retries.
+        stripeWebhookService.process(event);
 
-        // Always return 200 (Stripe best practice)
         return ResponseEntity.ok().build();
     }
 }
