@@ -10,6 +10,7 @@ const config: Config = {
     "^@/(.*)$": "<rootDir>/$1",
   },
   testMatch: ["**/__tests__/**/*.test.{ts,tsx}"],
+  testPathIgnorePatterns: ["<rootDir>/.next/", "<rootDir>/coverage/"],
   coverageProvider: "v8",
   collectCoverageFrom: ["lib/**/*.ts", "components/ui/**/*.tsx", "!**/*.d.ts"],
 };

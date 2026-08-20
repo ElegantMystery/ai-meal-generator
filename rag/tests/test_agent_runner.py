@@ -19,6 +19,22 @@ from app.agent.runner import run_agent
 from app.models import GenerateRequest, Preferences
 
 
+@pytest.fixture(autouse=True)
+def _run_mocked_thread_calls_inline(monkeypatch):
+    """Keep state-machine tests deterministic without a real thread pool.
+
+    The production runner offloads the blocking SDK and database calls. These
+    tests replace both call targets with in-memory mocks, so a worker thread
+    adds no coverage and can leave the synchronous asyncio harness waiting for
+    an executor callback during interpreter/plugin shutdown.
+    """
+
+    async def _inline(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(runner_mod.asyncio, "to_thread", _inline)
+
+
 # ---------------------------------------------------------------------------
 # Fake Anthropic message shapes
 # ---------------------------------------------------------------------------

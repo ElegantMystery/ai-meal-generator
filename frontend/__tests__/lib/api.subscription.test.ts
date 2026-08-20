@@ -19,7 +19,7 @@ describe("getSubscriptionStatus", () => {
     getSpy.mockRestore();
   });
 
-  it("calls GET /api/subscriptions/status and returns data", async () => {
+  it("calls GET /api/subscription/status and returns data", async () => {
     const mockStatus: SubscriptionStatus = {
       tier: "FREE",
       remainingQuota: 3,
@@ -30,7 +30,7 @@ describe("getSubscriptionStatus", () => {
 
     const result = await apiModule.getSubscriptionStatus();
 
-    expect(getSpy).toHaveBeenCalledWith("/api/subscriptions/status");
+    expect(getSpy).toHaveBeenCalledWith("/api/subscription/status");
     expect(result).toEqual(mockStatus);
   });
 
@@ -78,12 +78,12 @@ describe("createCheckoutSession", () => {
     postSpy.mockRestore();
   });
 
-  it("calls POST /api/subscriptions/checkout and returns url", async () => {
+  it("calls POST /api/subscription/checkout and returns url", async () => {
     postSpy.mockResolvedValueOnce({ data: { url: "https://stripe.com/checkout/123" } });
 
     const result = await apiModule.createCheckoutSession();
 
-    expect(postSpy).toHaveBeenCalledWith("/api/subscriptions/checkout");
+    expect(postSpy).toHaveBeenCalledWith("/api/subscription/checkout");
     expect(result).toEqual({ url: "https://stripe.com/checkout/123" });
   });
 
@@ -110,12 +110,12 @@ describe("createPortalSession", () => {
     postSpy.mockRestore();
   });
 
-  it("calls POST /api/subscriptions/portal and returns url", async () => {
+  it("calls POST /api/subscription/portal and returns url", async () => {
     postSpy.mockResolvedValueOnce({ data: { url: "https://billing.stripe.com/portal/123" } });
 
     const result = await apiModule.createPortalSession();
 
-    expect(postSpy).toHaveBeenCalledWith("/api/subscriptions/portal");
+    expect(postSpy).toHaveBeenCalledWith("/api/subscription/portal");
     expect(result).toEqual({ url: "https://billing.stripe.com/portal/123" });
   });
 

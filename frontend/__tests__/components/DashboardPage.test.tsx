@@ -70,6 +70,10 @@ jest.mock("@/hooks/useSubscription", () => ({
   useSubscription: jest.fn(),
 }));
 
+jest.mock("@/lib/sse", () => ({
+  streamMealPlan: jest.fn(),
+}));
+
 // ---- Toast mock ----
 jest.mock("@/components/ui/Toast", () => ({
   useToast: jest.fn(() => ({ toast: jest.fn() })),
@@ -80,12 +84,14 @@ jest.mock("@/components/ui/Toast", () => ({
 import * as apiModule from "@/lib/api";
 import * as subscriptionHook from "@/hooks/useSubscription";
 import * as toastModule from "@/components/ui/Toast";
+import * as sseModule from "@/lib/sse";
 import DashboardPage from "@/app/dashboard/page";
 
 // Type helpers
 const mockApi = apiModule.api as { get: jest.Mock; post: jest.Mock };
 const mockUseSubscription = subscriptionHook.useSubscription as jest.Mock;
 const mockUseToast = toastModule.useToast as jest.Mock;
+const mockStreamMealPlan = sseModule.streamMealPlan as jest.Mock;
 
 const freeStatus = {
   tier: "FREE" as const,
@@ -105,6 +111,7 @@ function setupDefaultMocks() {
     refetch: mockRefetch,
   });
   mockUseToast.mockReturnValue({ toast: mockToast });
+  mockStreamMealPlan.mockResolvedValue(undefined);
   mockApi.get.mockImplementation((url: string) => {
     if (url === "/api/preferences/me") return Promise.resolve({ data: null });
     if (url === "/api/mealplans") return Promise.resolve({ data: [] });
@@ -146,17 +153,17 @@ describe("Dashboard — QuotaBadge integration", () => {
   });
 });
 
-describe("Dashboard — UpgradeModal on 403 QUOTA_EXCEEDED", () => {
+describe("Dashboard — UpgradeModal on 429 QUOTA_EXCEEDED", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     setupDefaultMocks();
   });
 
-  it("shows UpgradeModal when AI generate returns 403 QUOTA_EXCEEDED", async () => {
+  it("shows UpgradeModal when AI generate returns 429 QUOTA_EXCEEDED", async () => {
     const quotaError = {
-      response: { status: 403, data: { error: "QUOTA_EXCEEDED" } },
+      response: { status: 429, data: { error: "QUOTA_EXCEEDED" } },
     };
-    mockApi.post.mockRejectedValueOnce(quotaError);
+    mockStreamMealPlan.mockRejectedValueOnce(quotaError);
     render(<DashboardPage />);
     await waitFor(() => screen.getByRole("button", { name: /generate with ai/i }));
 
@@ -171,9 +178,9 @@ describe("Dashboard — UpgradeModal on 403 QUOTA_EXCEEDED", () => {
     });
   });
 
-  it("shows UpgradeModal when rule-based generate returns 403 QUOTA_EXCEEDED", async () => {
+  it("shows UpgradeModal when rule-based generate returns 429 QUOTA_EXCEEDED", async () => {
     const quotaError = {
-      response: { status: 403, data: { error: "QUOTA_EXCEEDED" } },
+      response: { status: 429, data: { error: "QUOTA_EXCEEDED" } },
     };
     mockApi.post.mockRejectedValueOnce(quotaError);
     render(<DashboardPage />);
@@ -191,7 +198,7 @@ describe("Dashboard — UpgradeModal on 403 QUOTA_EXCEEDED", () => {
   });
 
   it("shows generic error (not upgrade modal) for non-403 errors", async () => {
-    mockApi.post.mockRejectedValueOnce(new Error("Server Error"));
+    mockStreamMealPlan.mockRejectedValueOnce(new Error("Server Error"));
     render(<DashboardPage />);
     await waitFor(() => screen.getByRole("button", { name: /generate with ai/i }));
 
@@ -258,15 +265,18 @@ describe("Dashboard — refetch after successful generation", () => {
   });
 
   it("calls refetch after AI meal plan is generated", async () => {
-    mockApi.post.mockResolvedValueOnce({
-      data: {
+    mockStreamMealPlan.mockImplementationOnce(async ({ onEvent }) => {
+      onEvent({
+        event: "mealplan_saved",
+        data: {
         id: 42,
         title: "Test Plan",
         startDate: null,
         endDate: null,
         planJson: null,
         createdAt: null,
-      },
+        },
+      });
     });
     render(<DashboardPage />);
     await waitFor(() => screen.getByRole("button", { name: /generate with ai/i }));

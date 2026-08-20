@@ -104,13 +104,13 @@ Relevant code:
 
 ### AUD-004 — Add mandatory CI quality gates before deployment
 
-- [ ] Add independent backend, frontend, and RAG test jobs.
-- [ ] Run frontend lint and production build.
-- [ ] Make deployment depend on every required quality job.
-- [ ] Remove `-DskipTests` from the release path or guarantee that an identical
+- [x] Add independent backend, frontend, and RAG test jobs.
+- [x] Run frontend lint and production build.
+- [x] Make deployment depend on every required quality job.
+- [x] Remove `-DskipTests` from the release path or guarantee that an identical
       source revision passed tests before image publication.
 - [ ] Use immutable action/image/dependency versions where appropriate.
-- [ ] Prevent direct production deployment when any matrix build or test fails.
+- [x] Prevent direct production deployment when any matrix build or test fails.
 
 Acceptance criteria:
 
@@ -133,14 +133,18 @@ Observed on 2026-08-19:
 - Python pytest did not finish during the audit and was interrupted.
 - `./mvnw` was not executable.
 
-- [ ] Ignore `.next`, coverage reports, and other generated artifacts in Jest and
+- [x] Ignore `.next`, coverage reports, and other generated artifacts in Jest and
       ESLint discovery.
-- [ ] Repair stale frontend assertions and required provider wrappers.
+- [x] Repair stale frontend assertions and required provider wrappers.
 - [x] Configure Mockito for Java 21 without runtime self-attachment.
 - [x] Commit the Maven wrapper executable bit; clean-checkout verification remains
       part of the final acceptance run.
-- [ ] Diagnose the Python suite stall and add per-test timeouts where useful.
-- [ ] Record stable local and CI commands in the root README.
+- [x] Diagnose the Python suite stall and make mocked thread calls deterministic
+      in the runner unit tests.
+- [x] Record stable local and CI commands in the root README.
+
+Verification on 2026-08-19: frontend 19 suites / 193 tests, ESLint, and the
+Next.js production build passed; backend 82 tests passed; RAG 84 tests passed.
 
 Acceptance criteria:
 

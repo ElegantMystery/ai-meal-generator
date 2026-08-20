@@ -37,6 +37,21 @@ export default function GeneratingModal({
   const [progress, setProgress] = useState(0);
   const [statusIndex, setStatusIndex] = useState(0);
   const [visible, setVisible] = useState(isOpen);
+  const [previousIsOpen, setPreviousIsOpen] = useState(isOpen);
+
+  // Reset the modal synchronously when its controlling prop changes. React
+  // applies these guarded render-phase updates before committing, avoiding a
+  // stale frame without using an effect to derive state from a prop.
+  if (isOpen !== previousIsOpen) {
+    setPreviousIsOpen(isOpen);
+    if (isOpen) {
+      setVisible(true);
+      setProgress(0);
+      setStatusIndex(0);
+    } else {
+      setProgress(100);
+    }
+  }
 
   // Drive simulated progress / status rotation while open, only when
   // real values are not supplied.
@@ -67,18 +82,12 @@ export default function GeneratingModal({
     };
   }, [isOpen, status, progressPercent]);
 
-  // Open / close lifecycle: animate to 100 % then unmount
+  // Keep the completed state visible briefly before unmounting.
   useEffect(() => {
-    if (isOpen) {
-      setVisible(true);
-      setProgress(0);
-      setStatusIndex(0);
-    } else if (visible) {
-      setProgress(100);
-      const t = setTimeout(() => setVisible(false), CLOSE_DELAY_MS);
-      return () => clearTimeout(t);
-    }
-  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (isOpen || !visible) return;
+    const timer = setTimeout(() => setVisible(false), CLOSE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [isOpen, visible]);
 
   const liveProgress =
     progressPercent !== undefined

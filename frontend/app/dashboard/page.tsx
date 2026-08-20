@@ -50,7 +50,7 @@ function isQuotaExceeded(err: unknown): boolean {
       response?: { status?: number; data?: { error?: string } };
     };
     if (
-      errObj.response?.status === 403 &&
+      (errObj.response?.status === 429 || errObj.response?.status === 403) &&
       errObj.response?.data?.error === "QUOTA_EXCEEDED"
     ) {
       return true;
@@ -60,7 +60,7 @@ function isQuotaExceeded(err: unknown): boolean {
   if ("status" in err && "body" in err) {
     const errObj = err as { status?: number; body?: string };
     if (
-      errObj.status === 403 &&
+      (errObj.status === 429 || errObj.status === 403) &&
       typeof errObj.body === "string" &&
       errObj.body.includes("QUOTA_EXCEEDED")
     ) {

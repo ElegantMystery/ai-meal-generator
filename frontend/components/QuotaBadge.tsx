@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
+import { createPortalSession } from "@/lib/api";
+import { navigateTo } from "@/lib/navigate";
+import { useToast } from "@/components/ui/Toast";
 
 interface QuotaBadgeProps {
   tier: string;
@@ -9,8 +12,34 @@ interface QuotaBadgeProps {
 }
 
 export default function QuotaBadge({ tier, remainingQuota }: QuotaBadgeProps) {
+  const { toast } = useToast();
+
   if (tier === "PRO") {
-    return null;
+    const openBillingPortal = async () => {
+      try {
+        const { url } = await createPortalSession();
+        navigateTo(url);
+      } catch (error) {
+        console.error("Failed to open billing portal:", error);
+        toast("Failed to open billing settings. Please try again.", "error");
+      }
+    };
+
+    return (
+      <Badge variant="success" className="inline-flex items-center gap-1">
+        <span>PRO</span>
+        <span aria-hidden>·</span>
+        <span>Unlimited</span>
+        <span aria-hidden>·</span>
+        <button
+          type="button"
+          onClick={openBillingPortal}
+          className="underline underline-offset-2 hover:opacity-80 transition"
+        >
+          Manage
+        </button>
+      </Badge>
+    );
   }
 
   // FREE tier
