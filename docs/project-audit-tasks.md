@@ -159,13 +159,18 @@ prerequisites.
 
 ### AUD-006 — Make RAG authentication fail closed
 
-- [ ] Fail application startup outside an explicit test/dev mode when
+- [x] Fail application startup outside an explicit test/dev mode when
       `RAG_SHARED_SECRET` is absent or blank.
-- [ ] Use constant-time secret comparison.
-- [ ] Apply one shared authentication dependency to generation and embedding
+- [x] Use constant-time secret comparison.
+- [x] Apply one shared authentication dependency to generation and embedding
       routes instead of duplicating checks.
-- [ ] Add unauthorized, missing-secret, valid-secret, and startup-config tests.
-- [ ] Ensure Docker Compose and deployment validation require the secret.
+- [x] Add unauthorized, missing-secret, valid-secret, and startup-config tests.
+- [x] Ensure Docker Compose and deployment validation require the secret.
+
+Implemented on 2026-08-20 with production-default `RAG_ENV`, lifespan validation,
+router-level `require_rag_secret`, constant-time comparison, required Compose
+interpolation, and an explicit pre-deploy secret check. The RAG suite passes 94
+tests.
 
 Acceptance criteria:
 

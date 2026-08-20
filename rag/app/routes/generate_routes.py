@@ -7,22 +7,17 @@ JSON, or `error`).
 """
 import json
 import logging
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from ..agent.runner import run_agent
-from ..config import RAG_SHARED_SECRET
 from ..models import GenerateRequest
+from ..security import require_rag_secret
 
 logger = logging.getLogger(__name__)
-router = APIRouter(tags=["generate"])
-
-
-def auth(secret: Optional[str]):
-    if RAG_SHARED_SECRET and secret != RAG_SHARED_SECRET:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+router = APIRouter(tags=["generate"], dependencies=[Depends(require_rag_secret)])
 
 
 def _sse_frame(event: str, data: dict) -> str:
@@ -42,12 +37,7 @@ async def _agent_stream(req: GenerateRequest) -> AsyncIterator[str]:
 
 
 @router.post("/generate")
-async def generate(
-    req: GenerateRequest,
-    x_rag_secret: Optional[str] = Header(default=None),
-):
-    auth(x_rag_secret)
-
+async def generate(req: GenerateRequest):
     if req.days < 1 or req.days > 14:
         raise HTTPException(status_code=400, detail="days must be between 1 and 14")
 

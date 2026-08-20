@@ -24,6 +24,7 @@ services:
       # Use service name "mealgen-db" for networking inside compose
       DATABASE_URL: postgresql://meal_user:${POSTGRES_PASSWORD}@mealgen-db:5432/mealgen
       OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY must be set}
+      RAG_ENV: development
       RAG_SHARED_SECRET: ${RAG_SHARED_SECRET:?RAG_SHARED_SECRET must be set}
       MINIMAX_API_KEY: ${MINIMAX_API_KEY:?MINIMAX_API_KEY must be set}
       ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://api.minimax.io/anthropic}
@@ -47,7 +48,7 @@ services:
 
       # Spring calling python-rag internally
       MEALGEN_RAG_BASEURL: http://python-rag:8000
-      MEALGEN_RAG_SECRET: ${RAG_SHARED_SECRET}
+      MEALGEN_RAG_SECRET: ${RAG_SHARED_SECRET:?RAG_SHARED_SECRET must be set}
 
       # Google OAuth2
       SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?GOOGLE_CLIENT_ID must be set}

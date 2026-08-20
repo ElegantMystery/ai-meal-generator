@@ -223,6 +223,12 @@ jobs:
             update_env IMAGE_TAG     "$IMAGE_TAG"
             update_env ECR_REGISTRY  "$ECR_REGISTRY"
 
+            echo "==> Validating required service secrets"
+            if ! grep -Eq '^RAG_SHARED_SECRET=[^[:space:]].*$' .env; then
+              echo "RAG_SHARED_SECRET is missing or blank in /opt/meal-gen/.env"
+              exit 1
+            fi
+
             echo "==> Pulling new images"
             docker compose -f docker-compose.prod.yml pull
 
