@@ -21,14 +21,15 @@ on chat history.
 Problem: `users.plans_generated_count` is a lifetime counter, although the product
 promises three plans per month.
 
-- [ ] Choose and document the quota period boundary and timezone.
-- [ ] Replace the lifetime-only design with either a usage ledger or a counter plus
+- [x] Choose and document the quota period boundary and timezone (UTC calendar month).
+- [x] Replace the lifetime-only design with either a usage ledger or a counter plus
       an explicit period-start column.
-- [ ] Add a Flyway migration that preserves existing production data safely.
-- [ ] Reset usage lazily or transactionally when a new period begins; do not rely
+- [x] Add a Flyway migration that preserves existing production data safely by
+      assigning prior nonzero usage to the deployment month.
+- [x] Reset usage lazily or transactionally when a new period begins; do not rely
       only on an external scheduler.
-- [ ] Make `/api/subscription/status` report usage for the current period.
-- [ ] Test period rollover, boundary timestamps, FREE users, and PRO users.
+- [x] Make `/api/subscription/status` report usage for the current period.
+- [x] Test period rollover, boundary timestamps, FREE users, and PRO users.
 
 Acceptance criteria:
 
@@ -47,13 +48,15 @@ Relevant code:
 Problem: quota is checked before generation and incremented after completion, so
 parallel requests can all pass the limit and incur model costs.
 
-- [ ] Define generation usage states such as reserved, completed, released/failed.
-- [ ] Reserve FREE-tier capacity with one conditional database operation or a
+- [x] Define the in-process reservation contract for FREE and unlimited generations.
+- [x] Reserve FREE-tier capacity with one conditional database operation or a
       correctly locked transaction.
-- [ ] Ensure both rule-based and AI generation use the same reservation mechanism.
-- [ ] Define cancellation and upstream-failure behavior without allowing unlimited
+- [x] Ensure both rule-based and AI generation use the same reservation mechanism.
+- [x] Define cancellation and upstream-failure behavior without allowing unlimited
       retries or permanently consuming failed reservations.
-- [ ] Add concurrency tests that issue more requests than the remaining quota.
+- [ ] Add a PostgreSQL-backed concurrency test that issues more requests than the
+      remaining quota (unit tests cover the conditional-update result; Docker and
+      local PostgreSQL were unavailable during the 2026-08-19 implementation).
 - [ ] Add metrics/logging for reservation, completion, rejection, and release.
 
 Acceptance criteria:
@@ -130,8 +133,9 @@ Observed on 2026-08-19:
 - [ ] Ignore `.next`, coverage reports, and other generated artifacts in Jest and
       ESLint discovery.
 - [ ] Repair stale frontend assertions and required provider wrappers.
-- [ ] Configure Mockito for Java 21 without runtime self-attachment.
-- [ ] Commit the Maven wrapper executable bit and verify it in a clean checkout.
+- [x] Configure Mockito for Java 21 without runtime self-attachment.
+- [x] Commit the Maven wrapper executable bit; clean-checkout verification remains
+      part of the final acceptance run.
 - [ ] Diagnose the Python suite stall and add per-test timeouts where useful.
 - [ ] Record stable local and CI commands in the root README.
 

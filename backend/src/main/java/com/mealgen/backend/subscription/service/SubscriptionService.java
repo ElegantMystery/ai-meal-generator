@@ -2,6 +2,7 @@ package com.mealgen.backend.subscription.service;
 
 import com.mealgen.backend.auth.model.User;
 import com.mealgen.backend.auth.repository.UserRepository;
+import com.mealgen.backend.subscription.exception.QuotaExceededException;
 import com.mealgen.backend.subscription.model.Subscription;
 import com.mealgen.backend.subscription.model.SubscriptionTier;
 import com.mealgen.backend.subscription.repository.SubscriptionRepository;
@@ -22,6 +23,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.Set;
 
@@ -38,6 +42,7 @@ public class SubscriptionService {
 
     private final SubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
+    private final Clock clock;
 
     @Value("${stripe.secret-key}")
     private String stripeSecretKey;
@@ -70,14 +75,51 @@ public class SubscriptionService {
         if (getTier(user.getId()) == SubscriptionTier.PRO) {
             return true;
         }
-        return user.getPlansGeneratedCount() < FREE_PLAN_LIMIT;
+        return usageInCurrentPeriod(user) < FREE_PLAN_LIMIT;
     }
 
     public int getRemainingQuota(User user) {
         if (getTier(user.getId()) == SubscriptionTier.PRO) {
             return -1;
         }
-        return Math.max(0, FREE_PLAN_LIMIT - user.getPlansGeneratedCount());
+        return Math.max(0, FREE_PLAN_LIMIT - usageInCurrentPeriod(user));
+    }
+
+    /**
+     * Reserves generation capacity before any expensive work starts. The single
+     * conditional UPDATE is the concurrency boundary for FREE users.
+     */
+    @Transactional
+    public QuotaReservation reserveGeneration(User user) {
+        if (getTier(user.getId()) == SubscriptionTier.PRO) {
+            return QuotaReservation.unlimited();
+        }
+
+        LocalDate periodStart = currentQuotaPeriod();
+        int updated = userRepository.reserveFreeGeneration(
+                user.getId(), periodStart, FREE_PLAN_LIMIT);
+        if (updated == 0) {
+            throw new QuotaExceededException();
+        }
+        return QuotaReservation.free(periodStart);
+    }
+
+    @Transactional
+    public void releaseGeneration(Long userId, QuotaReservation reservation) {
+        if (reservation != null && reservation.consumesFreeQuota()) {
+            userRepository.releaseFreeGeneration(userId, reservation.periodStart());
+        }
+    }
+
+    private int usageInCurrentPeriod(User user) {
+        return currentQuotaPeriod().equals(user.getQuotaPeriodStart())
+                ? user.getPlansGeneratedCount()
+                : 0;
+    }
+
+    private LocalDate currentQuotaPeriod() {
+        LocalDate utcToday = LocalDate.now(clock.withZone(ZoneOffset.UTC));
+        return utcToday.withDayOfMonth(1);
     }
 
     // -------------------------------------------------------------------------

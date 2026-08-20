@@ -2,7 +2,6 @@ package com.mealgen.backend.mealplan.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.mealgen.backend.auth.model.User;
-import com.mealgen.backend.auth.repository.UserRepository;
 import com.mealgen.backend.mealplan.dto.MealPlanResponse;
 import com.mealgen.backend.mealplan.model.MealPlan;
 import com.mealgen.backend.mealplan.repository.MealPlanRepository;
@@ -17,7 +16,6 @@ import java.time.LocalDate;
 public class MealPlanPersistenceService {
 
     private final MealPlanRepository mealPlanRepository;
-    private final UserRepository userRepository;
 
     @Transactional
     public MealPlanResponse persistFromComplete(User user, JsonNode data) {
@@ -36,8 +34,6 @@ public class MealPlanPersistenceService {
                 .endDate(endDate)
                 .planJson(planJson)
                 .build());
-
-        userRepository.incrementPlansGeneratedCount(user.getId());
 
         return MealPlanResponse.builder()
                 .id(saved.getId())

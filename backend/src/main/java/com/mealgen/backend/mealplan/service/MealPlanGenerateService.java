@@ -10,7 +10,6 @@ import com.mealgen.backend.mealplan.model.MealPlan;
 import com.mealgen.backend.mealplan.repository.MealPlanRepository;
 import com.mealgen.backend.preferences.model.UserPreferences;
 import com.mealgen.backend.preferences.repository.UserPreferencesRepository;
-import com.mealgen.backend.subscription.exception.QuotaExceededException;
 import com.mealgen.backend.subscription.service.SubscriptionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -36,10 +35,8 @@ public class MealPlanGenerateService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalStateException("User not found for email: " + email));
 
-        // Quota check — throws QuotaExceededException for FREE users at limit
-        if (!subscriptionService.canGenerate(user)) {
-            throw new QuotaExceededException();
-        }
+        // Joins this transaction: any later failure rolls the reservation back.
+        subscriptionService.reserveGeneration(user);
 
         UserPreferences prefs = preferencesRepository.findByUserId(user.getId()).orElse(null);
 
@@ -130,9 +127,6 @@ public class MealPlanGenerateService {
                 .endDate(end)
                 .planJson(planJson)
                 .build());
-
-        // Atomically increment the generation counter
-        userRepository.incrementPlansGeneratedCount(user.getId());
 
         return MealPlanResponse.builder()
                 .id(saved.getId())
