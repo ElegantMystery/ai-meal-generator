@@ -75,7 +75,7 @@ class MealPlanServiceQuotaTest {
 
         service.streamGenerateAi(user.getEmail(), "TRADER_JOES", 7).collectList().block();
 
-        verify(subscriptionService).releaseGeneration(user.getId(), reservation);
+        verify(subscriptionService).releaseGeneration(user.getId(), reservation, "agent_error");
         verify(persistenceService, never()).persistFromComplete(any(), any());
     }
 
@@ -86,7 +86,7 @@ class MealPlanServiceQuotaTest {
 
         service.streamGenerateAi(user.getEmail(), "TRADER_JOES", 7).collectList().block();
 
-        verify(subscriptionService).releaseGeneration(user.getId(), reservation);
+        verify(subscriptionService).releaseGeneration(user.getId(), reservation, "transport_error");
     }
 
     @Test
@@ -104,7 +104,8 @@ class MealPlanServiceQuotaTest {
         service.streamGenerateAi(user.getEmail(), "TRADER_JOES", 7).collectList().block();
 
         verify(persistenceService).persistFromComplete(any(), any());
-        verify(subscriptionService, never()).releaseGeneration(any(), any());
+        verify(subscriptionService).completeGeneration(user.getId(), reservation);
+        verify(subscriptionService, never()).releaseGeneration(any(), any(), any());
     }
 
     private void arrangeReservation() {

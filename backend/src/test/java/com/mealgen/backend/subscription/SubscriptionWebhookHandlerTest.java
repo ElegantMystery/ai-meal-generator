@@ -29,6 +29,7 @@ class SubscriptionWebhookHandlerTest {
 
     @Mock SubscriptionRepository subscriptionRepository;
     @Mock UserRepository userRepository;
+    @Mock com.mealgen.backend.subscription.service.QuotaObservability quotaObservability;
     @Mock Event event;
     @Mock com.stripe.model.Subscription stripeSubscription;
 
@@ -38,7 +39,7 @@ class SubscriptionWebhookHandlerTest {
     @BeforeEach
     void setUp() {
         service = new SubscriptionService(
-                subscriptionRepository, userRepository, Clock.systemUTC());
+                subscriptionRepository, userRepository, Clock.systemUTC(), quotaObservability);
         user = User.builder()
                 .id(1L)
                 .email("user@example.com")

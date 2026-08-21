@@ -5,12 +5,15 @@ import com.mealgen.backend.auth.repository.UserRepository;
 import com.mealgen.backend.subscription.exception.QuotaExceededException;
 import com.mealgen.backend.subscription.repository.SubscriptionRepository;
 import com.mealgen.backend.subscription.service.QuotaReservation;
+import com.mealgen.backend.subscription.service.QuotaObservability;
 import com.mealgen.backend.subscription.service.SubscriptionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -31,13 +34,15 @@ class MonthlyQuotaServiceTest {
 
     @Mock SubscriptionRepository subscriptionRepository;
     @Mock UserRepository userRepository;
+    @Mock QuotaObservability quotaObservability;
 
     private SubscriptionService service;
 
     @BeforeEach
     void setUp() {
         Clock clock = Clock.fixed(Instant.parse("2026-08-19T12:00:00Z"), ZoneOffset.UTC);
-        service = new SubscriptionService(subscriptionRepository, userRepository, clock);
+        service = new SubscriptionService(
+                subscriptionRepository, userRepository, clock, quotaObservability);
     }
 
     @Test
@@ -67,6 +72,7 @@ class MonthlyQuotaServiceTest {
         assertThat(reservation.consumesFreeQuota()).isTrue();
         assertThat(reservation.periodStart()).isEqualTo(AUGUST);
         verify(userRepository).reserveFreeGeneration(1L, AUGUST, 3);
+        verify(quotaObservability).reserved(1L, reservation);
     }
 
     @Test
@@ -77,6 +83,7 @@ class MonthlyQuotaServiceTest {
 
         assertThatThrownBy(() -> service.reserveGeneration(user))
                 .isInstanceOf(QuotaExceededException.class);
+        verify(quotaObservability).rejected(1L);
     }
 
     @Test
@@ -87,15 +94,55 @@ class MonthlyQuotaServiceTest {
 
         assertThat(service.reserveGeneration(user).consumesFreeQuota()).isFalse();
         verify(userRepository, never()).reserveFreeGeneration(1L, AUGUST, 3);
+        verify(quotaObservability).reserved(1L, QuotaReservation.unlimited());
     }
 
     @Test
     void releaseGeneration_onlyTargetsReservationsPeriod() {
         QuotaReservation reservation = QuotaReservation.free(AUGUST);
+        when(userRepository.releaseFreeGeneration(1L, AUGUST)).thenReturn(1);
 
         service.releaseGeneration(1L, reservation);
 
         verify(userRepository).releaseFreeGeneration(1L, AUGUST);
+        verify(quotaObservability).released(1L, reservation, "stream_terminated");
+    }
+
+    @Test
+    void transactionRollbackRecordsImplicitReservationRelease() {
+        User user = freeUser(2, AUGUST);
+        when(subscriptionRepository.findByUserId(1L)).thenReturn(Optional.empty());
+        when(userRepository.reserveFreeGeneration(1L, AUGUST, 3)).thenReturn(1);
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            QuotaReservation reservation = service.reserveGeneration(user);
+
+            TransactionSynchronizationManager.getSynchronizations().forEach(
+                    synchronization -> synchronization.afterCompletion(
+                            TransactionSynchronization.STATUS_ROLLED_BACK));
+
+            verify(quotaObservability).released(
+                    1L, reservation, "transaction_rollback");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void completionMetricWaitsForTransactionCommit() {
+        QuotaReservation reservation = QuotaReservation.free(AUGUST);
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.completeGeneration(1L, reservation);
+            verify(quotaObservability, never()).completed(1L, reservation);
+
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+
+            verify(quotaObservability).completed(1L, reservation);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     private static User freeUser(int count, LocalDate periodStart) {
