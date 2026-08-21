@@ -13,6 +13,9 @@ from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
 import pytest
+import httpx
+from anthropic import APIError
+from psycopg import OperationalError
 
 from app.agent import runner as runner_mod
 from app.agent.runner import run_agent
@@ -88,6 +91,7 @@ def _tool(name: str, args: Dict[str, Any], block_id: str | None = None) -> _Fake
 def _make_req() -> GenerateRequest:
     return GenerateRequest(
         userId=1,
+        requestId="req-test-123",
         store="TRADER_JOES",
         days=1,
         preferences=Preferences(),
@@ -139,7 +143,11 @@ def test_run_agent_aborts_when_minimax_key_missing(monkeypatch):
     monkeypatch.setattr(runner_mod.config, "MINIMAX_API_KEY", None)
     events = _collect_sync(_make_req())
     assert events[-1][0] == "error"
-    assert events[-1][1]["code"] == "config"
+    assert events[-1][1] == {
+        "code": "GENERATION_CONFIGURATION_ERROR",
+        "message": "Meal plan generation is temporarily unavailable.",
+        "requestId": "req-test-123",
+    }
 
 
 def test_run_agent_happy_path_emits_complete(monkeypatch):
@@ -244,4 +252,81 @@ def test_run_agent_no_plan_submitted_yields_error(monkeypatch):
         events = _collect_sync(_make_req())
 
     assert events[-1][0] == "error"
-    assert events[-1][1]["code"] == "no_plan_submitted"
+    assert events[-1][1]["code"] == "GENERATION_VALIDATION_FAILED"
+    assert events[-1][1]["requestId"] == "req-test-123"
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_code", "expected_message"),
+    [
+        (
+            asyncio.TimeoutError("provider timeout containing secret"),
+            "GENERATION_TIMEOUT",
+            "Meal plan generation timed out. Please try again.",
+        ),
+        (
+            RuntimeError("unexpected internal details"),
+            "GENERATION_INTERNAL_ERROR",
+            "Meal plan generation failed. Please try again.",
+        ),
+    ],
+)
+def test_run_agent_sanitizes_sdk_call_failures(
+    monkeypatch, failure, expected_code, expected_message
+):
+    monkeypatch.setattr(runner_mod.config, "MINIMAX_API_KEY", "fake-key")
+    fake_client = MagicMock()
+    fake_client.messages.create.side_effect = failure
+
+    with patch.object(runner_mod, "Anthropic", return_value=fake_client):
+        events = _collect_sync(_make_req())
+
+    error = events[-1][1]
+    assert error == {
+        "code": expected_code,
+        "message": expected_message,
+        "requestId": "req-test-123",
+    }
+    assert "secret" not in error["message"]
+    assert "internal details" not in error["message"]
+
+
+def test_run_agent_sanitizes_anthropic_api_failure(monkeypatch):
+    monkeypatch.setattr(runner_mod.config, "MINIMAX_API_KEY", "fake-key")
+    fake_client = MagicMock()
+    fake_client.messages.create.side_effect = APIError(
+        "provider secret response", httpx.Request("POST", "https://provider.invalid"), body=None
+    )
+
+    with patch.object(runner_mod, "Anthropic", return_value=fake_client):
+        events = _collect_sync(_make_req())
+
+    assert events[-1][1] == {
+        "code": "GENERATION_PROVIDER_UNAVAILABLE",
+        "message": "The meal planner is temporarily unavailable. Please try again.",
+        "requestId": "req-test-123",
+    }
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_code"),
+    [
+        (OperationalError("database credentials leaked"), "GENERATION_DATABASE_UNAVAILABLE"),
+        (ValueError("plan validation internals"), "GENERATION_VALIDATION_FAILED"),
+    ],
+)
+def test_run_agent_sanitizes_tool_failures(monkeypatch, failure, expected_code):
+    monkeypatch.setattr(runner_mod.config, "MINIMAX_API_KEY", "fake-key")
+    response = _FakeResponse(content=[_tool("list_categories", {})], stop_reason="tool_use")
+    fake_client = MagicMock()
+    fake_client.messages.create.return_value = response
+
+    with patch.object(runner_mod, "dispatch", side_effect=failure):
+        with patch.object(runner_mod, "Anthropic", return_value=fake_client):
+            events = _collect_sync(_make_req())
+
+    error = events[-1][1]
+    assert error["code"] == expected_code
+    assert error["requestId"] == "req-test-123"
+    assert "credentials" not in error["message"]
+    assert "internals" not in error["message"]

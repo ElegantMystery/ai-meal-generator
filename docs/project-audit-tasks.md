@@ -206,10 +206,13 @@ Relevant code:
 
 ### AUD-008 — Sanitize public generation errors
 
-- [ ] Define stable public error codes and user-safe messages.
-- [ ] Keep provider/SDK exception text only in structured server logs.
-- [ ] Include a request/correlation ID in logs and safe client errors.
-- [ ] Test Anthropic API, database, validation, timeout, and unexpected failures.
+- [x] Define stable public error codes and user-safe messages. Generation SSE
+      errors use bounded `GENERATION_*` codes with fixed public text.
+- [x] Keep provider/SDK exception text only in structured server logs.
+- [x] Include a request/correlation ID in logs and safe client errors. The
+      backend-generated ID is forwarded to RAG, returned as `X-Request-ID`, and
+      included in every terminal error event.
+- [x] Test Anthropic API, database, validation, timeout, and unexpected failures.
 
 Relevant code:
 

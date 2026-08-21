@@ -7,12 +7,14 @@ JSON, or `error`).
 """
 import json
 import logging
+import uuid
 from typing import AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from ..agent.runner import run_agent
+from ..generation_errors import classify_generation_error, public_error
 from ..models import GenerateRequest
 from ..security import require_rag_secret
 
@@ -27,13 +29,16 @@ def _sse_frame(event: str, data: dict) -> str:
 
 async def _agent_stream(req: GenerateRequest) -> AsyncIterator[str]:
     """Translate runner events into SSE frames."""
+    request_id = req.requestId or str(uuid.uuid4())
+    req.requestId = request_id
     try:
         async for event_name, data in run_agent(req):
             logger.info("SSE event: %s | %s", event_name, str(data)[:200])
             yield _sse_frame(event_name, data)
     except Exception as e:
-        logger.exception("Agent stream crashed")
-        yield _sse_frame("error", {"code": "stream_crashed", "message": str(e)})
+        code = classify_generation_error(e)
+        logger.exception("generation_failed code=%s requestId=%s", code, request_id)
+        yield _sse_frame("error", public_error(code, request_id))
 
 
 @router.post("/generate")
@@ -41,11 +46,14 @@ async def generate(req: GenerateRequest):
     if req.days < 1 or req.days > 14:
         raise HTTPException(status_code=400, detail="days must be between 1 and 14")
 
+    request_id = req.requestId or str(uuid.uuid4())
+    req.requestId = request_id
     return StreamingResponse(
         _agent_stream(req),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",  # disable nginx response buffering for SSE
+            "X-Request-ID": request_id,
         },
     )
