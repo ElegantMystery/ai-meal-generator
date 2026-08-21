@@ -111,7 +111,9 @@ Relevant code:
 - [x] Make deployment depend on every required quality job.
 - [x] Remove `-DskipTests` from the release path or guarantee that an identical
       source revision passed tests before image publication.
-- [ ] Use immutable action/image/dependency versions where appropriate.
+- [x] Use immutable action/image/dependency versions where appropriate. GitHub
+      Actions are pinned to full commit SHAs, third-party build/runtime images
+      are pinned to multi-platform manifest digests, and CI rejects regressions.
 - [x] Prevent direct production deployment when any matrix build or test fails.
 
 Acceptance criteria:

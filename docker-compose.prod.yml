@@ -20,7 +20,7 @@
 
 services:
   nginx:
-    image: nginx:1.27-alpine
+    image: nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
     container_name: meal-gen-nginx
     ports:
       - "80:80"
@@ -48,7 +48,7 @@ services:
   # Initial cert: docker compose -f docker-compose.prod.yml run --rm certbot certonly \
   #   --webroot --webroot-path /var/www/certbot -d yourdomain.com
   certbot:
-    image: certbot/certbot:latest
+    image: certbot/certbot:latest@sha256:34ee91d2f43008eb78a007d22f23ed4b2eaa9a454cb27ca2c042b49527a695b4
     container_name: meal-gen-certbot
     volumes:
       - ./nginx/certbot/conf:/etc/letsencrypt
@@ -58,7 +58,7 @@ services:
     restart: always
 
   python-rag:
-    image: ${ECR_REGISTRY}/meal-gen-rag:${IMAGE_TAG:-latest}
+    image: ${ECR_REGISTRY}/meal-gen-rag:${IMAGE_TAG:?IMAGE_TAG must be an immutable tag}
     container_name: python-rag
     environment:
       DATABASE_URL: ${DATABASE_URL}
@@ -88,7 +88,7 @@ services:
       retries: 3
 
   backend:
-    image: ${ECR_REGISTRY}/meal-gen-backend:${IMAGE_TAG:-latest}
+    image: ${ECR_REGISTRY}/meal-gen-backend:${IMAGE_TAG:?IMAGE_TAG must be an immutable tag}
     container_name: mealgen-backend
     environment:
       SPRING_PROFILES_ACTIVE: prod
@@ -127,7 +127,7 @@ services:
       start_period: 60s
 
   frontend:
-    image: ${ECR_REGISTRY}/meal-gen-frontend:${IMAGE_TAG:-latest}
+    image: ${ECR_REGISTRY}/meal-gen-frontend:${IMAGE_TAG:?IMAGE_TAG must be an immutable tag}
     container_name: mealgen-frontend
     environment:
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}

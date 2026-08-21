@@ -5,13 +5,16 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
 @Testcontainers
 public abstract class PostgresIntegrationTest {
 
     @Container
     protected static final PostgreSQLContainer<?> POSTGRES =
-            new PostgreSQLContainer<>("pgvector/pgvector:pg18")
+            new PostgreSQLContainer<>(DockerImageName
+                    .parse("pgvector/pgvector:pg18@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a")
+                    .asCompatibleSubstituteFor("postgres"))
                     .withDatabaseName("mealgen_test")
                     .withUsername("meal_user")
                     .withPassword("test-password");

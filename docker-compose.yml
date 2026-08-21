@@ -1,6 +1,6 @@
 services:
   mealgen-db:
-    image: pgvector/pgvector:pg18
+    image: pgvector/pgvector:pg18@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a
     container_name: postgres-mealgen
     environment:
       POSTGRES_DB: mealgen
