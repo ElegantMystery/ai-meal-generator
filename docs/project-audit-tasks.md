@@ -54,9 +54,9 @@ parallel requests can all pass the limit and incur model costs.
 - [x] Ensure both rule-based and AI generation use the same reservation mechanism.
 - [x] Define cancellation and upstream-failure behavior without allowing unlimited
       retries or permanently consuming failed reservations.
-- [ ] Add a PostgreSQL-backed concurrency test that issues more requests than the
-      remaining quota (unit tests cover the conditional-update result; Docker and
-      local PostgreSQL were unavailable during the 2026-08-19 implementation).
+- [x] Add a PostgreSQL-backed concurrency test that issues more requests than the
+      remaining quota. Eight simultaneous reservations against two remaining
+      slots now prove that PostgreSQL accepts exactly two and caps usage at three.
 - [ ] Add metrics/logging for reservation, completion, rejection, and release.
 
 Acceptance criteria:
@@ -82,10 +82,9 @@ HTTP 200 and Stripe will consider the failed delivery successful.
 - [x] Avoid unnecessary Stripe retrieval where the signed event contains adequate
       data, or clearly handle retrieval failures as retryable.
 - [x] Handle out-of-order subscription events deterministically.
-- [ ] Add a PostgreSQL-backed transaction test for concurrent duplicate delivery
-      and replay after rollback. Unit tests cover transient failure propagation,
-      duplicate claim results, invalid signatures, deletion, and
-      update-before-checkout.
+- [x] Add PostgreSQL-backed transaction tests for concurrent duplicate delivery
+      and replay after rollback. Eight simultaneous deliveries create one
+      processed ledger row, and a failed handler rolls its claim back for retry.
 - [x] Add an operator procedure for replaying failed events in
       `docs/stripe-webhook-operations.md`.
 
@@ -122,6 +121,10 @@ Relevant code:
 - `.github/workflows/deploy.yml`
 - `backend/Dockerfile`
 
+Verification on 2026-08-20: the complete backend suite (including disposable
+PostgreSQL 18/pgvector concurrency tests), frontend tests/lint/build, and RAG
+suite all passed locally using the same commands as the independent CI jobs.
+
 ### AUD-005 — Restore the repository to a green test and lint baseline
 
 Observed on 2026-08-19:
@@ -143,8 +146,8 @@ Observed on 2026-08-19:
       in the runner unit tests.
 - [x] Record stable local and CI commands in the root README.
 
-Verification on 2026-08-19: frontend 19 suites / 193 tests, ESLint, and the
-Next.js production build passed; backend 82 tests passed; RAG 84 tests passed.
+Verification on 2026-08-20: frontend 19 suites / 193 tests, ESLint, and the
+Next.js production build passed; backend 85 tests passed; RAG 94 tests passed.
 
 Acceptance criteria:
 
