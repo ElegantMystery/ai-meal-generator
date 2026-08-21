@@ -188,11 +188,11 @@ Relevant code:
 
 ### AUD-007 — Restore Flyway migration validation
 
-- [ ] Audit production schema history and explain why checksums were set to zero.
-- [ ] Back up schema history before any repair operation.
-- [ ] Reconcile the production history with immutable migration files.
-- [ ] Re-enable `validate-on-migrate` in production.
-- [ ] Add CI validation against a disposable PostgreSQL/pgvector database.
+- [x] Audit production schema history and explain why checksums were set to zero.
+- [x] Back up schema history before any repair operation.
+- [x] Reconcile the production history with immutable migration files.
+- [x] Re-enable `validate-on-migrate` in production.
+- [x] Add CI validation against a disposable PostgreSQL/pgvector database.
 
 Acceptance criteria:
 
