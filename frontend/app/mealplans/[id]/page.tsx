@@ -23,7 +23,6 @@ import {
   safeParsePlanJson,
   hasDishes,
   getDishItemLabel,
-  type PlanDoc,
 } from "@/lib/mealplan-dish-utils";
 
 type MealPlan = {

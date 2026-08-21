@@ -150,6 +150,7 @@ npm run lint                           # ESLint
 source .venv/bin/activate                          # Activate venv first
 cd rag
 pip install -r requirements.txt
+export RAG_ENV=development RAG_SHARED_SECRET=dev-secret
 uvicorn app.main:app --host 0.0.0.0 --port 8000   # Run dev server
 ```
 
@@ -461,6 +462,9 @@ This distinction ensures that small garnish ingredients do not artificially infl
 - `DATABASE_URL` - PostgreSQL connection string
 - `OPENAI_API_KEY` - OpenAI API key — used **only** by `/embed/backfill/*`; not used at generation time
 - `RAG_SHARED_SECRET` - Shared secret for backend→RAG auth (header: `X-RAG-SECRET`)
+- `RAG_ENV` - Runtime environment (`production` by default; set explicitly to
+  `development` or `test` only outside production). Production startup fails if
+  `RAG_SHARED_SECRET` is absent or blank; protected routes always fail closed.
 - `EMBED_MODEL` - Embedding model (default: `text-embedding-3-small`) — used for backfill only
 - `MINIMAX_API_KEY` - Minimax key driving the agentic `/generate` loop; mapped to `ANTHROPIC_API_KEY` at startup
 - `ANTHROPIC_BASE_URL` - Minimax Anthropic-compatible endpoint (default: `https://api.minimax.io/anthropic`)

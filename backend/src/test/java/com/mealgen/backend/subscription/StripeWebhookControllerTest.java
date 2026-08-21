@@ -1,7 +1,7 @@
 package com.mealgen.backend.subscription;
 
 import com.mealgen.backend.subscription.controller.StripeWebhookController;
-import com.mealgen.backend.subscription.service.SubscriptionService;
+import com.mealgen.backend.subscription.service.StripeWebhookService;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.net.Webhook;
 import org.junit.jupiter.api.Test;
@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -29,7 +30,7 @@ import static org.mockito.Mockito.*;
 class StripeWebhookControllerTest {
 
     @Mock
-    private SubscriptionService subscriptionService;
+    private StripeWebhookService stripeWebhookService;
 
     @InjectMocks
     private StripeWebhookController stripeWebhookController;
@@ -88,7 +89,7 @@ class StripeWebhookControllerTest {
             ResponseEntity<?> response = stripeWebhookController.handleWebhook(payload, "t=1234,v1=sig");
 
             assertThat(response.getStatusCode().value()).isEqualTo(200);
-            verify(subscriptionService).handleCheckoutCompleted(any());
+            verify(stripeWebhookService).process(mockEvent);
         }
     }
 
@@ -108,7 +109,7 @@ class StripeWebhookControllerTest {
             ResponseEntity<?> response = stripeWebhookController.handleWebhook(payload, "t=1234,v1=sig");
 
             assertThat(response.getStatusCode().value()).isEqualTo(200);
-            verify(subscriptionService).handleSubscriptionUpdated(any());
+            verify(stripeWebhookService).process(mockEvent);
         }
     }
 
@@ -128,7 +129,7 @@ class StripeWebhookControllerTest {
             ResponseEntity<?> response = stripeWebhookController.handleWebhook(payload, "t=1234,v1=sig");
 
             assertThat(response.getStatusCode().value()).isEqualTo(200);
-            verify(subscriptionService).handleSubscriptionDeleted(any());
+            verify(stripeWebhookService).process(mockEvent);
         }
     }
 
@@ -148,7 +149,23 @@ class StripeWebhookControllerTest {
             ResponseEntity<?> response = stripeWebhookController.handleWebhook(payload, "t=1234,v1=sig");
 
             assertThat(response.getStatusCode().value()).isEqualTo(200);
-            verifyNoInteractions(subscriptionService);
+            verify(stripeWebhookService).process(mockEvent);
+        }
+    }
+
+    @Test
+    void handleWebhook_propagatesProcessingFailureSoStripeCanRetry() throws Exception {
+        String payload = "{\"id\":\"evt_1\",\"type\":\"customer.subscription.updated\"}";
+        com.stripe.model.Event mockEvent = buildMockEvent("customer.subscription.updated", payload);
+        RuntimeException failure = new RuntimeException("database unavailable");
+        doThrow(failure).when(stripeWebhookService).process(mockEvent);
+
+        try (MockedStatic<Webhook> webhookMock = mockStatic(Webhook.class)) {
+            webhookMock.when(() -> Webhook.constructEvent(anyString(), anyString(), anyString()))
+                    .thenReturn(mockEvent);
+
+            assertThatThrownBy(() -> stripeWebhookController.handleWebhook(payload, "t=1234,v1=sig"))
+                    .isSameAs(failure);
         }
     }
 
@@ -157,8 +174,6 @@ class StripeWebhookControllerTest {
     // -------------------------------------------------------------------------
 
     private com.stripe.model.Event buildMockEvent(String type, String rawJson) {
-        com.stripe.model.Event event = mock(com.stripe.model.Event.class);
-        when(event.getType()).thenReturn(type);
-        return event;
+        return mock(com.stripe.model.Event.class);
     }
 }

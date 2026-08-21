@@ -13,7 +13,7 @@ import com.mealgen.backend.mealplan.repository.MealPlanRepository;
 import com.mealgen.backend.mealplan.ai.RagClient;
 import com.mealgen.backend.preferences.model.UserPreferences;
 import com.mealgen.backend.preferences.repository.UserPreferencesRepository;
-import com.mealgen.backend.subscription.exception.QuotaExceededException;
+import com.mealgen.backend.subscription.service.QuotaReservation;
 import com.mealgen.backend.subscription.service.SubscriptionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +27,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
 @Slf4j
@@ -128,9 +129,9 @@ public class MealPlanService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalStateException("User not found for email: " + email));
 
-        if (!subscriptionService.canGenerate(user)) {
-            throw new QuotaExceededException();
-        }
+        // This commits before the asynchronous stream starts, preventing parallel
+        // FREE requests from all passing the same read/check race.
+        QuotaReservation reservation = subscriptionService.reserveGeneration(user);
 
         UserPreferences prefs = preferencesRepository.findByUserId(user.getId()).orElse(null);
 
@@ -146,6 +147,7 @@ public class MealPlanService {
         payload.put("preferences", preferences);
 
         AtomicReference<ServerSentEvent<String>> savedEvent = new AtomicReference<>();
+        AtomicBoolean quotaSettled = new AtomicBoolean(false);
 
         return ragClient.streamGenerate(payload)
                 .map(sse -> {
@@ -156,20 +158,39 @@ public class MealPlanService {
                             JsonNode data = objectMapper.readTree(rawData);
                             MealPlanResponse response = mealPlanPersistenceService.persistFromComplete(user, data);
                             savedEvent.set(buildSavedEvent(response));
+                            quotaSettled.set(true);
                         } catch (Exception e) {
                             throw new IllegalStateException("Failed to parse complete event data", e);
                         }
+                    } else if ("error".equals(eventName)) {
+                        releaseReservation(user.getId(), reservation, quotaSettled);
                     }
                     return forwardSse(sse);
                 })
+                // complete/error are terminal protocol events. Do not accept a
+                // contradictory later event that could desynchronise quota state.
+                .takeUntil(sse -> "complete".equals(sse.event()) || "error".equals(sse.event()))
                 .concatWith(Flux.defer(() -> {
                     ServerSentEvent<String> saved = savedEvent.get();
                     return saved == null ? Flux.empty() : Flux.just(saved);
                 }))
                 .onErrorResume(err -> {
+                    releaseReservation(user.getId(), reservation, quotaSettled);
                     log.error("Streaming generate-ai failed", err);
                     return Flux.just(errorEvent(err));
-                });
+                })
+                .doOnCancel(() -> releaseReservation(user.getId(), reservation, quotaSettled))
+                .doOnComplete(() -> releaseReservation(user.getId(), reservation, quotaSettled));
+    }
+
+    private void releaseReservation(
+            Long userId,
+            QuotaReservation reservation,
+            AtomicBoolean quotaSettled
+    ) {
+        if (quotaSettled.compareAndSet(false, true)) {
+            subscriptionService.releaseGeneration(userId, reservation);
+        }
     }
 
     private ServerSentEvent<String> forwardSse(ServerSentEvent<String> sse) {

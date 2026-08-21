@@ -1,6 +1,7 @@
 package com.mealgen.backend.subscription;
 
 import com.mealgen.backend.auth.model.User;
+import com.mealgen.backend.auth.repository.UserRepository;
 import com.mealgen.backend.subscription.model.Subscription;
 import com.mealgen.backend.subscription.model.SubscriptionTier;
 import com.mealgen.backend.subscription.repository.SubscriptionRepository;
@@ -8,11 +9,14 @@ import com.mealgen.backend.subscription.service.SubscriptionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
@@ -23,7 +27,9 @@ class SubscriptionServiceTest {
     @Mock
     private SubscriptionRepository subscriptionRepository;
 
-    @InjectMocks
+    @Mock
+    private UserRepository userRepository;
+
     private SubscriptionService subscriptionService;
 
     private User freeUser;
@@ -31,16 +37,20 @@ class SubscriptionServiceTest {
 
     @BeforeEach
     void setUp() {
+        Clock clock = Clock.fixed(Instant.parse("2026-08-19T12:00:00Z"), ZoneOffset.UTC);
+        subscriptionService = new SubscriptionService(subscriptionRepository, userRepository, clock);
         freeUser = User.builder()
                 .id(1L)
                 .email("free@example.com")
                 .plansGeneratedCount(0)
+                .quotaPeriodStart(LocalDate.of(2026, 8, 1))
                 .build();
 
         proUser = User.builder()
                 .id(2L)
                 .email("pro@example.com")
                 .plansGeneratedCount(0)
+                .quotaPeriodStart(LocalDate.of(2026, 8, 1))
                 .build();
     }
 

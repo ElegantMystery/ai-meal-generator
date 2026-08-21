@@ -126,7 +126,7 @@ export default function OnboardingModal({ isOpen, onComplete }: OnboardingModalP
             className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
           />
           <p className="mt-1 text-xs text-gray-500">
-            Optional - leave blank if you don't have a target yet.
+            Optional - leave blank if you don&apos;t have a target yet.
           </p>
         </div>
 

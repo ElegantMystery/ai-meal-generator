@@ -3,6 +3,8 @@ package com.mealgen.backend.auth.model;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDate;
+
 @Entity
 @Table(name = "users")
 @Getter
@@ -38,4 +40,8 @@ public class User {
     @Builder.Default
     @Column(name = "plans_generated_count", nullable = false)
     private int plansGeneratedCount = 0;
+
+    /** UTC calendar month to which plansGeneratedCount belongs. */
+    @Column(name = "quota_period_start")
+    private LocalDate quotaPeriodStart;
 }

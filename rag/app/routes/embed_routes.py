@@ -1,31 +1,30 @@
 import logging
-from fastapi import APIRouter, Header, HTTPException
-from typing import Optional
 
+from fastapi import APIRouter, Depends
+
+from ..embedding import embed_texts, ingredients_doc, item_doc, nutrition_doc
 from ..models import BackfillRequest, BackfillResponse
-from ..config import RAG_SHARED_SECRET
 from ..retrieval import (
-    fetch_items_missing_embeddings, 
-    upsert_item_embeddings,
-    fetch_nutrition_missing_embeddings,
     fetch_ingredients_missing_embeddings,
+    fetch_items_missing_embeddings,
+    fetch_nutrition_missing_embeddings,
+    upsert_ingredients_embeddings,
+    upsert_item_embeddings,
     upsert_nutrition_embeddings,
-    upsert_ingredients_embeddings
 )
-from ..embedding import item_doc, nutrition_doc, ingredients_doc, embed_texts
+from ..security import require_rag_secret
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/embed", tags=["embed"])
+router = APIRouter(
+    prefix="/embed",
+    tags=["embed"],
+    dependencies=[Depends(require_rag_secret)],
+)
 
-def auth(secret: Optional[str]):
-    if RAG_SHARED_SECRET and secret != RAG_SHARED_SECRET:
-        raise HTTPException(status_code=401, detail="Unauthorized")
 
 @router.post("/backfill/items", response_model=BackfillResponse)
-def backfill(req: BackfillRequest, x_rag_secret: Optional[str] = Header(default=None)):
+def backfill(req: BackfillRequest):
     """Backfill embeddings for items."""
-    auth(x_rag_secret)
-
     rows = fetch_items_missing_embeddings(req.store, req.limit)
     if not rows:
         return BackfillResponse(updated=0, skipped=0)
@@ -35,11 +34,10 @@ def backfill(req: BackfillRequest, x_rag_secret: Optional[str] = Header(default=
     updated = upsert_item_embeddings(rows, vectors)
     return BackfillResponse(updated=updated, skipped=0)
 
-@router.post("/backfill/nutrition", response_model=BackfillResponse)
-def backfill_nutrition(req: BackfillRequest, x_rag_secret: Optional[str] = Header(default=None)):
-    """Backfill embeddings for item nutrition data."""
-    auth(x_rag_secret)
 
+@router.post("/backfill/nutrition", response_model=BackfillResponse)
+def backfill_nutrition(req: BackfillRequest):
+    """Backfill embeddings for item nutrition data."""
     rows = fetch_nutrition_missing_embeddings(req.store, req.limit)
     if not rows:
         return BackfillResponse(updated=0, skipped=0)
@@ -49,11 +47,10 @@ def backfill_nutrition(req: BackfillRequest, x_rag_secret: Optional[str] = Heade
     updated = upsert_nutrition_embeddings(rows, vectors)
     return BackfillResponse(updated=updated, skipped=0)
 
-@router.post("/backfill/ingredients", response_model=BackfillResponse)
-def backfill_ingredients(req: BackfillRequest, x_rag_secret: Optional[str] = Header(default=None)):
-    """Backfill embeddings for item ingredients data."""
-    auth(x_rag_secret)
 
+@router.post("/backfill/ingredients", response_model=BackfillResponse)
+def backfill_ingredients(req: BackfillRequest):
+    """Backfill embeddings for item ingredients data."""
     rows = fetch_ingredients_missing_embeddings(req.store, req.limit)
     if not rows:
         return BackfillResponse(updated=0, skipped=0)

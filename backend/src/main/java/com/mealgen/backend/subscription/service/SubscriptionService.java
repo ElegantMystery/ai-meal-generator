@@ -2,6 +2,8 @@ package com.mealgen.backend.subscription.service;
 
 import com.mealgen.backend.auth.model.User;
 import com.mealgen.backend.auth.repository.UserRepository;
+import com.mealgen.backend.subscription.exception.QuotaExceededException;
+import com.mealgen.backend.subscription.exception.StripeWebhookProcessingException;
 import com.mealgen.backend.subscription.model.Subscription;
 import com.mealgen.backend.subscription.model.SubscriptionTier;
 import com.mealgen.backend.subscription.repository.SubscriptionRepository;
@@ -10,26 +12,24 @@ import com.stripe.model.Customer;
 import com.stripe.model.Event;
 import com.stripe.model.checkout.Session;
 import com.stripe.param.CustomerCreateParams;
-import com.stripe.param.CustomerSearchParams;
 import com.stripe.param.billingportal.SessionCreateParams;
 import com.stripe.param.checkout.SessionCreateParams.LineItem;
 import com.stripe.param.checkout.SessionCreateParams.Mode;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class SubscriptionService {
-
-    private static final Logger log = LoggerFactory.getLogger(SubscriptionService.class);
 
     /** Statuses that grant PRO-tier access (grace period during payment retry). */
     private static final Set<String> PRO_STATUSES = Set.of("active", "past_due");
@@ -38,6 +38,7 @@ public class SubscriptionService {
 
     private final SubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
+    private final Clock clock;
 
     @Value("${stripe.secret-key}")
     private String stripeSecretKey;
@@ -70,14 +71,51 @@ public class SubscriptionService {
         if (getTier(user.getId()) == SubscriptionTier.PRO) {
             return true;
         }
-        return user.getPlansGeneratedCount() < FREE_PLAN_LIMIT;
+        return usageInCurrentPeriod(user) < FREE_PLAN_LIMIT;
     }
 
     public int getRemainingQuota(User user) {
         if (getTier(user.getId()) == SubscriptionTier.PRO) {
             return -1;
         }
-        return Math.max(0, FREE_PLAN_LIMIT - user.getPlansGeneratedCount());
+        return Math.max(0, FREE_PLAN_LIMIT - usageInCurrentPeriod(user));
+    }
+
+    /**
+     * Reserves generation capacity before any expensive work starts. The single
+     * conditional UPDATE is the concurrency boundary for FREE users.
+     */
+    @Transactional
+    public QuotaReservation reserveGeneration(User user) {
+        if (getTier(user.getId()) == SubscriptionTier.PRO) {
+            return QuotaReservation.unlimited();
+        }
+
+        LocalDate periodStart = currentQuotaPeriod();
+        int updated = userRepository.reserveFreeGeneration(
+                user.getId(), periodStart, FREE_PLAN_LIMIT);
+        if (updated == 0) {
+            throw new QuotaExceededException();
+        }
+        return QuotaReservation.free(periodStart);
+    }
+
+    @Transactional
+    public void releaseGeneration(Long userId, QuotaReservation reservation) {
+        if (reservation != null && reservation.consumesFreeQuota()) {
+            userRepository.releaseFreeGeneration(userId, reservation.periodStart());
+        }
+    }
+
+    private int usageInCurrentPeriod(User user) {
+        return currentQuotaPeriod().equals(user.getQuotaPeriodStart())
+                ? user.getPlansGeneratedCount()
+                : 0;
+    }
+
+    private LocalDate currentQuotaPeriod() {
+        LocalDate utcToday = LocalDate.now(clock.withZone(ZoneOffset.UTC));
+        return utcToday.withDayOfMonth(1);
     }
 
     // -------------------------------------------------------------------------
@@ -135,94 +173,40 @@ public class SubscriptionService {
     @Transactional
     public void handleCheckoutCompleted(Event event) {
         Stripe.apiKey = stripeSecretKey;
-        try {
-            // Extract IDs from raw JSON to avoid SDK/API version deserialization mismatch
-            com.fasterxml.jackson.databind.JsonNode obj = new com.fasterxml.jackson.databind.ObjectMapper()
-                    .readTree(event.toJson())
-                    .path("data").path("object");
+        com.fasterxml.jackson.databind.JsonNode obj = eventObject(event);
+        String customerId = requiredJsonText(obj, "customer", "checkout customer id");
+        String subscriptionId = requiredJsonText(obj, "subscription", "checkout subscription id");
+        com.stripe.model.Subscription stripeSub = retrieveSubscription(subscriptionId);
 
-            String customerId = obj.path("customer").asText(null);
-            String subscriptionId = obj.path("subscription").asText(null);
-            if ("null".equals(customerId)) customerId = null;
-            if ("null".equals(subscriptionId)) subscriptionId = null;
-
-            if (subscriptionId == null || customerId == null) {
-                log.warn("checkout.session.completed missing subscription or customer id");
-                return;
-            }
-
-            // Retrieve full subscription details from Stripe
-            com.stripe.model.Subscription stripeSub =
-                    com.stripe.model.Subscription.retrieve(subscriptionId);
-
-            // Find the user by Stripe customer ID (set during checkout creation)
-            Optional<User> userOpt = userRepository.findByStripeCustomerId(customerId);
-            if (userOpt.isEmpty()) {
-                log.warn("No user found for Stripe customer {}", customerId);
-                return;
-            }
-
-            User user = userOpt.get();
-
-            // Upsert subscription row
-            Subscription sub = subscriptionRepository.findByUserId(user.getId())
-                    .orElse(new Subscription());
-            sub.setUser(user);
-            sub.setStripeSubscriptionId(stripeSub.getId());
-            sub.setStripeCustomerId(customerId);
-            sub.setStatus(stripeSub.getStatus());
-            sub.setTier("PRO");
-            applyPeriod(sub, stripeSub);
-            sub.setCancelAtPeriodEnd(Boolean.TRUE.equals(stripeSub.getCancelAtPeriodEnd()));
-            subscriptionRepository.save(sub);
-
-            // Persist customer ID on user entity
-            user.setStripeCustomerId(customerId);
-            userRepository.save(user);
-
-        } catch (Exception e) {
-            log.error("Error handling checkout.session.completed", e);
-        }
+        upsertSubscription(stripeSub, customerId);
     }
 
     @Transactional
     public void handleSubscriptionUpdated(Event event) {
         Stripe.apiKey = stripeSecretKey;
-        try {
-            String subscriptionId = new com.fasterxml.jackson.databind.ObjectMapper()
-                    .readTree(event.toJson())
-                    .path("data").path("object").path("id").asText();
+        com.fasterxml.jackson.databind.JsonNode obj = eventObject(event);
+        String subscriptionId = requiredJsonText(obj, "id", "subscription id");
+        com.stripe.model.Subscription stripeSub = retrieveSubscription(subscriptionId);
+        String customerId = requireText(stripeSub.getCustomer(), "subscription customer id");
 
-            com.stripe.model.Subscription stripeSub = com.stripe.model.Subscription.retrieve(subscriptionId);
-
-            subscriptionRepository.findByStripeSubscriptionId(stripeSub.getId())
-                    .ifPresent(sub -> {
-                        sub.setStatus(stripeSub.getStatus());
-                        applyPeriod(sub, stripeSub);
-                        sub.setCancelAtPeriodEnd(Boolean.TRUE.equals(stripeSub.getCancelAtPeriodEnd()));
-                        subscriptionRepository.save(sub);
-                    });
-        } catch (Exception e) {
-            log.error("Error handling customer.subscription.updated", e);
-        }
+        // Upsert by customer as well as subscription id so an update arriving
+        // before checkout.session.completed can still establish entitlement.
+        upsertSubscription(stripeSub, customerId);
     }
 
     @Transactional
     public void handleSubscriptionDeleted(Event event) {
         Stripe.apiKey = stripeSecretKey;
-        try {
-            String subscriptionId = new com.fasterxml.jackson.databind.ObjectMapper()
-                    .readTree(event.toJson())
-                    .path("data").path("object").path("id").asText();
+        String subscriptionId = requiredJsonText(
+                eventObject(event), "id", "deleted subscription id");
 
-            subscriptionRepository.findByStripeSubscriptionId(subscriptionId)
-                    .ifPresent(sub -> {
-                        sub.setStatus("canceled");
-                        subscriptionRepository.save(sub);
-                    });
-        } catch (Exception e) {
-            log.error("Error handling customer.subscription.deleted", e);
-        }
+        // Absence is already the desired FREE entitlement state. A stale deletion
+        // for an older subscription must not cancel a newer subscription row.
+        subscriptionRepository.findByStripeSubscriptionId(subscriptionId)
+                .ifPresent(sub -> {
+                    sub.setStatus("canceled");
+                    subscriptionRepository.save(sub);
+                });
     }
 
     // -------------------------------------------------------------------------
@@ -239,6 +223,67 @@ public class SubscriptionService {
         if (item.getCurrentPeriodEnd() != null) {
             sub.setCurrentPeriodEnd(Instant.ofEpochSecond(item.getCurrentPeriodEnd()));
         }
+    }
+
+    private void upsertSubscription(
+            com.stripe.model.Subscription stripeSub,
+            String customerId
+    ) {
+        User user = userRepository.findByStripeCustomerId(customerId)
+                .orElseThrow(() -> new StripeWebhookProcessingException(
+                        "No user found for Stripe customer " + customerId));
+
+        Subscription sub = subscriptionRepository.findByStripeSubscriptionId(stripeSub.getId())
+                .or(() -> subscriptionRepository.findByUserId(user.getId()))
+                .orElseGet(Subscription::new);
+        sub.setUser(user);
+        sub.setStripeSubscriptionId(requireText(stripeSub.getId(), "subscription id"));
+        sub.setStripeCustomerId(customerId);
+        sub.setStatus(requireText(stripeSub.getStatus(), "subscription status"));
+        sub.setTier("PRO");
+        applyPeriod(sub, stripeSub);
+        sub.setCancelAtPeriodEnd(Boolean.TRUE.equals(stripeSub.getCancelAtPeriodEnd()));
+        subscriptionRepository.save(sub);
+
+        if (!customerId.equals(user.getStripeCustomerId())) {
+            user.setStripeCustomerId(customerId);
+            userRepository.save(user);
+        }
+    }
+
+    private com.stripe.model.Subscription retrieveSubscription(String subscriptionId) {
+        try {
+            return com.stripe.model.Subscription.retrieve(subscriptionId);
+        } catch (Exception e) {
+            throw new StripeWebhookProcessingException(
+                    "Failed to retrieve Stripe subscription " + subscriptionId, e);
+        }
+    }
+
+    private com.fasterxml.jackson.databind.JsonNode eventObject(Event event) {
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readTree(event.toJson())
+                    .path("data")
+                    .path("object");
+        } catch (Exception e) {
+            throw new StripeWebhookProcessingException("Invalid Stripe event payload", e);
+        }
+    }
+
+    private String requiredJsonText(
+            com.fasterxml.jackson.databind.JsonNode object,
+            String field,
+            String description
+    ) {
+        return requireText(object.path(field).asText(null), description);
+    }
+
+    private String requireText(String value, String description) {
+        if (value == null || value.isBlank() || "null".equals(value)) {
+            throw new StripeWebhookProcessingException("Stripe event missing " + description);
+        }
+        return value;
     }
 
     private String getOrCreateCustomerId(User user) throws Exception {

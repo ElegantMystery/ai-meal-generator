@@ -15,7 +15,7 @@ describe("Select", () => {
   it("renders label when provided with id", () => {
     render(
       <Select id="store" label="Store">
-        <option value="TJ">Trader Joe's</option>
+        <option value="TJ">Trader Joe&apos;s</option>
       </Select>,
     );
     expect(screen.getByLabelText("Store")).toBeInTheDocument();

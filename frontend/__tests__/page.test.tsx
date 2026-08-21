@@ -28,31 +28,24 @@ jest.mock("next/link", () => ({
 }));
 
 describe("HomePage — hero logo", () => {
-  it("renders the hero logo image above the slogan", () => {
+  it("renders the brand name above the slogan", () => {
     render(<HomePage />);
-
-    // There are two whole_haul images (navbar + hero). Find the hero one by its larger width.
-    const images = screen
-      .getAllByRole("img", { name: /whole haul/i })
-      .filter((img) => img.getAttribute("width") === "320");
-
-    expect(images).toHaveLength(1);
-    expect(images[0]).toHaveAttribute("src", "/whole_haul.png");
+    expect(screen.getByText("Whole Haul", { selector: "section span" })).toBeInTheDocument();
   });
 
-  it("places the hero logo before the slogan text", () => {
+  it("places the brand name before the slogan text", () => {
     const { container } = render(<HomePage />);
 
     const heroSection = container.querySelector("section");
-    const heroLogo = heroSection?.querySelector('img[width="320"]');
+    const heroBrand = heroSection?.querySelector("span");
     const slogan = heroSection?.querySelector("h1");
 
-    expect(heroLogo).toBeTruthy();
+    expect(heroBrand).toBeTruthy();
     expect(slogan).toBeTruthy();
 
     // Logo should appear before slogan in the DOM
     const position =
-      heroLogo!.compareDocumentPosition(slogan!) &
+      heroBrand!.compareDocumentPosition(slogan!) &
       Node.DOCUMENT_POSITION_FOLLOWING;
     expect(position).toBeTruthy();
   });

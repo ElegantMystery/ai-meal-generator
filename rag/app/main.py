@@ -1,22 +1,24 @@
 import logging
-import sys
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
 
-from .db import init_pool, close_pool
+from fastapi import FastAPI
+
+from .db import close_pool, init_pool
 from .routes.embed_routes import router as embed_router
 from .routes.generate_routes import router as gen_router
+from .security import validate_security_configuration
 
 logging.basicConfig(level=logging.INFO)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
+    validate_security_configuration()
     init_pool()
-    yield
-    close_pool()
+    try:
+        yield
+    finally:
+        close_pool()
 
 
 app = FastAPI(title="MealGen RAG Service", lifespan=lifespan)

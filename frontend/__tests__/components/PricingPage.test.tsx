@@ -52,6 +52,10 @@ jest.mock("@/hooks/useSubscription", () => ({
   useSubscription: () => mockUseSubscription(),
 }));
 
+jest.mock("@/components/ui/Toast", () => ({
+  useToast: () => ({ toast: jest.fn() }),
+}));
+
 import PricingPage from "@/app/pricing/page";
 
 describe("PricingPage — loading state", () => {
@@ -108,7 +112,7 @@ describe("PricingPage — FREE user", () => {
 
   it("renders FREE plan features", () => {
     render(<PricingPage />);
-    expect(screen.getByText(/3 meal plans\/month/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 meal plans/i)).toBeInTheDocument();
   });
 
   it("renders PRO plan features", () => {

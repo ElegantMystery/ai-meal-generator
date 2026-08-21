@@ -33,13 +33,20 @@ jest.mock("@/lib/navigate", () => ({
 }));
 
 import UpgradeModal from "@/components/UpgradeModal";
+import { ToastProvider } from "@/components/ui/Toast";
+
+function renderModal(open: boolean, onClose = jest.fn()) {
+  return render(
+    <ToastProvider>
+      <UpgradeModal open={open} onClose={onClose} />
+    </ToastProvider>,
+  );
+}
 
 describe("UpgradeModal — closed state", () => {
   it("renders nothing when open=false", () => {
-    const { container } = render(
-      <UpgradeModal open={false} onClose={jest.fn()} />
-    );
-    expect(container.firstChild).toBeNull();
+    const { container } = renderModal(false);
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
   });
 });
 
@@ -48,7 +55,7 @@ describe("UpgradeModal — open state", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    render(<UpgradeModal open={true} onClose={onClose} />);
+    renderModal(true, onClose);
   });
 
   it("renders the heading", () => {
