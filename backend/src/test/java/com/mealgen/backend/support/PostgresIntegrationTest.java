@@ -3,18 +3,19 @@ package com.mealgen.backend.support;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-
-@Testcontainers
 public abstract class PostgresIntegrationTest {
 
-    @Container
     protected static final PostgreSQLContainer<?> POSTGRES =
             new PostgreSQLContainer<>("pgvector/pgvector:pg18")
                     .withDatabaseName("mealgen_test")
                     .withUsername("meal_user")
                     .withPassword("test-password");
+
+    static {
+        // Spring caches the @DataJpaTest application context across subclasses.
+        // Keep its datasource target alive for the entire test JVM as well.
+        POSTGRES.start();
+    }
 
     @DynamicPropertySource
     static void postgresProperties(DynamicPropertyRegistry registry) {

@@ -18,6 +18,7 @@ export type SseHandler = (event: SseEvent) => void;
 export type StreamMealPlanOptions = {
   store: string;
   days: number;
+  idempotencyKey: string;
   onEvent: SseHandler;
   signal?: AbortSignal;
 };
@@ -39,7 +40,10 @@ export async function streamMealPlan(
   const res = await fetch(url.toString(), {
     method: "POST",
     credentials: "include",
-    headers: { Accept: "text/event-stream" },
+    headers: {
+      Accept: "text/event-stream",
+      "Idempotency-Key": opts.idempotencyKey,
+    },
     signal: opts.signal,
   });
 

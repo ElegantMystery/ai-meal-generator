@@ -41,6 +41,13 @@ type MealPlan = {
 
 type StoreOption = "TRADER_JOES" | "WHOLE_FOODS";
 
+type GenerationStatus = {
+  id: string;
+  status: "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "ABANDONED";
+  failureCode: string | null;
+  mealPlanId: number | null;
+};
+
 // Type guard for quota exceeded errors — handles both Axios and fetch/SSE error shapes
 function isQuotaExceeded(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
@@ -70,6 +77,38 @@ function isQuotaExceeded(err: unknown): boolean {
   return false;
 }
 
+async function waitForGeneration(
+  requestId: string,
+  signal: AbortSignal,
+): Promise<GenerationStatus> {
+  const deadline = Date.now() + 2 * 60 * 1000;
+  while (Date.now() < deadline) {
+    const response = await api.get<GenerationStatus>(
+      `/api/mealplans/generation-requests/${requestId}`,
+      { signal },
+    );
+    if (
+      response.data.status === "SUCCEEDED" ||
+      response.data.status === "FAILED" ||
+      response.data.status === "ABANDONED"
+    ) {
+      return response.data;
+    }
+    await new Promise<void>((resolve, reject) => {
+      const onAbort = () => {
+        window.clearTimeout(timeout);
+        reject(new DOMException("Aborted", "AbortError"));
+      };
+      const timeout = window.setTimeout(() => {
+        signal.removeEventListener("abort", onAbort);
+        resolve();
+      }, 1500);
+      signal.addEventListener("abort", onAbort, { once: true });
+    });
+  }
+  throw new Error("Generation status recovery timed out");
+}
+
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
   const preferencesVersion = useAuthStore((s) => s.preferencesVersion);
@@ -96,6 +135,9 @@ export default function DashboardPage() {
   const [days, setDays] = useState<number>(7);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const generationKeyRef = useRef<string | null>(null);
+  const generationStatusRef = useRef<GenerationStatus | null>(null);
+  const recoveryHandledRef = useRef(false);
 
   // Cancel any in-flight SSE stream when the component unmounts
   useEffect(() => {
@@ -103,6 +145,69 @@ export default function DashboardPage() {
       abortControllerRef.current?.abort();
     };
   }, []);
+
+  // A page refresh or lost SSE connection must not make the result unknowable.
+  // Resume from the durable backend request and load the saved plan when ready.
+  useEffect(() => {
+    if (recoveryHandledRef.current) return;
+    recoveryHandledRef.current = true;
+    const raw = localStorage.getItem("activeMealPlanGeneration");
+    if (!raw) return;
+
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const active = JSON.parse(raw) as {
+          idempotencyKey: string;
+          requestId?: string;
+        };
+        generationKeyRef.current = active.idempotencyKey;
+        setCreatingAi(true);
+        setAiStatus("Recovering your meal plan…");
+        const initial = active.requestId
+          ? null
+          : (
+              await api.get<GenerationStatus>(
+                "/api/mealplans/generation-requests",
+                {
+                  params: { idempotencyKey: active.idempotencyKey },
+                  signal: controller.signal,
+                },
+              )
+            ).data;
+        const requestId = active.requestId ?? initial?.id;
+        if (!requestId) throw new Error("Generation request was not created");
+        const status =
+          initial?.status === "SUCCEEDED" ||
+          initial?.status === "FAILED" ||
+          initial?.status === "ABANDONED"
+            ? initial
+            : await waitForGeneration(requestId, controller.signal);
+        if (status.status === "SUCCEEDED" && status.mealPlanId) {
+          const plan = (await api.get<MealPlan>(`/api/mealplans/${status.mealPlanId}`)).data;
+          setMealplans((previous) =>
+            previous.some((candidate) => candidate.id === plan.id)
+              ? previous
+              : [plan, ...previous],
+          );
+          await refetchSubscription();
+        } else {
+          setError("The previous AI meal-plan generation did not complete.");
+        }
+        generationKeyRef.current = null;
+        localStorage.removeItem("activeMealPlanGeneration");
+      } catch (recoveryError) {
+        if (!(recoveryError instanceof Error && recoveryError.name === "AbortError")) {
+          setError("Unable to recover the previous AI meal-plan generation.");
+        }
+      } finally {
+        setCreatingAi(false);
+        setAiStatus("");
+      }
+    })();
+
+    return () => controller.abort();
+  }, [refetchSubscription]);
 
   // Handle ?upgrade=success — poll for PRO status until webhook is processed
   const upgradeHandledRef = useRef(false);
@@ -231,11 +336,19 @@ export default function DashboardPage() {
     // Heuristic progress: each tool call nudges the bar forward up to 89 %.
     let toolCalls = 0;
     let saved: MealPlan | null = null;
+    generationStatusRef.current = null;
+    const idempotencyKey = generationKeyRef.current ?? crypto.randomUUID();
+    generationKeyRef.current = idempotencyKey;
+    localStorage.setItem(
+      "activeMealPlanGeneration",
+      JSON.stringify({ idempotencyKey, store, days }),
+    );
 
     try {
       await streamMealPlan({
         store,
         days,
+        idempotencyKey,
         signal: controller.signal,
         onEvent: (ev) => {
           const data = (ev.data ?? {}) as {
@@ -247,6 +360,16 @@ export default function DashboardPage() {
           };
 
           switch (ev.event) {
+            case "generation_status":
+              generationStatusRef.current = ev.data as GenerationStatus;
+              localStorage.setItem(
+                "activeMealPlanGeneration",
+                JSON.stringify({
+                  idempotencyKey,
+                  requestId: generationStatusRef.current.id,
+                }),
+              );
+              break;
             case "phase":
               if (data.message) setAiStatus(data.message);
               break;
@@ -278,8 +401,26 @@ export default function DashboardPage() {
         },
       });
 
+      // The SSE callback mutates the ref asynchronously; keep the explicit union
+      // because TypeScript cannot infer callback side effects across the await.
+      const generation = generationStatusRef.current as GenerationStatus | null;
+      if (!saved && generation) {
+        const recovered = await waitForGeneration(generation.id, controller.signal);
+        if (recovered.status === "SUCCEEDED" && recovered.mealPlanId) {
+          saved = (
+            await api.get<MealPlan>(`/api/mealplans/${recovered.mealPlanId}`)
+          ).data;
+        } else if (recovered.status === "FAILED" || recovered.status === "ABANDONED") {
+          generationKeyRef.current = null;
+          localStorage.removeItem("activeMealPlanGeneration");
+          throw new Error(recovered.failureCode ?? "Generation failed");
+        }
+      }
+
       if (saved) {
         setMealplans((prev) => [saved as MealPlan, ...prev]);
+        generationKeyRef.current = null;
+        localStorage.removeItem("activeMealPlanGeneration");
         await refetchSubscription();
       } else {
         throw new Error("Stream ended without a saved meal plan");
