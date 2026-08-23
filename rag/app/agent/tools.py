@@ -164,6 +164,7 @@ class ToolContext:
     store: str
     days: int
     start_date: str
+    request_id: str = "unknown"
     dietary_restriction: Optional[str] = None
     plan_doc: Optional[MealPlanDoc] = None
     submitted: bool = False
@@ -184,8 +185,9 @@ def dispatch(name: str, args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any
     """
     Run the named tool. Returns a JSON-safe dict.
 
-    Tools must never raise — caller-visible errors are returned as
-    {'error': '...'} so the agent can react instead of the loop crashing.
+    Expected input/plan errors are returned as JSON so the agent can repair
+    them. Unexpected database or implementation failures propagate to the
+    runner, which emits the stable public generation-error contract.
     """
     ctx.tool_call_count += 1
     try:
@@ -206,8 +208,10 @@ def dispatch(name: str, args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any
             return _submit_plan(args, ctx)
         return {"error": f"unknown tool: {name}"}
     except Exception as e:
-        logger.exception("Tool %s raised", name)
-        return {"error": f"{type(e).__name__}: {e}"}
+        logger.exception(
+            "generation_tool_failed tool=%s requestId=%s", name, ctx.request_id
+        )
+        raise
 
 
 # ---------------------------------------------------------------------------

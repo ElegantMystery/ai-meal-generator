@@ -20,6 +20,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 from anthropic import Anthropic, APIError
 
 from .. import config
+from ..generation_errors import GenerationErrorCode, classify_generation_error, public_error
 from ..models import GenerateRequest
 from .prompt import SYSTEM_PROMPT
 from .tools import TOOL_DEFINITIONS, ToolContext, dispatch
@@ -273,19 +274,22 @@ async def run_agent(req: GenerateRequest) -> AsyncIterator[Event]:
       - ('complete', {title, startDate, endDate, planJson})
       - ('error', {code, message})
     """
+    request_id = req.requestId or str(uuid.uuid4())
     if not config.MINIMAX_API_KEY:
-        yield ("error", {"code": "config", "message": "MINIMAX_API_KEY not set"})
+        logger.error("generation_failed code=%s requestId=%s", GenerationErrorCode.CONFIGURATION, request_id)
+        yield ("error", public_error(GenerationErrorCode.CONFIGURATION, request_id))
         return
 
     prefs = req.preferences.model_dump() if req.preferences else {}
     start = date.today()
     end = start + timedelta(days=req.days - 1)
-    rag_id = str(uuid.uuid4())
+    rag_id = request_id
 
     ctx = ToolContext(
         store=req.store,
         days=req.days,
         start_date=str(start),
+        request_id=request_id,
         dietary_restriction=prefs.get("dietaryRestrictions"),
     )
 
@@ -327,10 +331,14 @@ async def run_agent(req: GenerateRequest) -> AsyncIterator[Event]:
                 messages=messages,
             )
         except APIError as e:
-            yield ("error", {"code": "anthropic_api_error", "message": f"{type(e).__name__}: {e}"})
+            code = classify_generation_error(e)
+            logger.exception("generation_failed code=%s requestId=%s", code, request_id)
+            yield ("error", public_error(code, request_id))
             return
         except Exception as e:
-            yield ("error", {"code": "agent_loop_failure", "message": str(e)})
+            code = classify_generation_error(e)
+            logger.exception("generation_failed code=%s requestId=%s", code, request_id)
+            yield ("error", public_error(code, request_id))
             return
 
         # Normalise: replace any XML text tool calls with synthetic tool_use blocks.
@@ -342,9 +350,15 @@ async def run_agent(req: GenerateRequest) -> AsyncIterator[Event]:
         )
         messages.append({"role": "assistant", "content": [_block_to_dict(b) for b in content]})
 
-        turn_events, tool_results, current_phase, should_stop = await _process_turn(
-            content, resp.stop_reason, ctx, current_phase
-        )
+        try:
+            turn_events, tool_results, current_phase, should_stop = await _process_turn(
+                content, resp.stop_reason, ctx, current_phase
+            )
+        except Exception as e:
+            code = classify_generation_error(e)
+            logger.exception("generation_failed code=%s requestId=%s", code, request_id)
+            yield ("error", public_error(code, request_id))
+            return
         for event in turn_events:
             yield event
 
@@ -357,8 +371,7 @@ async def run_agent(req: GenerateRequest) -> AsyncIterator[Event]:
         yield (
             "error",
             {
-                "code": "no_plan_submitted",
-                "message": "Agent loop ended without a valid plan",
+                **public_error(GenerationErrorCode.VALIDATION, request_id),
                 "turnsUsed": turns_used,
                 "toolCalls": ctx.tool_call_count,
             },

@@ -57,7 +57,10 @@ parallel requests can all pass the limit and incur model costs.
 - [x] Add a PostgreSQL-backed concurrency test that issues more requests than the
       remaining quota. Eight simultaneous reservations against two remaining
       slots now prove that PostgreSQL accepts exactly two and caps usage at three.
-- [ ] Add metrics/logging for reservation, completion, rejection, and release.
+- [x] Add metrics/logging for reservation, completion, rejection, and release.
+      `mealgen.generation.quota.events` uses bounded `outcome` and `tier` tags;
+      structured lifecycle logs contain internal user IDs only. Transactional
+      completions emit after commit, while rollbacks emit releases.
 
 Acceptance criteria:
 
@@ -108,7 +111,9 @@ Relevant code:
 - [x] Make deployment depend on every required quality job.
 - [x] Remove `-DskipTests` from the release path or guarantee that an identical
       source revision passed tests before image publication.
-- [ ] Use immutable action/image/dependency versions where appropriate.
+- [x] Use immutable action/image/dependency versions where appropriate. GitHub
+      Actions are pinned to full commit SHAs, third-party build/runtime images
+      are pinned to multi-platform manifest digests, and CI rejects regressions.
 - [x] Prevent direct production deployment when any matrix build or test fails.
 
 Acceptance criteria:
@@ -147,7 +152,7 @@ Observed on 2026-08-19:
 - [x] Record stable local and CI commands in the root README.
 
 Verification on 2026-08-20: frontend 19 suites / 193 tests, ESLint, and the
-Next.js production build passed; backend 85 tests passed; RAG 94 tests passed.
+Next.js production build passed; backend 89 tests passed; RAG 94 tests passed.
 
 Acceptance criteria:
 
@@ -188,11 +193,11 @@ Relevant code:
 
 ### AUD-007 — Restore Flyway migration validation
 
-- [ ] Audit production schema history and explain why checksums were set to zero.
-- [ ] Back up schema history before any repair operation.
-- [ ] Reconcile the production history with immutable migration files.
-- [ ] Re-enable `validate-on-migrate` in production.
-- [ ] Add CI validation against a disposable PostgreSQL/pgvector database.
+- [x] Audit production schema history and explain why checksums were set to zero.
+- [x] Back up schema history before any repair operation.
+- [x] Reconcile the production history with immutable migration files.
+- [x] Re-enable `validate-on-migrate` in production.
+- [x] Add CI validation against a disposable PostgreSQL/pgvector database.
 
 Acceptance criteria:
 
@@ -206,10 +211,13 @@ Relevant code:
 
 ### AUD-008 — Sanitize public generation errors
 
-- [ ] Define stable public error codes and user-safe messages.
-- [ ] Keep provider/SDK exception text only in structured server logs.
-- [ ] Include a request/correlation ID in logs and safe client errors.
-- [ ] Test Anthropic API, database, validation, timeout, and unexpected failures.
+- [x] Define stable public error codes and user-safe messages. Generation SSE
+      errors use bounded `GENERATION_*` codes with fixed public text.
+- [x] Keep provider/SDK exception text only in structured server logs.
+- [x] Include a request/correlation ID in logs and safe client errors. The
+      backend-generated ID is forwarded to RAG, returned as `X-Request-ID`, and
+      included in every terminal error event.
+- [x] Test Anthropic API, database, validation, timeout, and unexpected failures.
 
 Relevant code:
 

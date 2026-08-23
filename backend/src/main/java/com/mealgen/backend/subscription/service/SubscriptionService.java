@@ -19,6 +19,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.time.Clock;
@@ -39,6 +41,7 @@ public class SubscriptionService {
     private final SubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
     private final Clock clock;
+    private final QuotaObservability quotaObservability;
 
     @Value("${stripe.secret-key}")
     private String stripeSecretKey;
@@ -88,23 +91,79 @@ public class SubscriptionService {
     @Transactional
     public QuotaReservation reserveGeneration(User user) {
         if (getTier(user.getId()) == SubscriptionTier.PRO) {
-            return QuotaReservation.unlimited();
+            QuotaReservation reservation = QuotaReservation.unlimited();
+            quotaObservability.reserved(user.getId(), reservation);
+            observeTransactionRollback(user.getId(), reservation);
+            return reservation;
         }
 
         LocalDate periodStart = currentQuotaPeriod();
         int updated = userRepository.reserveFreeGeneration(
                 user.getId(), periodStart, FREE_PLAN_LIMIT);
         if (updated == 0) {
+            quotaObservability.rejected(user.getId());
             throw new QuotaExceededException();
         }
-        return QuotaReservation.free(periodStart);
+        QuotaReservation reservation = QuotaReservation.free(periodStart);
+        quotaObservability.reserved(user.getId(), reservation);
+        observeTransactionRollback(user.getId(), reservation);
+        return reservation;
     }
 
     @Transactional
     public void releaseGeneration(Long userId, QuotaReservation reservation) {
-        if (reservation != null && reservation.consumesFreeQuota()) {
-            userRepository.releaseFreeGeneration(userId, reservation.periodStart());
+        releaseGeneration(userId, reservation, "stream_terminated");
+    }
+
+    @Transactional
+    public void releaseGeneration(
+            Long userId,
+            QuotaReservation reservation,
+            String reason
+    ) {
+        if (reservation == null) {
+            return;
         }
+        if (reservation.consumesFreeQuota()) {
+            int updated = userRepository.releaseFreeGeneration(userId, reservation.periodStart());
+            if (updated == 1) {
+                quotaObservability.released(userId, reservation, reason);
+            } else {
+                quotaObservability.releaseMissed(userId, reservation, reason);
+            }
+        } else {
+            quotaObservability.released(userId, reservation, reason);
+        }
+    }
+
+    public void completeGeneration(Long userId, QuotaReservation reservation) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            quotaObservability.completed(userId, reservation);
+                        }
+                    });
+        } else {
+            quotaObservability.completed(userId, reservation);
+        }
+    }
+
+    private void observeTransactionRollback(Long userId, QuotaReservation reservation) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCompletion(int status) {
+                        if (status == TransactionSynchronization.STATUS_ROLLED_BACK) {
+                            quotaObservability.released(
+                                    userId, reservation, "transaction_rollback");
+                        }
+                    }
+                });
     }
 
     private int usageInCurrentPeriod(User user) {

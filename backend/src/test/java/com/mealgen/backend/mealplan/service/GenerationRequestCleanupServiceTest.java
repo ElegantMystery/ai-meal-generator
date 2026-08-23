@@ -4,6 +4,7 @@ import com.mealgen.backend.auth.model.User;
 import com.mealgen.backend.mealplan.model.GenerationRequest;
 import com.mealgen.backend.mealplan.model.GenerationRequestStatus;
 import com.mealgen.backend.mealplan.repository.GenerationRequestRepository;
+import com.mealgen.backend.subscription.service.QuotaReservation;
 import com.mealgen.backend.subscription.service.SubscriptionService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -49,7 +50,28 @@ class GenerationRequestCleanupServiceTest {
         assertThat(request.getStatus()).isEqualTo(GenerationRequestStatus.ABANDONED);
         assertThat(request.getFailureCode()).isEqualTo("GENERATION_ABANDONED");
         assertThat(request.isQuotaConsumed()).isFalse();
-        verify(subscriptionService).releaseGeneration(eq(9L), any());
+        verify(subscriptionService).releaseGeneration(eq(9L), any(), eq("stale_cleanup"));
         verify(repository).deleteCompletedBefore(anyList(), any());
+    }
+
+    @Test
+    void cleanup_recordsReleaseForStaleRunningProRequest() {
+        User user = User.builder().id(10L).email("pro@example.com").build();
+        GenerationRequest request = GenerationRequest.builder()
+                .user(user)
+                .status(GenerationRequestStatus.RUNNING)
+                .quotaConsumed(false)
+                .build();
+        GenerationRequestCleanupService service = new GenerationRequestCleanupService(
+                repository, subscriptionService,
+                Clock.fixed(Instant.parse("2026-08-22T12:00:00Z"), ZoneOffset.UTC));
+        ReflectionTestUtils.setField(service, "staleAfter", Duration.ofMinutes(30));
+        ReflectionTestUtils.setField(service, "retention", Duration.ofDays(30));
+        when(repository.lockStale(anyList(), any(), any())).thenReturn(List.of(request));
+
+        service.cleanup();
+
+        verify(subscriptionService).releaseGeneration(
+                10L, QuotaReservation.unlimited(), "stale_cleanup");
     }
 }

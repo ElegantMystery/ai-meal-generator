@@ -90,9 +90,10 @@ class GenerationRequestServiceTest {
         QuotaReservation reservation = QuotaReservation.free(LocalDate.of(2026, 8, 1));
         when(repository.markFailed(eq(id), eq("GENERATION_FAILED"), any())).thenReturn(1);
 
-        assertThat(service.fail(id, user.getId(), reservation, "GENERATION_FAILED")).isTrue();
+        assertThat(service.fail(
+                id, user.getId(), reservation, "GENERATION_FAILED", "transport_error")).isTrue();
 
-        verify(subscriptionService).releaseGeneration(user.getId(), reservation);
+        verify(subscriptionService).releaseGeneration(user.getId(), reservation, "transport_error");
     }
 
     private GenerationRequest request(String key, String fingerprint) {

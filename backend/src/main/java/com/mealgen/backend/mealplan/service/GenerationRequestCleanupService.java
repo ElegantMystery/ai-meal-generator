@@ -48,15 +48,20 @@ public class GenerationRequestCleanupService {
         List<GenerationRequest> stale = repository.lockStale(
                 ACTIVE_STATUSES, now.minus(staleAfter), PageRequest.of(0, BATCH_SIZE));
         for (GenerationRequest request : stale) {
+            boolean hadReservation = request.getStatus() == GenerationRequestStatus.RUNNING;
             request.setStatus(GenerationRequestStatus.ABANDONED);
             request.setFailureCode(ABANDONED_CODE);
             request.setCompletedAt(now);
             request.setUpdatedAt(now);
             if (request.isQuotaConsumed()) {
                 subscriptionService.releaseGeneration(
-                        request.getUser().getId(), QuotaReservation.free(request.getQuotaPeriodStart()));
+                        request.getUser().getId(), QuotaReservation.free(request.getQuotaPeriodStart()),
+                        "stale_cleanup");
                 request.setQuotaConsumed(false);
                 request.setQuotaPeriodStart(null);
+            } else if (hadReservation) {
+                subscriptionService.releaseGeneration(
+                        request.getUser().getId(), QuotaReservation.unlimited(), "stale_cleanup");
             }
         }
         int deleted = repository.deleteCompletedBefore(TERMINAL_STATUSES, now.minus(retention));

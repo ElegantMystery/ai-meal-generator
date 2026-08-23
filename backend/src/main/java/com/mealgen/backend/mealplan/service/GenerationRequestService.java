@@ -58,11 +58,12 @@ public class GenerationRequestService {
             UUID id,
             Long userId,
             QuotaReservation reservation,
-            String failureCode
+            String failureCode,
+            String releaseReason
     ) {
         boolean transitioned = repository.markFailed(id, failureCode, now()) == 1;
         if (transitioned) {
-            subscriptionService.releaseGeneration(userId, reservation);
+            subscriptionService.releaseGeneration(userId, reservation, releaseReason);
         }
         return transitioned;
     }

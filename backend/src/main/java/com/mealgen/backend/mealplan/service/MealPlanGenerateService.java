@@ -11,6 +11,7 @@ import com.mealgen.backend.mealplan.repository.MealPlanRepository;
 import com.mealgen.backend.preferences.model.UserPreferences;
 import com.mealgen.backend.preferences.repository.UserPreferencesRepository;
 import com.mealgen.backend.subscription.service.SubscriptionService;
+import com.mealgen.backend.subscription.service.QuotaReservation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,7 +37,7 @@ public class MealPlanGenerateService {
                 .orElseThrow(() -> new IllegalStateException("User not found for email: " + email));
 
         // Joins this transaction: any later failure rolls the reservation back.
-        subscriptionService.reserveGeneration(user);
+        QuotaReservation reservation = subscriptionService.reserveGeneration(user);
 
         UserPreferences prefs = preferencesRepository.findByUserId(user.getId()).orElse(null);
 
@@ -127,6 +128,8 @@ public class MealPlanGenerateService {
                 .endDate(end)
                 .planJson(planJson)
                 .build());
+
+        subscriptionService.completeGeneration(user.getId(), reservation);
 
         return MealPlanResponse.builder()
                 .id(saved.getId())
