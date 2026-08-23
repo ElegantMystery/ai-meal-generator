@@ -308,10 +308,13 @@ correlation, alarm, and sensitive-log conventions.
 
 ### AUD-013 — Pin and automate Python dependency updates
 
-- [ ] Pin direct and transitive Python dependencies using a reproducible lock or
+- [x] Pin direct and transitive Python dependencies using a reproducible lock or
       constraints workflow.
-- [ ] Add automated vulnerability and update checks.
-- [ ] Verify deterministic RAG image builds.
+- [x] Add automated vulnerability and update checks.
+- [x] Verify deterministic RAG image builds.
+
+Implemented on 2026-08-23. See `docs/python-dependencies.md` for the lock update,
+security audit, and image reproducibility workflow.
 
 Relevant code:
 

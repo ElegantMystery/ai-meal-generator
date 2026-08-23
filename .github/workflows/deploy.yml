@@ -110,9 +110,24 @@ jobs:
             rag/requirements.txt
             rag/requirements-test.txt
       - name: Install dependencies
-        run: python -m pip install -r rag/requirements-test.txt
+        run: python -m pip install --require-hashes -r rag/requirements-test.txt
+      - name: Audit Python dependencies
+        run: pip-audit -r rag/requirements.txt
+      - name: Verify Python lock files are current
+        working-directory: rag
+        run: |
+          pip-compile --generate-hashes --strip-extras --resolver=backtracking --output-file=requirements.txt requirements.in
+          pip-compile --allow-unsafe --generate-hashes --strip-extras --resolver=backtracking --output-file=requirements-test.txt requirements-test.in
+          git diff --exit-code -- requirements.txt requirements-test.txt
       - name: Run RAG tests
+        env:
+          RAG_ENV: test
+          RAG_SHARED_SECRET: test-secret
+          OPENAI_API_KEY: test-key
+          MINIMAX_API_KEY: test-key
         run: python -m pytest rag/tests -q
+      - name: Verify reproducible RAG image dependencies
+        run: bash scripts/check_rag_image_reproducibility.sh
       - name: Test production deployment control flow
         run: bash scripts/deploy/test_deploy_prod.sh
 
