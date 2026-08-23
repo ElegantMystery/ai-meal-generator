@@ -6,6 +6,25 @@ export const apiBaseUrl =
 export const api = axios.create({
   baseURL: apiBaseUrl,
   withCredentials: true,
+  withXSRFToken: true,
+});
+
+let csrfRequest: Promise<void> | null = null;
+
+export async function ensureCsrfToken(): Promise<void> {
+  if (typeof document !== "undefined" && document.cookie.includes("XSRF-TOKEN=")) return;
+  csrfRequest ??= api.get("/api/auth/csrf").then(() => undefined).finally(() => {
+    csrfRequest = null;
+  });
+  await csrfRequest;
+}
+
+api.interceptors.request.use(async (config) => {
+  const method = config.method?.toUpperCase() ?? "GET";
+  if (!["GET", "HEAD", "OPTIONS"].includes(method) && config.url !== "/api/auth/csrf") {
+    await ensureCsrfToken();
+  }
+  return config;
 });
 
 export type SubscriptionStatus = {

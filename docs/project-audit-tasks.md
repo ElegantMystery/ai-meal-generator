@@ -274,14 +274,17 @@ Relevant code:
 
 ### AUD-011 — Review cookie-session and CSRF protection
 
-- [ ] Threat-model every state-changing cookie-authenticated endpoint.
-- [ ] Re-enable Spring Security CSRF protection where applicable or document and
+- [x] Threat-model every state-changing cookie-authenticated endpoint.
+- [x] Re-enable Spring Security CSRF protection where applicable or document and
       test an equivalent origin/token defense.
-- [ ] Keep the Stripe webhook outside browser CSRF protection while retaining
+- [x] Keep the Stripe webhook outside browser CSRF protection while retaining
       signature verification.
-- [ ] Verify production cookie Secure, HttpOnly, SameSite, domain, and lifetime
+- [x] Verify production cookie Secure, HttpOnly, SameSite, domain, and lifetime
       behavior.
-- [ ] Add cross-origin request tests.
+- [x] Add cross-origin request tests.
+
+Implemented on 2026-08-23. See `docs/security/csrf-threat-model.md` for the
+endpoint inventory, browser token flow, cookie policy, and Stripe exception.
 
 Relevant code:
 
