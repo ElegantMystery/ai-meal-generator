@@ -43,7 +43,7 @@ public class UserPreferencesController {
             return email.toString();
         }
 
-        // Handle local users (email/password login) - principal is the email string
+        // String principals remain supported for controller-level test authentication.
         if (principal instanceof String email) {
             return email;
         }
