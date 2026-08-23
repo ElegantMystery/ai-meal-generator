@@ -13,7 +13,6 @@ from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
 import pytest
-import httpx
 from anthropic import APIError
 from psycopg import OperationalError
 
@@ -295,7 +294,7 @@ def test_run_agent_sanitizes_anthropic_api_failure(monkeypatch):
     monkeypatch.setattr(runner_mod.config, "MINIMAX_API_KEY", "fake-key")
     fake_client = MagicMock()
     fake_client.messages.create.side_effect = APIError(
-        "provider secret response", httpx.Request("POST", "https://provider.invalid"), body=None
+        "provider secret response", MagicMock(), body=None
     )
 
     with patch.object(runner_mod, "Anthropic", return_value=fake_client):
