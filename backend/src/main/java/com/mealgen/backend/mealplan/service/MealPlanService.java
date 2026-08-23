@@ -18,14 +18,20 @@ import com.mealgen.backend.subscription.service.SubscriptionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Flux;
 
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -33,6 +39,17 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Slf4j
 @RequiredArgsConstructor
 public class MealPlanService {
+
+    private static final String CONFIGURATION_ERROR = "GENERATION_CONFIGURATION_ERROR";
+    private static final String PROVIDER_ERROR = "GENERATION_PROVIDER_UNAVAILABLE";
+    private static final String DATABASE_ERROR = "GENERATION_DATABASE_UNAVAILABLE";
+    private static final String VALIDATION_ERROR = "GENERATION_VALIDATION_FAILED";
+    private static final String TIMEOUT_ERROR = "GENERATION_TIMEOUT";
+    private static final String INTERNAL_ERROR = "GENERATION_INTERNAL_ERROR";
+    private static final Set<String> PUBLIC_ERROR_CODES = Set.of(
+            CONFIGURATION_ERROR, PROVIDER_ERROR, DATABASE_ERROR,
+            VALIDATION_ERROR, TIMEOUT_ERROR, INTERNAL_ERROR
+    );
 
     private final UserRepository userRepository;
     private final UserPreferencesRepository preferencesRepository;
@@ -141,7 +158,9 @@ public class MealPlanService {
         preferences.put("targetCaloriesPerDay", prefs == null ? null : prefs.getTargetCaloriesPerDay());
 
         Map<String, Object> payload = new LinkedHashMap<>();
+        String requestId = UUID.randomUUID().toString();
         payload.put("userId", user.getId());
+        payload.put("requestId", requestId);
         payload.put("store", store);
         payload.put("days", days);
         payload.put("preferences", preferences);
@@ -165,6 +184,7 @@ public class MealPlanService {
                         }
                     } else if ("error".equals(eventName)) {
                         releaseReservation(user.getId(), reservation, quotaSettled, "agent_error");
+                        return sanitizeUpstreamError(rawData, requestId);
                     }
                     return forwardSse(sse);
                 })
@@ -177,8 +197,9 @@ public class MealPlanService {
                 }))
                 .onErrorResume(err -> {
                     releaseReservation(user.getId(), reservation, quotaSettled, "transport_error");
-                    log.error("Streaming generate-ai failed", err);
-                    return Flux.just(errorEvent(err));
+                    String code = errorCode(err);
+                    log.error("generation_failed code={} requestId={}", code, requestId, err);
+                    return Flux.just(errorEvent(code, requestId));
                 })
                 .doOnCancel(() -> releaseReservation(
                         user.getId(), reservation, quotaSettled, "client_cancelled"))
@@ -215,23 +236,67 @@ public class MealPlanService {
         }
     }
 
-    private ServerSentEvent<String> errorEvent(Throwable err) {
+    private ServerSentEvent<String> sanitizeUpstreamError(String rawData, String requestId) {
+        String code = INTERNAL_ERROR;
+        if (rawData != null) {
+            try {
+                String candidate = objectMapper.readTree(rawData).path("code").asText();
+                if (PUBLIC_ERROR_CODES.contains(candidate)) {
+                    code = candidate;
+                }
+            } catch (Exception e) {
+                log.warn("invalid_generation_error requestId={}", requestId, e);
+            }
+        }
+        return errorEvent(code, requestId);
+    }
+
+    private ServerSentEvent<String> errorEvent(String code, String requestId) {
         ObjectNode node = JsonNodeFactory.instance.objectNode();
-        node.put("code", "stream_error");
-        node.put("message", safeErrorMessage(err));
+        node.put("code", code);
+        node.put("message", safeErrorMessage(code));
+        node.put("requestId", requestId);
         return ServerSentEvent.<String>builder()
                 .event("error")
                 .data(node.toString())
                 .build();
     }
 
-    private static String safeErrorMessage(Throwable err) {
-        if (err instanceof org.springframework.web.reactive.function.client.WebClientResponseException wce) {
-            return "Upstream service error (" + wce.getStatusCode().value() + ")";
+    private static String errorCode(Throwable err) {
+        if (hasCause(err, TimeoutException.class)) {
+            return TIMEOUT_ERROR;
         }
-        if (err instanceof IllegalArgumentException) {
-            return err.getMessage();
+        if (hasCause(err, WebClientRequestException.class)
+                || hasCause(err, WebClientResponseException.class)) {
+            return PROVIDER_ERROR;
         }
-        return "An unexpected error occurred. Please try again.";
+        if (hasCause(err, DataAccessException.class)) {
+            return DATABASE_ERROR;
+        }
+        if (hasCause(err, com.fasterxml.jackson.core.JsonProcessingException.class)
+                || hasCause(err, IllegalArgumentException.class)) {
+            return VALIDATION_ERROR;
+        }
+        return INTERNAL_ERROR;
+    }
+
+    private static boolean hasCause(Throwable err, Class<? extends Throwable> type) {
+        Throwable current = err;
+        while (current != null) {
+            if (type.isInstance(current)) return true;
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private static String safeErrorMessage(String code) {
+        return switch (code) {
+            case CONFIGURATION_ERROR -> "Meal plan generation is temporarily unavailable.";
+            case PROVIDER_ERROR -> "The meal planner is temporarily unavailable. Please try again.";
+            case DATABASE_ERROR -> "Meal data is temporarily unavailable. Please try again.";
+            case VALIDATION_ERROR -> "The generated meal plan was invalid. Please try again.";
+            case TIMEOUT_ERROR -> "Meal plan generation timed out. Please try again.";
+            default -> "Meal plan generation failed. Please try again.";
+        };
     }
 }

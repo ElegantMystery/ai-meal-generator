@@ -1,5 +1,7 @@
 package com.mealgen.backend.mealplan.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mealgen.backend.auth.model.User;
 import com.mealgen.backend.auth.repository.UserRepository;
 import com.mealgen.backend.mealplan.ai.RagClient;
@@ -13,13 +15,21 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Flux;
 
 import java.time.LocalDate;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeoutException;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -69,14 +79,27 @@ class MealPlanServiceQuotaTest {
     void agentErrorEvent_releasesReservationAndTerminatesProtocol() {
         arrangeReservation();
         when(ragClient.streamGenerate(any())).thenReturn(Flux.just(
-                event("error", "{\"code\":\"failed\"}"),
+                event("error", "{\"code\":\"GENERATION_PROVIDER_UNAVAILABLE\","
+                        + "\"message\":\"raw provider secret\",\"requestId\":\"wrong\"}"),
                 event("complete", "{\"title\":\"must not persist\"}")
         ));
 
-        service.streamGenerateAi(user.getEmail(), "TRADER_JOES", 7).collectList().block();
+        List<ServerSentEvent<String>> events = service.streamGenerateAi(
+                user.getEmail(), "TRADER_JOES", 7).collectList().block();
 
         verify(subscriptionService).releaseGeneration(user.getId(), reservation, "agent_error");
         verify(persistenceService, never()).persistFromComplete(any(), any());
+        JsonNode error = json(events.getFirst().data());
+        assertThat(error.path("code").asText()).isEqualTo("GENERATION_PROVIDER_UNAVAILABLE");
+        assertThat(error.path("message").asText())
+                .isEqualTo("The meal planner is temporarily unavailable. Please try again.");
+        assertThat(error.path("message").asText()).doesNotContain("secret");
+        assertThat(error.path("requestId").asText()).isNotBlank().isNotEqualTo("wrong");
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> payload = ArgumentCaptor.forClass(Map.class);
+        verify(ragClient).streamGenerate(payload.capture());
+        assertThat(payload.getValue().get("requestId"))
+                .isEqualTo(error.path("requestId").asText());
     }
 
     @Test
@@ -84,9 +107,68 @@ class MealPlanServiceQuotaTest {
         arrangeReservation();
         when(ragClient.streamGenerate(any())).thenReturn(Flux.error(new RuntimeException("upstream")));
 
-        service.streamGenerateAi(user.getEmail(), "TRADER_JOES", 7).collectList().block();
+        List<ServerSentEvent<String>> events = service.streamGenerateAi(
+                user.getEmail(), "TRADER_JOES", 7).collectList().block();
 
         verify(subscriptionService).releaseGeneration(user.getId(), reservation, "transport_error");
+        assertError(events, "GENERATION_INTERNAL_ERROR", "Meal plan generation failed. Please try again.");
+    }
+
+    @Test
+    void providerHttpError_isSanitized() {
+        arrangeReservation();
+        when(ragClient.streamGenerate(any())).thenReturn(Flux.error(
+                WebClientResponseException.create(
+                        502, "provider body contains secret", null, new byte[0], StandardCharsets.UTF_8
+                )
+        ));
+
+        List<ServerSentEvent<String>> events = service.streamGenerateAi(
+                user.getEmail(), "TRADER_JOES", 7).collectList().block();
+
+        assertError(events, "GENERATION_PROVIDER_UNAVAILABLE",
+                "The meal planner is temporarily unavailable. Please try again.");
+    }
+
+    @Test
+    void timeout_isSanitized() {
+        arrangeReservation();
+        when(ragClient.streamGenerate(any())).thenReturn(Flux.error(new TimeoutException("secret timeout")));
+
+        List<ServerSentEvent<String>> events = service.streamGenerateAi(
+                user.getEmail(), "TRADER_JOES", 7).collectList().block();
+
+        assertError(events, "GENERATION_TIMEOUT", "Meal plan generation timed out. Please try again.");
+    }
+
+    @Test
+    void databaseFailure_isSanitized() {
+        arrangeReservation();
+        when(ragClient.streamGenerate(any())).thenReturn(Flux.just(event(
+                "complete",
+                "{\"title\":\"Plan\",\"startDate\":\"2026-08-19\","
+                        + "\"endDate\":\"2026-08-25\",\"planJson\":\"{}\"}"
+        )));
+        when(persistenceService.persistFromComplete(any(), any()))
+                .thenThrow(new DataAccessResourceFailureException("database password leaked"));
+
+        List<ServerSentEvent<String>> events = service.streamGenerateAi(
+                user.getEmail(), "TRADER_JOES", 7).collectList().block();
+
+        assertError(events, "GENERATION_DATABASE_UNAVAILABLE",
+                "Meal data is temporarily unavailable. Please try again.");
+    }
+
+    @Test
+    void invalidCompletePayload_isSanitized() {
+        arrangeReservation();
+        when(ragClient.streamGenerate(any())).thenReturn(Flux.just(event("complete", "not-json-secret")));
+
+        List<ServerSentEvent<String>> events = service.streamGenerateAi(
+                user.getEmail(), "TRADER_JOES", 7).collectList().block();
+
+        assertError(events, "GENERATION_VALIDATION_FAILED",
+                "The generated meal plan was invalid. Please try again.");
     }
 
     @Test
@@ -116,5 +198,25 @@ class MealPlanServiceQuotaTest {
 
     private static ServerSentEvent<String> event(String name, String data) {
         return ServerSentEvent.<String>builder().event(name).data(data).build();
+    }
+
+    private static void assertError(
+            List<ServerSentEvent<String>> events, String code, String message
+    ) {
+        assertThat(events).hasSize(1);
+        JsonNode error = json(events.getFirst().data());
+        assertThat(events.getFirst().event()).isEqualTo("error");
+        assertThat(error.path("code").asText()).isEqualTo(code);
+        assertThat(error.path("message").asText()).isEqualTo(message);
+        assertThat(error.path("requestId").asText()).isNotBlank();
+        assertThat(error.toString()).doesNotContain("secret", "password");
+    }
+
+    private static JsonNode json(String value) {
+        try {
+            return new ObjectMapper().readTree(value);
+        } catch (Exception e) {
+            throw new AssertionError(e);
+        }
     }
 }
