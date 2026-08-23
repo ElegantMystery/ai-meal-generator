@@ -113,6 +113,8 @@ jobs:
         run: python -m pip install -r rag/requirements-test.txt
       - name: Run RAG tests
         run: python -m pytest rag/tests -q
+      - name: Test production deployment control flow
+        run: bash scripts/deploy/test_deploy_prod.sh
 
   # ---------------------------------------------------------------------------
   # Build and push all 3 images to ECR in parallel
@@ -225,7 +227,7 @@ jobs:
             ProxyCommand sh -c "aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters 'portNumber=%p' --region ${{ env.AWS_REGION }}"
           EOF
 
-      # Copy compose file + nginx config + cloudwatch config + scraper scripts to EC2.
+      # Copy compose file + nginx config + cloudwatch config + operational scripts to EC2.
       # Use tar-over-ssh (rsync is not installed on Amazon Linux 2023); relative
       # paths are preserved and extracted under /opt/meal-gen. No clobbering of
       # runtime-only dirs (nginx/certbot certs, nginx-logs) since we only overlay.
@@ -233,7 +235,7 @@ jobs:
         run: |
           tar czf - \
             --exclude='scripts/tj/*.json' --exclude='scripts/tj/*.png' \
-            docker-compose.prod.yml nginx cloudwatch scripts/tj \
+            docker-compose.prod.yml nginx cloudwatch scripts/tj scripts/deploy \
             | ssh "$INSTANCE_ID" 'mkdir -p /opt/meal-gen && tar xzf - -C /opt/meal-gen'
 
       # SSH in (over SSM), pull new images, rolling restart
@@ -250,37 +252,14 @@ jobs:
             aws ecr get-login-password --region us-east-1 | \
               docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
-            echo "==> Updating .env"
-            # Upsert IMAGE_TAG and ECR_REGISTRY in .env
-            update_env() {
-              local key=$1 val=$2
-              if grep -q "^${key}=" .env 2>/dev/null; then
-                sed -i "s|^${key}=.*|${key}=${val}|" .env
-              else
-                echo "${key}=${val}" >> .env
-              fi
-            }
-            update_env IMAGE_TAG     "$IMAGE_TAG"
-            update_env ECR_REGISTRY  "$ECR_REGISTRY"
-
             echo "==> Validating required service secrets"
             if ! grep -Eq '^RAG_SHARED_SECRET=[^[:space:]].*$' .env; then
               echo "RAG_SHARED_SECRET is missing or blank in /opt/meal-gen/.env"
               exit 1
             fi
 
-            echo "==> Pulling new images"
-            docker compose -f docker-compose.prod.yml pull
-
-            echo "==> Rolling restart"
-            # Restart in dependency order; brief sleeps let healthchecks pass
-            docker compose -f docker-compose.prod.yml up -d --no-deps python-rag
-            sleep 15
-            docker compose -f docker-compose.prod.yml up -d --no-deps backend
-            sleep 20
-            docker compose -f docker-compose.prod.yml up -d --no-deps frontend
-            docker compose -f docker-compose.prod.yml up -d --no-deps nginx
-            docker compose -f docker-compose.prod.yml up -d --no-deps certbot
+            echo "==> Deploying with bounded readiness checks and automatic rollback"
+            bash scripts/deploy/deploy_prod.sh "$IMAGE_TAG"
 
             echo "==> Ensuring nginx-logs directory exists"
             mkdir -p /opt/meal-gen/nginx-logs
@@ -307,17 +286,8 @@ jobs:
     needs: deploy
 
     steps:
-      - name: Wait for services to stabilize
-        run: sleep 30
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Check /actuator/health
-        run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            --max-time 10 \
-            "https://whole-haul.com/actuator/health")
-          echo "HTTP status: $STATUS"
-          if [ "$STATUS" != "200" ]; then
-            echo "Health check failed (HTTP $STATUS)"
-            exit 1
-          fi
-          echo "Health check passed"
+      - name: Run production smoke tests
+        run: bash scripts/deploy/smoke_prod.sh https://whole-haul.com "${{ github.sha }}"
