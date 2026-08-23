@@ -153,7 +153,7 @@
             <plugin>
                 <groupId>org.flywaydb</groupId>
                 <artifactId>flyway-maven-plugin</artifactId>
-                <version>7.0.0</version>
+                <version>${flyway.version}</version>
                 <configuration>
                     <url>jdbc:postgresql://localhost:5432/mealgen</url>
                     <user>meal_user</user>
