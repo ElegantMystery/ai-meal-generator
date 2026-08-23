@@ -8,6 +8,8 @@ import com.mealgen.backend.auth.model.User;
 import com.mealgen.backend.auth.repository.UserRepository;
 import com.mealgen.backend.mealplan.dto.MealPlanCreateRequest;
 import com.mealgen.backend.mealplan.dto.MealPlanResponse;
+import com.mealgen.backend.mealplan.dto.GenerationRequestResponse;
+import com.mealgen.backend.mealplan.model.GenerationRequest;
 import com.mealgen.backend.mealplan.model.MealPlan;
 import com.mealgen.backend.mealplan.repository.MealPlanRepository;
 import com.mealgen.backend.mealplan.ai.RagClient;
@@ -34,6 +36,8 @@ import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 
 @Service
 @Slf4j
@@ -55,8 +59,9 @@ public class MealPlanService {
     private final UserPreferencesRepository preferencesRepository;
     private final MealPlanRepository mealPlanRepository;
     private final RagClient ragClient;
-    private final SubscriptionService subscriptionService;
     private final MealPlanPersistenceService mealPlanPersistenceService;
+    private final GenerationRequestService generationRequestService;
+    private final SubscriptionService subscriptionService;
     // ObjectMapper is not exposed as a bean in this Spring Boot 4 setup — instantiate directly.
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -138,17 +143,14 @@ public class MealPlanService {
      * user at limit gets QuotaExceededException synchronously from the
      * controller, not buried in a stream error.
      */
-    public Flux<ServerSentEvent<String>> streamGenerateAi(String email, String store, int days) {
+    public Flux<ServerSentEvent<String>> streamGenerateAi(
+            String email, String store, int days, String idempotencyKey) {
         if (days < 1 || days > 14) {
             throw new IllegalArgumentException("days must be between 1 and 14");
         }
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalStateException("User not found for email: " + email));
-
-        // This commits before the asynchronous stream starts, preventing parallel
-        // FREE requests from all passing the same read/check race.
-        QuotaReservation reservation = subscriptionService.reserveGeneration(user);
 
         UserPreferences prefs = preferencesRepository.findByUserId(user.getId()).orElse(null);
 
@@ -158,64 +160,133 @@ public class MealPlanService {
         preferences.put("targetCaloriesPerDay", prefs == null ? null : prefs.getTargetCaloriesPerDay());
 
         Map<String, Object> payload = new LinkedHashMap<>();
-        String requestId = UUID.randomUUID().toString();
         payload.put("userId", user.getId());
-        payload.put("requestId", requestId);
         payload.put("store", store);
         payload.put("days", days);
         payload.put("preferences", preferences);
 
+        GenerationRequestClaim claim = generationRequestService.claim(
+                user, idempotencyKey, fingerprint(payload));
+        GenerationRequest generationRequest = claim.request();
+        if (!claim.owner()) {
+            return Flux.just(generationStatusEvent(
+                    generationRequestService.getOwned(user, generationRequest.getId())));
+        }
+        String requestId = generationRequest.getId().toString();
+        payload.put("requestId", requestId);
+
+        // Only the owner of the durable request reserves quota. Concurrent retries
+        // with the same key observe the existing request and never call RAG.
+        QuotaReservation reservation;
+        try {
+            reservation = generationRequestService.start(generationRequest.getId(), user);
+        } catch (RuntimeException error) {
+            generationRequestService.markFailed(generationRequest.getId(), failureCode(error));
+            throw error;
+        }
+        payload.put("generationRequestId", generationRequest.getId().toString());
+
         AtomicReference<ServerSentEvent<String>> savedEvent = new AtomicReference<>();
         AtomicBoolean quotaSettled = new AtomicBoolean(false);
 
-        return ragClient.streamGenerate(payload)
-                .map(sse -> {
-                    String eventName = sse.event();
-                    String rawData = sse.data();
-                    if ("complete".equals(eventName) && rawData != null) {
-                        try {
-                            JsonNode data = objectMapper.readTree(rawData);
-                            MealPlanResponse response = mealPlanPersistenceService.persistFromComplete(user, data);
-                            quotaSettled.set(true);
-                            subscriptionService.completeGeneration(user.getId(), reservation);
-                            savedEvent.set(buildSavedEvent(response));
-                        } catch (Exception e) {
-                            throw new IllegalStateException("Failed to parse complete event data", e);
-                        }
-                    } else if ("error".equals(eventName)) {
-                        releaseReservation(user.getId(), reservation, quotaSettled, "agent_error");
-                        return sanitizeUpstreamError(rawData, requestId);
-                    }
-                    return forwardSse(sse);
-                })
-                // complete/error are terminal protocol events. Do not accept a
-                // contradictory later event that could desynchronise quota state.
-                .takeUntil(sse -> "complete".equals(sse.event()) || "error".equals(sse.event()))
-                .concatWith(Flux.defer(() -> {
-                    ServerSentEvent<String> saved = savedEvent.get();
-                    return saved == null ? Flux.empty() : Flux.just(saved);
-                }))
+        return Flux.concat(
+                Flux.defer(() -> Flux.just(generationStatusEvent(
+                        generationRequestService.getOwned(user, generationRequest.getId())))),
+                Flux.defer(() -> ragClient.streamGenerate(payload))
+                        .map(sse -> {
+                            String eventName = sse.event();
+                            String rawData = sse.data();
+                            if ("complete".equals(eventName) && rawData != null) {
+                                try {
+                                    JsonNode data = objectMapper.readTree(rawData);
+                                    MealPlanResponse response = mealPlanPersistenceService.persistFromComplete(
+                                            generationRequest.getId(), user, data);
+                                    quotaSettled.set(true);
+                                    subscriptionService.completeGeneration(user.getId(), reservation);
+                                    savedEvent.set(buildSavedEvent(response));
+                                } catch (Exception e) {
+                                    throw new IllegalStateException("Failed to parse complete event data", e);
+                                }
+                            } else if ("error".equals(eventName)) {
+                                failGeneration(user.getId(), generationRequest.getId(), reservation,
+                                        quotaSettled, "GENERATION_UPSTREAM_ERROR", "agent_error");
+                                return sanitizeUpstreamError(rawData, requestId);
+                            }
+                            return forwardSse(sse);
+                        })
+                        // complete/error are terminal protocol events. Do not accept a
+                        // contradictory later event that could desynchronise quota state.
+                        .takeUntil(sse -> "complete".equals(sse.event()) || "error".equals(sse.event()))
+                        .concatWith(Flux.defer(() -> {
+                            ServerSentEvent<String> saved = savedEvent.get();
+                            return saved == null ? Flux.empty() : Flux.just(saved);
+                        }))
+        )
                 .onErrorResume(err -> {
-                    releaseReservation(user.getId(), reservation, quotaSettled, "transport_error");
+                    failGeneration(user.getId(), generationRequest.getId(), reservation,
+                            quotaSettled, errorCode(err), "transport_error");
                     String code = errorCode(err);
                     log.error("generation_failed code={} requestId={}", code, requestId, err);
                     return Flux.just(errorEvent(code, requestId));
                 })
-                .doOnCancel(() -> releaseReservation(
-                        user.getId(), reservation, quotaSettled, "client_cancelled"))
-                .doOnComplete(() -> releaseReservation(
-                        user.getId(), reservation, quotaSettled, "stream_incomplete"));
+                .doOnCancel(() -> failGeneration(user.getId(), generationRequest.getId(), reservation,
+                        quotaSettled, "GENERATION_CANCELLED", "client_cancelled"))
+                .doOnComplete(() -> {
+                    if (!quotaSettled.get()) {
+                        failGeneration(user.getId(), generationRequest.getId(), reservation,
+                                quotaSettled, "GENERATION_INCOMPLETE", "stream_incomplete");
+                    }
+                });
     }
 
-    private void releaseReservation(
+    public GenerationRequestResponse getGenerationRequest(String email, UUID id) {
+        return generationRequestService.getOwned(getUserByEmail(email), id);
+    }
+
+    public GenerationRequestResponse getGenerationRequest(String email, String idempotencyKey) {
+        return generationRequestService.getOwnedByKey(getUserByEmail(email), idempotencyKey);
+    }
+
+    private void failGeneration(
             Long userId,
+            UUID generationRequestId,
             QuotaReservation reservation,
             AtomicBoolean quotaSettled,
-            String reason
+            String failureCode,
+            String releaseReason
     ) {
         if (quotaSettled.compareAndSet(false, true)) {
-            subscriptionService.releaseGeneration(userId, reservation, reason);
+            generationRequestService.fail(
+                    generationRequestId, userId, reservation, failureCode, releaseReason);
         }
+    }
+
+    private ServerSentEvent<String> generationStatusEvent(GenerationRequestResponse response) {
+        try {
+            return ServerSentEvent.<String>builder()
+                    .event("generation_status")
+                    .data(objectMapper.writeValueAsString(response))
+                    .build();
+        } catch (Exception error) {
+            throw new IllegalStateException("Failed to serialise generation status", error);
+        }
+    }
+
+    private String fingerprint(Map<String, Object> payload) {
+        try {
+            byte[] canonicalPayload = objectMapper.writeValueAsBytes(payload);
+            return HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256").digest(canonicalPayload));
+        } catch (Exception error) {
+            throw new IllegalStateException("Failed to fingerprint generation request", error);
+        }
+    }
+
+    private static String failureCode(Throwable error) {
+        if (error instanceof com.mealgen.backend.subscription.exception.QuotaExceededException) {
+            return "GENERATION_QUOTA_EXCEEDED";
+        }
+        return "GENERATION_FAILED";
     }
 
     private ServerSentEvent<String> forwardSse(ServerSentEvent<String> sse) {

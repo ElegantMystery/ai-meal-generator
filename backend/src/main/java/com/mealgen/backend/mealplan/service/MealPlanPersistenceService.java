@@ -5,20 +5,26 @@ import com.mealgen.backend.auth.model.User;
 import com.mealgen.backend.mealplan.dto.MealPlanResponse;
 import com.mealgen.backend.mealplan.model.MealPlan;
 import com.mealgen.backend.mealplan.repository.MealPlanRepository;
+import com.mealgen.backend.mealplan.repository.GenerationRequestRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.Clock;
+import java.time.OffsetDateTime;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class MealPlanPersistenceService {
 
     private final MealPlanRepository mealPlanRepository;
+    private final GenerationRequestRepository generationRequestRepository;
+    private final Clock clock;
 
     @Transactional
-    public MealPlanResponse persistFromComplete(User user, JsonNode data) {
+    public MealPlanResponse persistFromComplete(UUID generationRequestId, User user, JsonNode data) {
         String title = textOrDefault(data, "title", "AI Meal Plan");
         String startDateStr = textOrNull(data, "startDate");
         String endDateStr = textOrNull(data, "endDate");
@@ -34,6 +40,12 @@ public class MealPlanPersistenceService {
                 .endDate(endDate)
                 .planJson(planJson)
                 .build());
+
+        int completed = generationRequestRepository.markSucceeded(
+                generationRequestId, saved, OffsetDateTime.now(clock));
+        if (completed != 1) {
+            throw new IllegalStateException("Generation request is not running");
+        }
 
         return MealPlanResponse.builder()
                 .id(saved.getId())

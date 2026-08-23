@@ -104,6 +104,7 @@ const mockRefetch = jest.fn();
 const mockToast = jest.fn();
 
 function setupDefaultMocks() {
+  localStorage.clear();
   mockSearchParamsGet.mockReturnValue(null);
   mockUseSubscription.mockReturnValue({
     status: freeStatus,
@@ -118,6 +119,52 @@ function setupDefaultMocks() {
     return Promise.reject(new Error(`unknown url: ${url}`));
   });
 }
+
+describe("Dashboard — durable generation recovery", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    setupDefaultMocks();
+  });
+
+  it("recovers a saved plan after a page refresh using the idempotency key", async () => {
+    localStorage.setItem(
+      "activeMealPlanGeneration",
+      JSON.stringify({ idempotencyKey: "recover-key" }),
+    );
+    mockApi.get.mockImplementation((url: string) => {
+      if (url === "/api/preferences/me") return Promise.resolve({ data: null });
+      if (url === "/api/mealplans") return Promise.resolve({ data: [] });
+      if (url === "/api/mealplans/generation-requests") {
+        return Promise.resolve({
+          data: {
+            id: "00000000-0000-0000-0000-000000000001",
+            status: "SUCCEEDED",
+            failureCode: null,
+            mealPlanId: 88,
+          },
+        });
+      }
+      if (url === "/api/mealplans/88") {
+        return Promise.resolve({
+          data: {
+            id: 88,
+            title: "Recovered Plan",
+            startDate: null,
+            endDate: null,
+            planJson: null,
+            createdAt: null,
+          },
+        });
+      }
+      return Promise.reject(new Error(`unknown url: ${url}`));
+    });
+
+    render(<DashboardPage />);
+
+    expect(await screen.findByText("Recovered Plan")).toBeInTheDocument();
+    expect(localStorage.getItem("activeMealPlanGeneration")).toBeNull();
+  });
+});
 
 describe("Dashboard — QuotaBadge integration", () => {
   beforeEach(() => {

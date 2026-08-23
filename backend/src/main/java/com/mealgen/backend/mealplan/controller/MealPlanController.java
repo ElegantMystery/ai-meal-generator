@@ -2,6 +2,7 @@ package com.mealgen.backend.mealplan.controller;
 
 import com.mealgen.backend.mealplan.dto.MealPlanCreateRequest;
 import com.mealgen.backend.mealplan.dto.MealPlanResponse;
+import com.mealgen.backend.mealplan.dto.GenerationRequestResponse;
 import com.mealgen.backend.mealplan.dto.ShoppingListResponse;
 import com.mealgen.backend.mealplan.service.MealPlanGenerateService;
 import com.mealgen.backend.mealplan.service.MealPlanService;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/mealplans")
@@ -71,10 +73,27 @@ public class MealPlanController {
     @PostMapping(value = "/generate-ai", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> generateAi(
             Authentication authentication,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
             @RequestParam(defaultValue = "TRADER_JOES") String store,
             @RequestParam(defaultValue = "7") int days
     ) {
-        return mealPlanService.streamGenerateAi(getEmail(authentication), store, days);
+        return mealPlanService.streamGenerateAi(getEmail(authentication), store, days, idempotencyKey);
+    }
+
+    @GetMapping("/generation-requests/{id}")
+    public GenerationRequestResponse generationRequest(
+            Authentication authentication,
+            @PathVariable UUID id
+    ) {
+        return mealPlanService.getGenerationRequest(getEmail(authentication), id);
+    }
+
+    @GetMapping("/generation-requests")
+    public GenerationRequestResponse generationRequestByKey(
+            Authentication authentication,
+            @RequestParam("idempotencyKey") String idempotencyKey
+    ) {
+        return mealPlanService.getGenerationRequest(getEmail(authentication), idempotencyKey);
     }
 
     @GetMapping("/{id}/shopping-list")

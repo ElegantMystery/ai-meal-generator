@@ -63,6 +63,10 @@ logging:
     org.springframework.security.web.authentication: DEBUG
 
 mealgen:
+  generation:
+    stale-after: PT30M
+    retention: PT720H
+    cleanup-interval: PT1H
   rag:
     base-url: http://localhost:8000
     secret: dev-secret

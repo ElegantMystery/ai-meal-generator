@@ -229,14 +229,23 @@ Relevant code:
 
 ### AUD-009 — Add durable, idempotent generation tracking
 
-- [ ] Introduce a generation-request record with owner, idempotency key, status,
+- [x] Introduce a generation-request record with owner, idempotency key, status,
       quota reservation, timestamps, failure code, and saved meal-plan ID.
-- [ ] Define state transitions and enforce them transactionally.
-- [ ] Allow clients to recover status after disconnection or refresh.
-- [ ] Prevent duplicate persistence after retry/reconnect.
-- [ ] Add cleanup/retention rules for abandoned generation requests.
-- [ ] Test browser cancellation, proxy timeout, backend restart, duplicate submit,
+- [x] Define state transitions and enforce them transactionally.
+- [x] Allow clients to recover status after disconnection or refresh.
+- [x] Prevent duplicate persistence after retry/reconnect.
+- [x] Add cleanup/retention rules for abandoned generation requests.
+- [x] Test browser cancellation, proxy timeout, backend restart, duplicate submit,
       duplicate terminal event, and recovery polling.
+
+Implemented with the `generation_requests` state machine in migration V033,
+authenticated recovery by request ID or idempotency key, browser recovery state,
+and an hourly stale-request/retention sweep. Quota reservation plus `RUNNING`,
+failure plus quota release, and meal-plan persistence plus `SUCCEEDED` each share
+a transaction. See `docs/generation-request-lifecycle.md`. Verification includes
+the PostgreSQL concurrent-claim test, stream cancellation/transport/synchronous
+failure and duplicate-terminal tests, dashboard refresh recovery test, all 94
+backend tests, all 194 frontend tests, frontend lint, and production build.
 
 Acceptance criteria:
 
