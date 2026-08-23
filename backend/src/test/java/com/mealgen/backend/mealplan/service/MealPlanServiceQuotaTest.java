@@ -53,6 +53,7 @@ class MealPlanServiceQuotaTest {
     @Mock MealPlanPersistenceService persistenceService;
     @Mock GenerationRequestService generationRequestService;
     @Mock SubscriptionService subscriptionService;
+    @Mock GenerationObservability generationObservability;
 
     private MealPlanService service;
     private User user;
@@ -67,7 +68,8 @@ class MealPlanServiceQuotaTest {
                 ragClient,
                 persistenceService,
                 generationRequestService,
-                subscriptionService
+                subscriptionService,
+                generationObservability
         );
         user = User.builder().id(1L).email("free@example.com").build();
         reservation = QuotaReservation.free(LocalDate.of(2026, 8, 1));

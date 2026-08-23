@@ -83,7 +83,7 @@ public class AuthController {
             authService.completeOnboarding(userOpt.get().getEmail());
             return ResponseEntity.ok(Map.of("message", "Onboarding completed"));
         } catch (Exception e) {
-            logger.error("Error completing onboarding", e);
+            logger.error("Error completing onboarding errorType={}", e.getClass().getSimpleName());
             return ResponseEntity.status(500).body(Map.of("error", "Failed to complete onboarding"));
         }
     }
@@ -99,7 +99,7 @@ public class AuthController {
             SecurityContextHolder.clearContext();
             return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
         } catch (Exception e) {
-            logger.error("Error during logout", e);
+            logger.error("Error during logout errorType={}", e.getClass().getSimpleName());
             return ResponseEntity.status(500).body(Map.of("error", "Logout failed"));
         }
     }

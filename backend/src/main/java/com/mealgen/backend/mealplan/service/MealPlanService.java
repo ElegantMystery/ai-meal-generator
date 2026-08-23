@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Flux;
+import io.micrometer.core.instrument.Timer;
 
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
@@ -62,6 +63,7 @@ public class MealPlanService {
     private final MealPlanPersistenceService mealPlanPersistenceService;
     private final GenerationRequestService generationRequestService;
     private final SubscriptionService subscriptionService;
+    private final GenerationObservability generationObservability;
     // ObjectMapper is not exposed as a bean in this Spring Boot 4 setup — instantiate directly.
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -145,6 +147,11 @@ public class MealPlanService {
      */
     public Flux<ServerSentEvent<String>> streamGenerateAi(
             String email, String store, int days, String idempotencyKey) {
+        return streamGenerateAi(email, store, days, idempotencyKey, null);
+    }
+
+    public Flux<ServerSentEvent<String>> streamGenerateAi(
+            String email, String store, int days, String idempotencyKey, String suppliedCorrelationId) {
         if (days < 1 || days > 14) {
             throw new IllegalArgumentException("days must be between 1 and 14");
         }
@@ -173,7 +180,9 @@ public class MealPlanService {
                     generationRequestService.getOwned(user, generationRequest.getId())));
         }
         String requestId = generationRequest.getId().toString();
+        String correlationId = validUuid(suppliedCorrelationId) ? suppliedCorrelationId : requestId;
         payload.put("requestId", requestId);
+        payload.put("correlationId", correlationId);
 
         // Only the owner of the durable request reserves quota. Concurrent retries
         // with the same key observe the existing request and never call RAG.
@@ -182,12 +191,17 @@ public class MealPlanService {
             reservation = generationRequestService.start(generationRequest.getId(), user);
         } catch (RuntimeException error) {
             generationRequestService.markFailed(generationRequest.getId(), failureCode(error));
+            if (error instanceof com.mealgen.backend.subscription.exception.QuotaExceededException) {
+                generationObservability.quotaRejected(correlationId);
+            }
             throw error;
         }
         payload.put("generationRequestId", generationRequest.getId().toString());
 
         AtomicReference<ServerSentEvent<String>> savedEvent = new AtomicReference<>();
         AtomicBoolean quotaSettled = new AtomicBoolean(false);
+        AtomicBoolean metricSettled = new AtomicBoolean(false);
+        Timer.Sample generationTimer = generationObservability.started(correlationId);
 
         return Flux.concat(
                 Flux.defer(() -> Flux.just(generationStatusEvent(
@@ -199,10 +213,18 @@ public class MealPlanService {
                             if ("complete".equals(eventName) && rawData != null) {
                                 try {
                                     JsonNode data = objectMapper.readTree(rawData);
+                                    JsonNode planDoc = objectMapper.readTree(data.path("planJson").asText("{}"));
+                                    JsonNode meta = planDoc.path("_meta");
+                                    generationObservability.providerTokens(
+                                            meta.path("inputTokens").asLong(0),
+                                            meta.path("outputTokens").asLong(0));
                                     MealPlanResponse response = mealPlanPersistenceService.persistFromComplete(
                                             generationRequest.getId(), user, data);
                                     quotaSettled.set(true);
                                     subscriptionService.completeGeneration(user.getId(), reservation);
+                                    if (metricSettled.compareAndSet(false, true)) {
+                                        generationObservability.succeeded(generationTimer, correlationId);
+                                    }
                                     savedEvent.set(buildSavedEvent(response));
                                 } catch (Exception e) {
                                     throw new IllegalStateException("Failed to parse complete event data", e);
@@ -210,6 +232,8 @@ public class MealPlanService {
                             } else if ("error".equals(eventName)) {
                                 failGeneration(user.getId(), generationRequest.getId(), reservation,
                                         quotaSettled, "GENERATION_UPSTREAM_ERROR", "agent_error");
+                                recordGenerationFailure(metricSettled, generationTimer, correlationId,
+                                        "GENERATION_UPSTREAM_ERROR");
                                 return sanitizeUpstreamError(rawData, requestId);
                             }
                             return forwardSse(sse);
@@ -226,17 +250,41 @@ public class MealPlanService {
                     failGeneration(user.getId(), generationRequest.getId(), reservation,
                             quotaSettled, errorCode(err), "transport_error");
                     String code = errorCode(err);
-                    log.error("generation_failed code={} requestId={}", code, requestId, err);
+                    recordGenerationFailure(metricSettled, generationTimer, correlationId, code);
+                    log.error("generation_failed code={} requestId={} errorType={}",
+                            code, requestId, err.getClass().getSimpleName());
                     return Flux.just(errorEvent(code, requestId));
                 })
-                .doOnCancel(() -> failGeneration(user.getId(), generationRequest.getId(), reservation,
-                        quotaSettled, "GENERATION_CANCELLED", "client_cancelled"))
+                .doOnCancel(() -> {
+                    failGeneration(user.getId(), generationRequest.getId(), reservation,
+                            quotaSettled, "GENERATION_CANCELLED", "client_cancelled");
+                    recordGenerationFailure(metricSettled, generationTimer, correlationId,
+                            "GENERATION_CANCELLED");
+                })
                 .doOnComplete(() -> {
                     if (!quotaSettled.get()) {
                         failGeneration(user.getId(), generationRequest.getId(), reservation,
                                 quotaSettled, "GENERATION_INCOMPLETE", "stream_incomplete");
+                        recordGenerationFailure(metricSettled, generationTimer, correlationId,
+                                "GENERATION_INCOMPLETE");
                     }
                 });
+    }
+
+    private void recordGenerationFailure(AtomicBoolean settled, Timer.Sample timer,
+                                         String requestId, String code) {
+        if (settled.compareAndSet(false, true)) {
+            generationObservability.failed(timer, requestId, code);
+        }
+    }
+
+    private static boolean validUuid(String value) {
+        if (value == null) return false;
+        try {
+            return UUID.fromString(value).toString().equalsIgnoreCase(value);
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
     }
 
     public GenerationRequestResponse getGenerationRequest(String email, UUID id) {

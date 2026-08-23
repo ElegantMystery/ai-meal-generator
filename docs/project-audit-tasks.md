@@ -293,13 +293,16 @@ Relevant code:
 
 ### AUD-012 — Improve observability for business-critical flows
 
-- [ ] Add metrics for generation starts, successes, failures, durations, quota
+- [x] Add metrics for generation starts, successes, failures, durations, quota
       rejections, reservations, and upstream token/cost usage when available.
-- [ ] Add Stripe webhook received/processed/retried/failed metrics by event type.
-- [ ] Use one correlation ID across browser, backend, RAG, and saved plan metadata.
-- [ ] Add alarms for sustained generation failure and webhook processing failure.
-- [ ] Ensure logs do not expose emails, secrets, prompts containing sensitive user
+- [x] Add Stripe webhook received/processed/retried/failed metrics by event type.
+- [x] Use one correlation ID across browser, backend, RAG, and saved plan metadata.
+- [x] Add alarms for sustained generation failure and webhook processing failure.
+- [x] Ensure logs do not expose emails, secrets, prompts containing sensitive user
       preferences, or raw provider errors.
+
+Implemented on 2026-08-23. See `docs/observability-business-flows.md` for metric,
+correlation, alarm, and sensitive-log conventions.
 
 ## P3 — Maintainability and documentation
 

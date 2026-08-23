@@ -39,7 +39,7 @@ public class StripeWebhookController {
         try {
             event = Webhook.constructEvent(payload, sigHeader, webhookSecret);
         } catch (SignatureVerificationException e) {
-            log.warn("Invalid Stripe webhook signature: {}", e.getMessage());
+            log.warn("Invalid Stripe webhook signature");
             return ResponseEntity.badRequest().body("Invalid signature");
         }
 

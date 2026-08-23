@@ -19,13 +19,17 @@ describe("CSRF browser integration", () => {
       store: "TRADER_JOES",
       days: 3,
       idempotencyKey: "test-key",
+      correlationId: "00000000-0000-4000-8000-000000000001",
       onEvent: jest.fn(),
     })).rejects.toThrow("generate-ai response has no body");
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        headers: expect.objectContaining({ "X-XSRF-TOKEN": "test-token" }),
+        headers: expect.objectContaining({
+          "X-XSRF-TOKEN": "test-token",
+          "X-Correlation-ID": "00000000-0000-4000-8000-000000000001",
+        }),
       })
     );
     delete (global as typeof globalThis & { fetch?: typeof fetch }).fetch;
