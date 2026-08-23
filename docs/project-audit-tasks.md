@@ -323,16 +323,21 @@ Relevant code:
 
 ### AUD-014 — Reconcile project documentation with the implementation
 
-- [ ] Correct 403 versus 429 quota documentation and choose one API contract.
-- [ ] Describe MiniMax as the generation provider and OpenAI as embedding-only.
-- [ ] Remove the obsolete `_meta.recipeTemplatesOffered` description.
-- [ ] Remove stale local email/password authentication comments.
-- [ ] Replace the stock frontend README with project-specific instructions.
-- [ ] Decide whether `CLAUDE.md`, `AGENTS.md`, or both are authoritative; avoid
+- [x] Correct 403 versus 429 quota documentation and choose one API contract.
+- [x] Describe MiniMax as the generation provider and OpenAI as embedding-only.
+- [x] Remove the obsolete `_meta.recipeTemplatesOffered` description.
+- [x] Remove stale local email/password authentication comments.
+- [x] Replace the stock frontend README with project-specific instructions.
+- [x] Decide whether `CLAUDE.md`, `AGENTS.md`, or both are authoritative; avoid
       maintaining conflicting copies.
-- [ ] Shorten the root operational guide and link focused runbooks.
-- [ ] Add a documentation-drift check for endpoints, environment variables, and
+- [x] Shorten the root operational guide and link focused runbooks.
+- [x] Add a documentation-drift check for endpoints, environment variables, and
       verification commands where practical.
+
+Implemented on 2026-08-23. `AGENTS.md` is authoritative, `CLAUDE.md` points to it,
+and focused architecture, API, configuration, and development documents replace
+the previous monolithic operational guide. CI runs
+`scripts/check_documentation_drift.sh`.
 
 ### AUD-015 — Reduce duplicated and fragile application plumbing
 

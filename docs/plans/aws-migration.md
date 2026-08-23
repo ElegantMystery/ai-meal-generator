@@ -139,7 +139,8 @@ Key resources:
 - Uses ECR images instead of local builds
 - Nginx reverse proxy for routing + TLS (Let's Encrypt)
 - Backend connects to RDS (env vars for endpoint, credentials)
-- RAG connects to RDS + uses OpenAI API key from env
+- RAG connects to RDS, uses MiniMax for generation, and uses OpenAI only for
+  embedding backfills
 - All services set `restart: always`
 
 **File:** `nginx/nginx.conf` (new file)
@@ -180,7 +181,7 @@ GitHub Secrets needed:
 1. SSH into EC2, run `docker compose -f docker-compose.prod.yml up -d`
 2. Verify health: `curl http://<EC2_IP>/api/actuator/health` → `{"status":"UP"}`
 3. Set up TLS: run certbot for Let's Encrypt certificate (requires domain)
-4. Test flows: signup, login, OAuth2, generate meal plan (rule + AI), preferences, shopping list
+4. Test flows: Google OAuth2 signup/login, generate meal plan (rule + AI), preferences, shopping list
 5. Update Google OAuth authorized redirect URIs to include production URL
 
 ---
@@ -206,10 +207,11 @@ GitHub Secrets needed:
 2. **Terraform**: `terraform plan` to review infrastructure before applying
 3. **Deploy**: Push to main, watch GitHub Actions succeed
 4. **Health**: `curl http://<EC2_IP>/api/actuator/health` returns `{"status":"UP"}`
-5. **E2E**: Sign up → login → generate AI meal plan → view shopping list
+5. **E2E**: Google OAuth2 login → generate AI meal plan → view shopping list
 6. **OAuth2**: Update Google OAuth redirect URIs, test Google login
 
 ## Future Upgrades (Notion tickets exist)
 
 - **ECS Fargate migration**: When traffic grows, swap EC2 for Fargate (~half day, same images)
-- **AWS Bedrock**: Replace OpenAI with Bedrock for embeddings + chat (lower latency, IAM auth)
+- **AWS Bedrock**: Evaluate replacing OpenAI embeddings and MiniMax generation
+  with Bedrock models (lower latency, IAM auth)

@@ -4,7 +4,7 @@
  *
  * Focuses on:
  * 1. QuotaBadge is rendered with tier/remainingQuota from useSubscription
- * 2. 403 QUOTA_EXCEEDED → showUpgradeModal
+ * 2. 429 QUOTA_EXCEEDED → showUpgradeModal
  * 3. UpgradeModal is rendered in the page
  * 4. ?upgrade=success query param → success toast + refetch
  * 5. refetch() is called after successful plan generation
