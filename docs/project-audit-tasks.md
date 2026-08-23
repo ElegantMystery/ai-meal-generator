@@ -254,11 +254,17 @@ Acceptance criteria:
 
 ### AUD-010 — Strengthen production smoke tests and deployment rollback
 
-- [ ] Check frontend, backend, RAG, database readiness, and SSE proxy behavior.
-- [ ] Verify that the deployed revision/tag matches the intended Git SHA.
-- [ ] Replace fixed deployment sleeps with bounded health polling.
-- [ ] Define automatic rollback or a documented one-command rollback path.
-- [ ] Test deployment failure after each service restart stage.
+- [x] Check frontend, backend, RAG, database readiness, and SSE proxy behavior.
+- [x] Verify that the deployed revision/tag matches the intended Git SHA.
+- [x] Replace fixed deployment sleeps with bounded health polling.
+- [x] Define automatic rollback or a documented one-command rollback path.
+- [x] Test deployment failure after each service restart stage.
+
+Implemented on 2026-08-23. Deploy stages now poll Compose health with a bounded
+timeout, verify immutable ECR image tags, and automatically restore the previous
+revision on failure. RAG readiness includes a database query; nginx exposes the
+deployed SHA and disables buffering for the AI-generation SSE route. See
+`docs/deployment-rollback.md` for the one-command operator rollback.
 
 Relevant code:
 
