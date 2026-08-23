@@ -1,9 +1,4 @@
 spring:
-  session:
-    cookie:
-      sameSite: lax
-      secure: true
-
   datasource:
     url: ${SPRING_DATASOURCE_URL}
     username: ${SPRING_DATASOURCE_USERNAME}
@@ -36,6 +31,14 @@ spring:
 
 server:
   forward-headers-strategy: framework
+  servlet:
+    session:
+      timeout: 12h
+      cookie:
+        same-site: lax
+        secure: true
+        http-only: true
+        max-age: 12h
 
 management:
   endpoints:
@@ -53,3 +56,6 @@ cors:
 
 frontend:
   url: ${FRONTEND_URL:http://localhost:3000}
+
+csrf:
+  cookie-secure: true

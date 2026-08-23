@@ -6,7 +6,7 @@
  * one frame at a time and invokes the callback for each.
  */
 
-import { apiBaseUrl } from "./api";
+import { apiBaseUrl, ensureCsrfToken } from "./api";
 
 export type SseEvent = {
   event: string;
@@ -33,6 +33,7 @@ export type StreamMealPlanOptions = {
 export async function streamMealPlan(
   opts: StreamMealPlanOptions
 ): Promise<void> {
+  await ensureCsrfToken();
   const url = new URL(`${apiBaseUrl}/api/mealplans/generate-ai`);
   url.searchParams.set("store", opts.store);
   url.searchParams.set("days", String(opts.days));
@@ -43,6 +44,7 @@ export async function streamMealPlan(
     headers: {
       Accept: "text/event-stream",
       "Idempotency-Key": opts.idempotencyKey,
+      "X-XSRF-TOKEN": readCookie("XSRF-TOKEN"),
     },
     signal: opts.signal,
   });
@@ -89,6 +91,13 @@ export async function streamMealPlan(
     const parsed = parseFrame(buffer);
     if (parsed) opts.onEvent(parsed);
   }
+}
+
+function readCookie(name: string): string {
+  if (typeof document === "undefined") return "";
+  const prefix = `${name}=`;
+  const cookie = document.cookie.split("; ").find((entry) => entry.startsWith(prefix));
+  return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : "";
 }
 
 function parseFrame(frame: string): SseEvent | null {
