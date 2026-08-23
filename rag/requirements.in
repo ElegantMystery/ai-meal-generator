@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+psycopg[binary,pool]
+pydantic
+python-dotenv
+openai
+pgvector
+tqdm
+anthropic

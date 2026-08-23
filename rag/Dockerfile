@@ -3,15 +3,9 @@ FROM python:3.11-slim@sha256:9c900dea9e8fb7e16277c179b555cc72d29a352dbc33cff48ad
 
 WORKDIR /app
 
-# Install system dependencies for psycopg
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    postgresql-client \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements and install Python dependencies
+# psycopg[binary] needs no mutable apt packages. Install only locked artifacts.
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 
 # Copy application code
 COPY app/ ./app/
