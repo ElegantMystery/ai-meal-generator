@@ -57,7 +57,10 @@ parallel requests can all pass the limit and incur model costs.
 - [x] Add a PostgreSQL-backed concurrency test that issues more requests than the
       remaining quota. Eight simultaneous reservations against two remaining
       slots now prove that PostgreSQL accepts exactly two and caps usage at three.
-- [ ] Add metrics/logging for reservation, completion, rejection, and release.
+- [x] Add metrics/logging for reservation, completion, rejection, and release.
+      `mealgen.generation.quota.events` uses bounded `outcome` and `tier` tags;
+      structured lifecycle logs contain internal user IDs only. Transactional
+      completions emit after commit, while rollbacks emit releases.
 
 Acceptance criteria:
 
@@ -147,7 +150,7 @@ Observed on 2026-08-19:
 - [x] Record stable local and CI commands in the root README.
 
 Verification on 2026-08-20: frontend 19 suites / 193 tests, ESLint, and the
-Next.js production build passed; backend 85 tests passed; RAG 94 tests passed.
+Next.js production build passed; backend 89 tests passed; RAG 94 tests passed.
 
 Acceptance criteria:
 
