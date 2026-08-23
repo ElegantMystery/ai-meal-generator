@@ -87,7 +87,7 @@ class MealPlanServiceQuotaTest {
         List<ServerSentEvent<String>> events = service.streamGenerateAi(
                 user.getEmail(), "TRADER_JOES", 7).collectList().block();
 
-        verify(subscriptionService).releaseGeneration(user.getId(), reservation);
+        verify(subscriptionService).releaseGeneration(user.getId(), reservation, "agent_error");
         verify(persistenceService, never()).persistFromComplete(any(), any());
         JsonNode error = json(events.getFirst().data());
         assertThat(error.path("code").asText()).isEqualTo("GENERATION_PROVIDER_UNAVAILABLE");
@@ -110,7 +110,7 @@ class MealPlanServiceQuotaTest {
         List<ServerSentEvent<String>> events = service.streamGenerateAi(
                 user.getEmail(), "TRADER_JOES", 7).collectList().block();
 
-        verify(subscriptionService).releaseGeneration(user.getId(), reservation);
+        verify(subscriptionService).releaseGeneration(user.getId(), reservation, "transport_error");
         assertError(events, "GENERATION_INTERNAL_ERROR", "Meal plan generation failed. Please try again.");
     }
 
@@ -186,7 +186,8 @@ class MealPlanServiceQuotaTest {
         service.streamGenerateAi(user.getEmail(), "TRADER_JOES", 7).collectList().block();
 
         verify(persistenceService).persistFromComplete(any(), any());
-        verify(subscriptionService, never()).releaseGeneration(any(), any());
+        verify(subscriptionService).completeGeneration(user.getId(), reservation);
+        verify(subscriptionService, never()).releaseGeneration(any(), any(), any());
     }
 
     private void arrangeReservation() {

@@ -176,13 +176,14 @@ public class MealPlanService {
                         try {
                             JsonNode data = objectMapper.readTree(rawData);
                             MealPlanResponse response = mealPlanPersistenceService.persistFromComplete(user, data);
-                            savedEvent.set(buildSavedEvent(response));
                             quotaSettled.set(true);
+                            subscriptionService.completeGeneration(user.getId(), reservation);
+                            savedEvent.set(buildSavedEvent(response));
                         } catch (Exception e) {
                             throw new IllegalStateException("Failed to parse complete event data", e);
                         }
                     } else if ("error".equals(eventName)) {
-                        releaseReservation(user.getId(), reservation, quotaSettled);
+                        releaseReservation(user.getId(), reservation, quotaSettled, "agent_error");
                         return sanitizeUpstreamError(rawData, requestId);
                     }
                     return forwardSse(sse);
@@ -195,22 +196,25 @@ public class MealPlanService {
                     return saved == null ? Flux.empty() : Flux.just(saved);
                 }))
                 .onErrorResume(err -> {
-                    releaseReservation(user.getId(), reservation, quotaSettled);
+                    releaseReservation(user.getId(), reservation, quotaSettled, "transport_error");
                     String code = errorCode(err);
                     log.error("generation_failed code={} requestId={}", code, requestId, err);
                     return Flux.just(errorEvent(code, requestId));
                 })
-                .doOnCancel(() -> releaseReservation(user.getId(), reservation, quotaSettled))
-                .doOnComplete(() -> releaseReservation(user.getId(), reservation, quotaSettled));
+                .doOnCancel(() -> releaseReservation(
+                        user.getId(), reservation, quotaSettled, "client_cancelled"))
+                .doOnComplete(() -> releaseReservation(
+                        user.getId(), reservation, quotaSettled, "stream_incomplete"));
     }
 
     private void releaseReservation(
             Long userId,
             QuotaReservation reservation,
-            AtomicBoolean quotaSettled
+            AtomicBoolean quotaSettled,
+            String reason
     ) {
         if (quotaSettled.compareAndSet(false, true)) {
-            subscriptionService.releaseGeneration(userId, reservation);
+            subscriptionService.releaseGeneration(userId, reservation, reason);
         }
     }
 

@@ -30,6 +30,9 @@ class SubscriptionServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private com.mealgen.backend.subscription.service.QuotaObservability quotaObservability;
+
     private SubscriptionService subscriptionService;
 
     private User freeUser;
@@ -38,7 +41,8 @@ class SubscriptionServiceTest {
     @BeforeEach
     void setUp() {
         Clock clock = Clock.fixed(Instant.parse("2026-08-19T12:00:00Z"), ZoneOffset.UTC);
-        subscriptionService = new SubscriptionService(subscriptionRepository, userRepository, clock);
+        subscriptionService = new SubscriptionService(
+                subscriptionRepository, userRepository, clock, quotaObservability);
         freeUser = User.builder()
                 .id(1L)
                 .email("free@example.com")
