@@ -21,6 +21,7 @@ export type StreamMealPlanOptions = {
   idempotencyKey: string;
   onEvent: SseHandler;
   signal?: AbortSignal;
+  correlationId?: string;
 };
 
 /**
@@ -34,6 +35,7 @@ export async function streamMealPlan(
   opts: StreamMealPlanOptions
 ): Promise<void> {
   await ensureCsrfToken();
+  const correlationId = opts.correlationId ?? crypto.randomUUID();
   const url = new URL(`${apiBaseUrl}/api/mealplans/generate-ai`);
   url.searchParams.set("store", opts.store);
   url.searchParams.set("days", String(opts.days));
@@ -45,6 +47,7 @@ export async function streamMealPlan(
       Accept: "text/event-stream",
       "Idempotency-Key": opts.idempotencyKey,
       "X-XSRF-TOKEN": readCookie("XSRF-TOKEN"),
+      "X-Correlation-ID": correlationId,
     },
     signal: opts.signal,
   });

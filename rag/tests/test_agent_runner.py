@@ -67,6 +67,7 @@ class _FakeBlock:
 class _FakeResponse:
     content: List[_FakeBlock]
     stop_reason: str = "tool_use"
+    usage: Any = field(default_factory=lambda: type("Usage", (), {"input_tokens": 10, "output_tokens": 5})())
 
 
 def _text(text: str) -> _FakeBlock:
@@ -91,6 +92,7 @@ def _make_req() -> GenerateRequest:
     return GenerateRequest(
         userId=1,
         requestId="req-test-123",
+        correlationId="00000000-0000-4000-8000-000000000001",
         store="TRADER_JOES",
         days=1,
         preferences=Preferences(),
@@ -193,7 +195,10 @@ def test_run_agent_happy_path_emits_complete(monkeypatch):
     assert event_names[-1] == "complete"
     complete = next(d for n, d in events if n == "complete")
     assert complete["title"] == "Test Plan"
-    assert "planJson" in complete
+    plan_doc = __import__("json").loads(complete["planJson"])
+    assert plan_doc["_meta"]["correlationId"] == "00000000-0000-4000-8000-000000000001"
+    assert plan_doc["_meta"]["inputTokens"] == 30
+    assert plan_doc["_meta"]["outputTokens"] == 15
 
 
 def test_run_agent_emits_repair_phase_on_resubmit(monkeypatch):

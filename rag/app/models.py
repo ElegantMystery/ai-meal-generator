@@ -13,6 +13,7 @@ class Preferences(BaseModel):
 class GenerateRequest(BaseModel):
     userId: int
     requestId: Optional[str] = None
+    correlationId: Optional[str] = None
     store: str
     days: int
     preferences: Preferences

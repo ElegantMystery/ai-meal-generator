@@ -74,10 +74,12 @@ public class MealPlanController {
     public Flux<ServerSentEvent<String>> generateAi(
             Authentication authentication,
             @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId,
             @RequestParam(defaultValue = "TRADER_JOES") String store,
             @RequestParam(defaultValue = "7") int days
     ) {
-        return mealPlanService.streamGenerateAi(getEmail(authentication), store, days, idempotencyKey);
+        return mealPlanService.streamGenerateAi(
+                getEmail(authentication), store, days, idempotencyKey, correlationId);
     }
 
     @GetMapping("/generation-requests/{id}")

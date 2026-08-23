@@ -129,7 +129,8 @@ def parse_and_validate_plan_json(content: str) -> MealPlanDoc:
         return MealPlanDoc.model_validate(raw)
     except ValidationError as e:
         errors = e.errors()
-        logger.error("LLM JSON schema validation failed: %s", errors[:5])
+        logger.error("LLM JSON schema validation failed count=%s types=%s",
+                     len(errors), [error.get("type") for error in errors[:5]])
         raise HTTPException(
             status_code=500,
             detail={

@@ -208,9 +208,8 @@ def dispatch(name: str, args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any
             return _submit_plan(args, ctx)
         return {"error": f"unknown tool: {name}"}
     except Exception as e:
-        logger.exception(
-            "generation_tool_failed tool=%s requestId=%s", name, ctx.request_id
-        )
+        logger.error("generation_tool_failed tool=%s requestId=%s errorType=%s",
+                     name, ctx.request_id, type(e).__name__)
         raise
 
 

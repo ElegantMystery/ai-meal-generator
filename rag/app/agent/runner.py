@@ -275,6 +275,7 @@ async def run_agent(req: GenerateRequest) -> AsyncIterator[Event]:
       - ('error', {code, message})
     """
     request_id = req.requestId or str(uuid.uuid4())
+    correlation_id = req.correlationId or request_id
     if not config.MINIMAX_API_KEY:
         logger.error("generation_failed code=%s requestId=%s", GenerationErrorCode.CONFIGURATION, request_id)
         yield ("error", public_error(GenerationErrorCode.CONFIGURATION, request_id))
@@ -289,7 +290,7 @@ async def run_agent(req: GenerateRequest) -> AsyncIterator[Event]:
         store=req.store,
         days=req.days,
         start_date=str(start),
-        request_id=request_id,
+        request_id=correlation_id,
         dietary_restriction=prefs.get("dietaryRestrictions"),
     )
 
@@ -316,6 +317,8 @@ async def run_agent(req: GenerateRequest) -> AsyncIterator[Event]:
     client = Anthropic()  # picks up ANTHROPIC_API_KEY + ANTHROPIC_BASE_URL from env
     current_phase: Optional[str] = None
     turns_used = 0
+    input_tokens = 0
+    output_tokens = 0
 
     yield ("phase", {"phase": "starting", "message": "Connecting to the planner"})
 
@@ -332,21 +335,24 @@ async def run_agent(req: GenerateRequest) -> AsyncIterator[Event]:
             )
         except APIError as e:
             code = classify_generation_error(e)
-            logger.exception("generation_failed code=%s requestId=%s", code, request_id)
+            logger.error("generation_failed code=%s requestId=%s errorType=%s", code, correlation_id, type(e).__name__)
             yield ("error", public_error(code, request_id))
             return
         except Exception as e:
             code = classify_generation_error(e)
-            logger.exception("generation_failed code=%s requestId=%s", code, request_id)
+            logger.error("generation_failed code=%s requestId=%s errorType=%s", code, correlation_id, type(e).__name__)
             yield ("error", public_error(code, request_id))
             return
 
         # Normalise: replace any XML text tool calls with synthetic tool_use blocks.
         content = _normalize_blocks(resp.content)
+        usage = getattr(resp, "usage", None)
+        input_tokens += getattr(usage, "input_tokens", 0) or 0
+        output_tokens += getattr(usage, "output_tokens", 0) or 0
         logger.info(
             "Turn %d: stop_reason=%s blocks=%s",
             turns_used, resp.stop_reason,
-            [(b.type, getattr(b, "name", None) or getattr(b, "text", "")[:80]) for b in content],
+            [(b.type, getattr(b, "name", None)) for b in content],
         )
         messages.append({"role": "assistant", "content": [_block_to_dict(b) for b in content]})
 
@@ -356,7 +362,7 @@ async def run_agent(req: GenerateRequest) -> AsyncIterator[Event]:
             )
         except Exception as e:
             code = classify_generation_error(e)
-            logger.exception("generation_failed code=%s requestId=%s", code, request_id)
+            logger.error("generation_failed code=%s requestId=%s errorType=%s", code, correlation_id, type(e).__name__)
             yield ("error", public_error(code, request_id))
             return
         for event in turn_events:
@@ -383,8 +389,11 @@ async def run_agent(req: GenerateRequest) -> AsyncIterator[Event]:
         "generatedBy": "python-rag-agent",
         "agentModel": config.AGENT_MODEL,
         "ragRequestId": rag_id,
+        "correlationId": correlation_id,
         "turnsUsed": turns_used,
         "toolCallCount": ctx.tool_call_count,
+        "inputTokens": input_tokens,
+        "outputTokens": output_tokens,
     }
 
     yield (

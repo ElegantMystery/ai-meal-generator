@@ -91,7 +91,7 @@ public class CustomOAuth2UserService extends OidcUserService {
                     oidcUser.getUserInfo()
             );
         } catch (Exception e) {
-            logger.error("Error processing OIDC user: {}", e.getMessage(), e);
+            logger.error("Error processing OIDC user errorType={}", e.getClass().getSimpleName());
             throw e; // Re-throw to let Spring Security handle it
         }
     }

@@ -3,6 +3,7 @@ package com.mealgen.backend.subscription;
 import com.mealgen.backend.subscription.repository.StripeWebhookEventRepository;
 import com.mealgen.backend.subscription.service.StripeWebhookService;
 import com.mealgen.backend.subscription.service.SubscriptionService;
+import com.mealgen.backend.subscription.service.StripeWebhookObservability;
 import com.stripe.model.Event;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,12 +24,13 @@ class StripeWebhookServiceTest {
     @Mock StripeWebhookEventRepository eventRepository;
     @Mock SubscriptionService subscriptionService;
     @Mock Event event;
+    @Mock StripeWebhookObservability observability;
 
     private StripeWebhookService service;
 
     @BeforeEach
     void setUp() {
-        service = new StripeWebhookService(eventRepository, subscriptionService);
+        service = new StripeWebhookService(eventRepository, subscriptionService, observability);
         when(event.getId()).thenReturn("evt_123");
         org.mockito.Mockito.lenient().when(event.getType())
                 .thenReturn("customer.subscription.updated");
@@ -49,6 +51,8 @@ class StripeWebhookServiceTest {
 
         verify(subscriptionService).handleSubscriptionUpdated(event);
         verify(eventRepository).markProcessed("evt_123");
+        verify(observability).record("received", "customer.subscription.updated");
+        verify(observability).record("processed", "customer.subscription.updated");
     }
 
     @Test
@@ -63,6 +67,7 @@ class StripeWebhookServiceTest {
 
         verify(subscriptionService, never()).handleSubscriptionUpdated(event);
         verify(eventRepository, never()).markProcessed("evt_123");
+        verify(observability).record("retried", "customer.subscription.updated");
     }
 
     @Test
@@ -78,6 +83,7 @@ class StripeWebhookServiceTest {
 
         assertThatThrownBy(() -> service.process(event)).isSameAs(failure);
         verify(eventRepository, never()).markProcessed("evt_123");
+        verify(observability).record("failed", "customer.subscription.updated");
     }
 
     @Test

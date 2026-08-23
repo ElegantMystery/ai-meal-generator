@@ -3,6 +3,7 @@ package com.mealgen.backend.subscription;
 import com.mealgen.backend.subscription.model.StripeWebhookEvent;
 import com.mealgen.backend.subscription.repository.StripeWebhookEventRepository;
 import com.mealgen.backend.subscription.service.StripeWebhookService;
+import com.mealgen.backend.subscription.service.StripeWebhookObservability;
 import com.mealgen.backend.subscription.service.SubscriptionService;
 import com.mealgen.backend.support.PostgresIntegrationTest;
 import com.stripe.model.Event;
@@ -35,6 +36,7 @@ class StripeWebhookPostgresTransactionTest extends PostgresIntegrationTest {
     @Autowired StripeWebhookService webhookService;
     @Autowired StripeWebhookEventRepository eventRepository;
     @MockitoBean SubscriptionService subscriptionService;
+    @MockitoBean StripeWebhookObservability observability;
 
     @Test
     void concurrentDuplicateDeliveryIsProcessedExactlyOnce() throws Exception {

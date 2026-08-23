@@ -131,6 +131,42 @@ resource "aws_cloudwatch_log_metric_filter" "http_5xx" {
   }
 }
 
+resource "aws_cloudwatch_log_metric_filter" "generation_failed" {
+  name           = "GenerationFailed"
+  log_group_name = aws_cloudwatch_log_group.backend.name
+  pattern        = "{ $.mdc.event = \"GENERATION_FAILED\" }"
+  metric_transformation {
+    name          = "GenerationFailedCount"
+    namespace     = "MealGen/Generation"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "generation_succeeded" {
+  name           = "GenerationSucceeded"
+  log_group_name = aws_cloudwatch_log_group.backend.name
+  pattern        = "{ $.mdc.event = \"GENERATION_SUCCEEDED\" }"
+  metric_transformation {
+    name          = "GenerationSucceededCount"
+    namespace     = "MealGen/Generation"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "stripe_webhook_failed" {
+  name           = "StripeWebhookFailed"
+  log_group_name = aws_cloudwatch_log_group.backend.name
+  pattern        = "{ $.mdc.event = \"STRIPE_WEBHOOK_FAILED\" }"
+  metric_transformation {
+    name          = "StripeWebhookFailedCount"
+    namespace     = "MealGen/Stripe"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
 # ---------------------------------------------------------------------------
 # CloudWatch Dashboard
 # ---------------------------------------------------------------------------
@@ -235,4 +271,35 @@ resource "aws_cloudwatch_metric_alarm" "high_login_failures" {
     Project = var.project
     Env     = var.env
   }
+}
+
+resource "aws_cloudwatch_metric_alarm" "generation_failures" {
+  alarm_name          = "MealGen-SustainedGenerationFailures"
+  alarm_description   = "Generation failures occurred in two of three five-minute periods"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 3
+  datapoints_to_alarm = 2
+  metric_name         = "GenerationFailedCount"
+  namespace           = "MealGen/Generation"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 3
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "stripe_webhook_failures" {
+  alarm_name          = "MealGen-StripeWebhookFailures"
+  alarm_description   = "A signed Stripe webhook failed processing"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "StripeWebhookFailedCount"
+  namespace           = "MealGen/Stripe"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
 }

@@ -30,14 +30,16 @@ def _sse_frame(event: str, data: dict) -> str:
 async def _agent_stream(req: GenerateRequest) -> AsyncIterator[str]:
     """Translate runner events into SSE frames."""
     request_id = req.requestId or str(uuid.uuid4())
+    correlation_id = req.correlationId or request_id
     req.requestId = request_id
     try:
         async for event_name, data in run_agent(req):
-            logger.info("SSE event: %s | %s", event_name, str(data)[:200])
+            logger.info("SSE event=%s correlationId=%s", event_name, correlation_id)
             yield _sse_frame(event_name, data)
     except Exception as e:
         code = classify_generation_error(e)
-        logger.exception("generation_failed code=%s requestId=%s", code, request_id)
+        logger.error("generation_failed code=%s requestId=%s correlationId=%s errorType=%s",
+                     code, request_id, correlation_id, type(e).__name__)
         yield _sse_frame("error", public_error(code, request_id))
 
 
@@ -55,5 +57,6 @@ async def generate(req: GenerateRequest):
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",  # disable nginx response buffering for SSE
             "X-Request-ID": request_id,
+            "X-Correlation-ID": req.correlationId or request_id,
         },
     )
