@@ -220,9 +220,9 @@ jiter==0.16.0 \
     # via
     #   anthropic
     #   openai
-openai==3.3.1 \
-    --hash=sha256:6f22807de1a976c932cecda620e8172a8c3fdbaeed29c7f21564e0c2410edf56 \
-    --hash=sha256:9652df7fdf8ee6f5bd58e0a12f2b1d414a18e0f06bb7a9a57c8643a5f5469bd3
+openai==3.8.0 \
+    --hash=sha256:514736aa1e4ef1033c1209ad53897392845ccd4f2c4fae6413b2cf5f91c2c926 \
+    --hash=sha256:6138a5a1333a1be9e4d1edea2d160b311542787b029543f87de4961c66358d16
     # via -r requirements.in
 pgvector==0.5.0 \
     --hash=sha256:07a9dcf735696879406983afc6eba9a787cef7c0cf6c367ca1a5779f036dee74 \
