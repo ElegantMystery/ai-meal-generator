@@ -2,7 +2,9 @@
 
 ## Setup
 
-Prerequisites are Docker, Node.js 20, Java 21, and Python 3.11.
+Prerequisites are Docker, Node.js 20, Java 21, Python 3.11, and ripgrep (`rg`).
+On Ubuntu, install ripgrep with `sudo apt-get install ripgrep`; CI installs it
+before running the documentation checks.
 
 ```bash
 cp .env.example .env
@@ -37,6 +39,7 @@ startup.
 RAG_ENV=test RAG_SHARED_SECRET=test-secret OPENAI_API_KEY=test-key \
   MINIMAX_API_KEY=test-key .venv/bin/python -m pytest rag/tests -q
 bash scripts/check_immutable_ci_refs.sh
+.venv/bin/python scripts/test_documentation_drift.py
 bash scripts/check_documentation_drift.sh
 ```
 
