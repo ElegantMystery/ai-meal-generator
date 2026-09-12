@@ -56,8 +56,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install documentation check dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ripgrep
       - name: Verify immutable CI references
         run: bash scripts/check_immutable_ci_refs.sh
+      - name: Test documentation check diagnostics
+        run: python3 scripts/test_documentation_drift.py
       - name: Verify documentation contract
         run: bash scripts/check_documentation_drift.sh
       - name: Set up Java 21

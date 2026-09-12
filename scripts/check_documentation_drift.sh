@@ -6,6 +6,8 @@ fail() {
   exit 1
 }
 
+command -v rg >/dev/null 2>&1 || fail "ripgrep (rg) is required; install it before running this check"
+
 contract="docs/api-contract.md"
 config="docs/configuration.md"
 
