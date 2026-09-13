@@ -143,7 +143,9 @@ def test_readiness_route_uses_shared_fail_closed_auth():
     from app.main import app
     from app.security import require_rag_secret
 
-    readiness_route = next(route for route in app.routes if route.path == "/ready")
+    readiness_route = next(
+        route for route in app.routes if getattr(route, "path", None) == "/ready"
+    )
 
     assert [dependency.call for dependency in readiness_route.dependant.dependencies] == [
         require_rag_secret
@@ -188,7 +190,9 @@ def test_health_remains_public_when_rag_authentication_is_configured(monkeypatch
     from app import main
 
     monkeypatch.setattr(config, "RAG_SHARED_SECRET", "expected-secret")
-    health_route = next(route for route in main.app.routes if route.path == "/health")
+    health_route = next(
+        route for route in main.app.routes if getattr(route, "path", None) == "/health"
+    )
 
     assert health_route.dependant.dependencies == []
     assert main.health() == {"ok": True}
