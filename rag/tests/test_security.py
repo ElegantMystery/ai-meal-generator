@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
-from httpx import ASGITransport, AsyncClient
 
 from app import config
 
@@ -16,12 +16,46 @@ def _authenticate(secret: str | None) -> None:
     asyncio.run(require_rag_secret(secret))
 
 
-async def _request_app(app, path, body=None, headers=None):
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        if body is not None:
-            return await client.post(path, json=body, headers=headers)
-        return await client.get(path, headers=headers)
+async def _request_status(app, path, body=None, headers=None):
+    encoded_body = json.dumps(body).encode() if body is not None else b""
+    encoded_headers = [
+        (name.lower().encode(), value.encode())
+        for name, value in (headers or {}).items()
+    ]
+    if body is not None:
+        encoded_headers.append((b"content-type", b"application/json"))
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST" if body is not None else "GET",
+        "scheme": "http",
+        "path": path,
+        "raw_path": path.encode(),
+        "query_string": b"",
+        "headers": encoded_headers,
+        "client": ("test", 1234),
+        "server": ("test", 80),
+    }
+    request_sent = False
+    messages = []
+
+    async def receive():
+        nonlocal request_sent
+        if not request_sent:
+            request_sent = True
+            return {"type": "http.request", "body": encoded_body, "more_body": False}
+        return {"type": "http.disconnect"}
+
+    async def send(message):
+        messages.append(message)
+
+    await app(scope, receive, send)
+    return next(
+        message["status"]
+        for message in messages
+        if message["type"] == "http.response.start"
+    )
 
 
 def test_production_startup_rejects_missing_secret(monkeypatch):
@@ -144,9 +178,9 @@ def test_protected_routes_reject_missing_or_incorrect_secret(
     get_conn = MagicMock()
     monkeypatch.setattr(main, "get_conn", get_conn)
     headers = {"X-RAG-SECRET": provided_secret} if provided_secret else {}
-    response = asyncio.run(_request_app(main.app, path, body, headers))
+    status = asyncio.run(_request_status(main.app, path, body, headers))
 
-    assert response.status_code == 401
+    assert status == 401
     get_conn.assert_not_called()
 
 
