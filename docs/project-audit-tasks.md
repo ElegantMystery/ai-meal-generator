@@ -1,10 +1,29 @@
-# Project Audit Backlog
+# Project Audit Completion Record
 
-This is the durable remediation backlog from the repository audit performed on
-2026-08-19. It is intentionally stored in Git so work can resume without relying
-on chat history.
+**Status: Complete.** All 15 remediation tasks from the repository audit
+performed on 2026-08-19 were implemented, verified, merged, and deployed by
+2026-09-12 (America/Los_Angeles). This document is now the durable completion
+record; new operational and product work should be tracked separately.
 
-## Working rules
+## Outcome summary
+
+| Tasks | Area | Completed outcome |
+| --- | --- | --- |
+| AUD-001–AUD-003 | Billing and cost correctness | Monthly FREE-tier quota, atomic reservations, and retryable/idempotent Stripe webhooks |
+| AUD-004–AUD-008 | Release safety and service security | Mandatory deployment gates, green service baselines, fail-closed RAG authentication, Flyway validation, and safe public errors |
+| AUD-009–AUD-012 | Generation reliability and operations | Durable generation tracking, deployment rollback and smoke tests, CSRF/session review, and business-flow observability |
+| AUD-013–AUD-015 | Maintainability and documentation | Reproducible Python dependencies, reconciled documentation, and shared hardened application plumbing |
+
+Final verification for AUD-015 and the program completion included 136 backend
+tests, 211 frontend tests, frontend lint and production build, 121 RAG tests,
+fresh-database Flyway validation, immutable-reference and documentation checks,
+container publication, EC2 deployment, and production health checks. See
+[PR #61](https://github.com/ElegantMystery/ai-meal-generator/pull/61),
+[PR #62](https://github.com/ElegantMystery/ai-meal-generator/pull/62),
+[PR #63](https://github.com/ElegantMystery/ai-meal-generator/pull/63), and the
+[successful production run](https://github.com/ElegantMystery/ai-meal-generator/actions/runs/34735688142).
+
+## Historical working rules
 
 - Address tasks in priority order unless a dependency requires otherwise.
 - Use a separate `feat/...` branch for each implementation task.
@@ -365,9 +384,9 @@ events, and cancels/releases the reader on abort or failure. The unused
 live-host, and GitHub Actions consumer checks. See `docs/api-contract.md` and
 `docs/configuration.md` for the resulting contracts.
 
-## Completion definition
+## Completion record
 
-This backlog is complete when every task is checked, each acceptance criterion has
-automated or documented evidence, all service test/build/lint commands pass, the
-production deployment is gated by those checks, and the billing/quota behavior
-matches the published product contract under concurrency and failure.
+Every task and acceptance criterion is complete with automated or documented
+evidence. All service test, build, lint, migration, deployment, and health gates
+passed, and billing/quota behavior matches the published product contract under
+concurrency and failure.

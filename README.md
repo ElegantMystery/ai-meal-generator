@@ -4,6 +4,13 @@ AI Meal Generator creates grocery-store-specific meal plans with a Next.js
 frontend, Spring Boot API, and FastAPI agent service. MiniMax-M3 generates plans;
 OpenAI is used only to backfill vector embeddings.
 
+## Project status
+
+The repository audit remediation program is complete. All work from AUD-001
+through AUD-015 has been implemented, verified, merged, and deployed. The
+[audit completion record](docs/project-audit-tasks.md) summarizes the outcomes
+and retains the detailed acceptance evidence.
+
 ## Quick start
 
 Prerequisites: Docker, Node.js 20, Java 21, and Python 3.11.
