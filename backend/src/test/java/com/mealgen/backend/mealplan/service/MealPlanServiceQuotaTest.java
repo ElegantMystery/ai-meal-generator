@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.JsonParser;
 import com.mealgen.backend.auth.model.User;
 import com.mealgen.backend.auth.repository.UserRepository;
+import com.mealgen.backend.config.JacksonCompatibilityConfiguration;
 import com.mealgen.backend.mealplan.ai.RagClient;
 import com.mealgen.backend.mealplan.dto.MealPlanResponse;
 import com.mealgen.backend.mealplan.dto.GenerationRequestResponse;
@@ -27,11 +28,14 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Flux;
 
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
@@ -84,6 +88,37 @@ class MealPlanServiceQuotaTest {
                 .isInstanceOf(QuotaExceededException.class);
 
         verify(ragClient, never()).streamGenerate(any());
+    }
+
+    @Test
+    void populatedGenerationStatusIsEmittedBeforeRagEventsWithConfiguredMapper() {
+        arrangeReservation();
+        when(generationRequestService.getOwned(eq(user), any())).thenReturn(
+                GenerationRequestResponse.builder()
+                        .id(UUID.fromString("00000000-0000-0000-0000-000000000001"))
+                        .status(GenerationRequestStatus.RUNNING)
+                        .createdAt(OffsetDateTime.parse("2026-09-12T17:00:00Z"))
+                        .updatedAt(OffsetDateTime.parse("2026-09-12T17:00:01Z"))
+                        .build());
+        // The provider is external; keep the service and its production mapper real.
+        lenient().when(ragClient.streamGenerate(any())).thenReturn(
+                Flux.just(event("phase", "{\"message\":\"planning\"}")));
+
+        try (var context = new AnnotationConfigApplicationContext(
+                JacksonCompatibilityConfiguration.class)) {
+            ReflectionTestUtils.setField(service, "objectMapper", context.getBean(ObjectMapper.class));
+
+            var events = service.streamGenerateAi(user.getEmail(), "TRADER_JOES", 7, "key-1")
+                    .collectList().block();
+
+            assertThat(events).extracting(ServerSentEvent::event)
+                    .containsExactly("generation_status", "phase");
+            var status = json(events.getFirst().data());
+            assertThat(status.path("createdAt").asText()).isEqualTo("2026-09-12T17:00:00Z");
+            assertThat(status.path("updatedAt").asText()).isEqualTo("2026-09-12T17:00:01Z");
+            assertThat(json(events.get(1).data()).path("message").asText()).isEqualTo("planning");
+            verify(ragClient).streamGenerate(any());
+        }
     }
 
     @Test

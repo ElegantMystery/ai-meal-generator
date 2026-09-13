@@ -154,6 +154,7 @@ class SseParser {
   private lineBytes = 0;
   private frameBytes = 0;
   private pendingCr = false;
+  private pendingCrInFrame = false;
   private firstLine = true;
 
   constructor(
@@ -170,11 +171,16 @@ class SseParser {
     if (this.pendingCr) {
       this.pendingCr = false;
       if (chunk[0] === 0x0a) {
-        this.completeLine(2);
+        // The CR already completed its line. Count an optional LF only when
+        // that line was part of the frame, not its terminating empty line.
+        if (this.pendingCrInFrame) {
+          this.frameBytes += 1;
+          if (this.frameBytes > MAX_FRAME_BYTES) {
+            throw new Error(OVERSIZED_FRAME_ERROR);
+          }
+        }
         index = 1;
         segmentStart = 1;
-      } else {
-        this.completeLine(1);
       }
     }
 
@@ -186,6 +192,8 @@ class SseParser {
       if (byte === 0x0a) {
         this.completeLine(1);
       } else if (index + 1 === chunk.byteLength) {
+        this.pendingCrInFrame = this.lineBytes > 0;
+        this.completeLine(1);
         this.pendingCr = true;
       } else if (chunk[index + 1] === 0x0a) {
         this.completeLine(2);
@@ -200,10 +208,6 @@ class SseParser {
   }
 
   finish(): void {
-    if (this.pendingCr) {
-      this.pendingCr = false;
-      this.completeLine(1);
-    }
     if (this.lineBytes > 0 || this.frameLines.length > 0) {
       throw new Error(INCOMPLETE_FRAME_ERROR);
     }

@@ -49,6 +49,53 @@ afterEach(() => {
 });
 
 describe("streamMealPlan SSE parsing", () => {
+  test("dispatches a chunk-ending CR frame before another byte or EOF arrives", async () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    let nextRead!: () => void;
+    const waitingForNextChunk = new Promise<void>((resolve) => { nextRead = resolve; });
+    const body = new ReadableStream<Uint8Array>({
+      start(streamController) {
+        controller = streamController;
+        controller.enqueue(encoder.encode('data: {"step":1}\r\r'));
+      },
+      pull() { nextRead(); },
+    }, { highWaterMark: 0 });
+    const events: SseEvent[] = [];
+    installResponse(body);
+    const reading = readStream((event) => events.push(event));
+
+    try {
+      await waitingForNextChunk;
+      expect(events).toEqual([{ event: "message", data: { step: 1 } }]);
+      expect(body.locked).toBe(true);
+      // An optional LF belongs to the already-consumed CR, not a new line.
+      controller.enqueue(encoder.encode('\ndata: {"step":2}\r\n\r\n'));
+    } finally {
+      controller.close();
+      await reading;
+    }
+    expect(events).toEqual([
+      { event: "message", data: { step: 1 } },
+      { event: "message", data: { step: 2 } },
+    ]);
+  });
+
+  test.each([false, true])("counts both CRLF bytes toward the frame limit (split: %s)", async (split) => {
+    const payload = "a".repeat(1024 * 1024 - 10);
+    const chunks = (data: string) => split
+      ? [`data: "${data}"\r`, "\n\r", "\n"]
+      : [`data: "${data}"\r\n\r\n`];
+    const events: SseEvent[] = [];
+    installResponse(streamFromTextChunks(chunks(payload)));
+    await readStream((event) => events.push(event));
+    expect(events).toEqual([{ event: "message", data: payload }]);
+
+    installResponse(streamFromTextChunks(chunks(`${payload}a`)));
+    const onEvent = jest.fn();
+    await expect(readStream(onEvent)).rejects.toThrow("SSE frame exceeds 1 MiB");
+    expect(onEvent).not.toHaveBeenCalled();
+  });
+
   test.each([
     [
       "CRLF",

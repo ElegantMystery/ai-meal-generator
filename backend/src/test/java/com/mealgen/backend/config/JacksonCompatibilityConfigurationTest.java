@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mealgen.backend.auth.repository.UserRepository;
 import com.mealgen.backend.items.repository.ItemRepository;
 import com.mealgen.backend.mealplan.ai.RagClient;
+import com.mealgen.backend.mealplan.dto.GenerationRequestResponse;
+import com.mealgen.backend.mealplan.model.GenerationRequestStatus;
 import com.mealgen.backend.mealplan.repository.MealPlanRepository;
 import com.mealgen.backend.mealplan.service.GenerationObservability;
 import com.mealgen.backend.mealplan.service.GenerationRequestService;
@@ -21,12 +23,33 @@ import org.springframework.context.annotation.AnnotationConfigApplicationContext
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Clock;
+import java.time.OffsetDateTime;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 class JacksonCompatibilityConfigurationTest {
+
+    @Test
+    void configuredMapperSerializesGenerationTimestampsAsIsoStrings() throws Exception {
+        try (var context = new AnnotationConfigApplicationContext(
+                JacksonCompatibilityConfiguration.class)) {
+            ObjectMapper mapper = context.getBean(ObjectMapper.class);
+            var response = GenerationRequestResponse.builder()
+                    .status(GenerationRequestStatus.SUCCEEDED)
+                    .createdAt(OffsetDateTime.parse("2026-09-12T10:00:00-07:00"))
+                    .updatedAt(OffsetDateTime.parse("2026-09-12T17:01:00Z"))
+                    .completedAt(OffsetDateTime.parse("2026-09-12T17:02:00Z"))
+                    .build();
+
+            var json = mapper.readTree(mapper.writeValueAsString(response));
+
+            assertThat(json.path("createdAt").asText()).isEqualTo("2026-09-12T10:00:00-07:00");
+            assertThat(json.path("updatedAt").asText()).isEqualTo("2026-09-12T17:01:00Z");
+            assertThat(json.path("completedAt").asText()).isEqualTo("2026-09-12T17:02:00Z");
+        }
+    }
 
     @Test
     void contextProvidesOneMapperSharedByAllJackson2Consumers() {
