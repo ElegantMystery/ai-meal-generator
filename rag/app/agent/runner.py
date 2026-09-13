@@ -339,6 +339,9 @@ async def run_agent(req: GenerateRequest) -> AsyncIterator[Event]:
             yield ("error", public_error(code, request_id))
             return
         except Exception as e:
+            # Provider transports and SDK internals can fail with types outside the
+            # public SDK hierarchy. This stream boundary must always terminate with
+            # a fixed, sanitized event rather than expose an exception to the caller.
             code = classify_generation_error(e)
             logger.error("generation_failed code=%s requestId=%s errorType=%s", code, correlation_id, type(e).__name__)
             yield ("error", public_error(code, request_id))
@@ -361,6 +364,9 @@ async def run_agent(req: GenerateRequest) -> AsyncIterator[Event]:
                 content, resp.stop_reason, ctx, current_phase
             )
         except Exception as e:
+            # Database, validation, and unexpected tool failures meet here. Keep the
+            # catch broad so every in-flight SSE stream receives one safe terminal
+            # error while classification preserves the stable public error codes.
             code = classify_generation_error(e)
             logger.error("generation_failed code=%s requestId=%s errorType=%s", code, correlation_id, type(e).__name__)
             yield ("error", public_error(code, request_id))

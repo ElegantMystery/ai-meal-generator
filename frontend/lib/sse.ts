@@ -2,8 +2,10 @@
  * Minimal SSE-over-fetch helper.
  *
  * EventSource can't be used here because we need POST + cookie auth.
- * This parses the standard `event: <name>\ndata: <json>\n\n` frame format
- * one frame at a time and invokes the callback for each.
+ * This parses the standard SSE line endings and invokes the callback for each
+ * complete application JSON event. An undispatched frame may occupy at most
+ * 1 MiB of UTF-8 bytes, including non-empty line endings and excluding the
+ * terminating empty line.
  */
 
 import { apiBaseUrl, ensureCsrfToken } from "./api";
@@ -23,6 +25,11 @@ export type StreamMealPlanOptions = {
   signal?: AbortSignal;
   correlationId?: string;
 };
+
+const MAX_FRAME_BYTES = 1024 * 1024;
+const INVALID_EVENT_DATA_ERROR = "Invalid SSE event data";
+const INCOMPLETE_FRAME_ERROR = "SSE stream ended with an incomplete frame";
+const OVERSIZED_FRAME_ERROR = "SSE frame exceeds 1 MiB";
 
 /**
  * POSTs /api/mealplans/generate-ai and streams the SSE response.
@@ -71,28 +78,62 @@ export async function streamMealPlan(
   }
 
   const reader = res.body.getReader();
-  const decoder = new TextDecoder("utf-8");
-  let buffer = "";
+  let aborted = false;
+  let abortReason: unknown;
+  let cancellation: Promise<void> | undefined;
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    // SSE frames are separated by a blank line ("\n\n").
-    let sepIndex: number;
-    while ((sepIndex = buffer.indexOf("\n\n")) !== -1) {
-      const frame = buffer.slice(0, sepIndex);
-      buffer = buffer.slice(sepIndex + 2);
-      const parsed = parseFrame(frame);
-      if (parsed) opts.onEvent(parsed);
+  const cancel = (reason: unknown): Promise<void> => {
+    if (!cancellation) {
+      try {
+        cancellation = reader.cancel(reason).then(
+          () => undefined,
+          () => undefined,
+        );
+      } catch {
+        cancellation = Promise.resolve();
+      }
     }
-  }
+    return cancellation;
+  };
+  const handleAbort = () => {
+    aborted = true;
+    abortReason =
+      opts.signal?.reason ?? new DOMException("The operation was aborted", "AbortError");
+    void cancel(abortReason);
+  };
+  const throwIfAborted = () => {
+    if (aborted) throw abortReason;
+  };
+  const parser = new SseParser(opts.onEvent, throwIfAborted);
 
-  // Flush any final frame without trailing blank line
-  if (buffer.trim().length > 0) {
-    const parsed = parseFrame(buffer);
-    if (parsed) opts.onEvent(parsed);
+  opts.signal?.addEventListener("abort", handleAbort, { once: true });
+  if (opts.signal?.aborted) handleAbort();
+
+  let failed = false;
+  try {
+    throwIfAborted();
+    while (true) {
+      const { value, done } = await reader.read();
+      throwIfAborted();
+      if (done) {
+        parser.finish();
+        break;
+      }
+      parser.push(value);
+      throwIfAborted();
+    }
+  } catch (error) {
+    failed = true;
+    await cancel(error);
+    try {
+      reader.releaseLock();
+    } catch {
+      // Preserve the stream, callback, or abort error.
+    }
+    throw error;
+  } finally {
+    opts.signal?.removeEventListener("abort", handleAbort);
+    if (!failed) reader.releaseLock();
   }
 }
 
@@ -103,11 +144,129 @@ function readCookie(name: string): string {
   return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : "";
 }
 
-function parseFrame(frame: string): SseEvent | null {
+class SseParser {
+  private readonly decoder = new TextDecoder("utf-8", {
+    fatal: true,
+    ignoreBOM: true,
+  });
+  private readonly lineSegments: Uint8Array[] = [];
+  private readonly frameLines: string[] = [];
+  private lineBytes = 0;
+  private frameBytes = 0;
+  private pendingCr = false;
+  private firstLine = true;
+
+  constructor(
+    private readonly onEvent: SseHandler,
+    private readonly throwIfAborted: () => void,
+  ) {}
+
+  push(chunk: Uint8Array): void {
+    if (chunk.byteLength === 0) return;
+
+    let index = 0;
+    let segmentStart = 0;
+
+    if (this.pendingCr) {
+      this.pendingCr = false;
+      if (chunk[0] === 0x0a) {
+        this.completeLine(2);
+        index = 1;
+        segmentStart = 1;
+      } else {
+        this.completeLine(1);
+      }
+    }
+
+    for (; index < chunk.byteLength; index += 1) {
+      const byte = chunk[index];
+      if (byte !== 0x0a && byte !== 0x0d) continue;
+
+      this.appendLineBytes(chunk.subarray(segmentStart, index));
+      if (byte === 0x0a) {
+        this.completeLine(1);
+      } else if (index + 1 === chunk.byteLength) {
+        this.pendingCr = true;
+      } else if (chunk[index + 1] === 0x0a) {
+        this.completeLine(2);
+        index += 1;
+      } else {
+        this.completeLine(1);
+      }
+      segmentStart = index + 1;
+    }
+
+    this.appendLineBytes(chunk.subarray(segmentStart));
+  }
+
+  finish(): void {
+    if (this.pendingCr) {
+      this.pendingCr = false;
+      this.completeLine(1);
+    }
+    if (this.lineBytes > 0 || this.frameLines.length > 0) {
+      throw new Error(INCOMPLETE_FRAME_ERROR);
+    }
+  }
+
+  private appendLineBytes(bytes: Uint8Array): void {
+    if (bytes.byteLength === 0) return;
+    if (this.frameBytes + this.lineBytes + bytes.byteLength > MAX_FRAME_BYTES) {
+      throw new Error(OVERSIZED_FRAME_ERROR);
+    }
+    this.lineSegments.push(bytes.slice());
+    this.lineBytes += bytes.byteLength;
+  }
+
+  private completeLine(endingBytes: number): void {
+    if (this.lineBytes === 0) {
+      this.firstLine = false;
+      this.dispatchFrame();
+      return;
+    }
+    if (this.frameBytes + this.lineBytes + endingBytes > MAX_FRAME_BYTES) {
+      throw new Error(OVERSIZED_FRAME_ERROR);
+    }
+
+    const encodedLine = new Uint8Array(this.lineBytes);
+    let offset = 0;
+    for (const segment of this.lineSegments) {
+      encodedLine.set(segment, offset);
+      offset += segment.byteLength;
+    }
+
+    let line: string;
+    try {
+      line = this.decoder.decode(encodedLine);
+    } catch {
+      throw new Error(INVALID_EVENT_DATA_ERROR);
+    }
+    if (this.firstLine && line.startsWith("\uFEFF")) line = line.slice(1);
+    this.firstLine = false;
+    this.frameLines.push(line);
+    this.frameBytes += this.lineBytes + endingBytes;
+    this.lineSegments.length = 0;
+    this.lineBytes = 0;
+  }
+
+  private dispatchFrame(): void {
+    const lines = this.frameLines.splice(0);
+    this.frameBytes = 0;
+    if (lines.length === 0) return;
+
+    const parsed = parseFrame(lines);
+    if (parsed) {
+      this.onEvent(parsed);
+      this.throwIfAborted();
+    }
+  }
+}
+
+function parseFrame(lines: string[]): SseEvent | null {
   let eventName = "message";
   const dataLines: string[] = [];
 
-  for (const line of frame.split("\n")) {
+  for (const line of lines) {
     if (!line || line.startsWith(":")) continue;
     const colon = line.indexOf(":");
     const field = colon === -1 ? line : line.slice(0, colon);
@@ -120,11 +279,9 @@ function parseFrame(frame: string): SseEvent | null {
   if (dataLines.length === 0) return null;
 
   const dataStr = dataLines.join("\n");
-  let data: unknown;
   try {
-    data = JSON.parse(dataStr);
+    return { event: eventName, data: JSON.parse(dataStr) as unknown };
   } catch {
-    data = dataStr;
+    throw new Error(INVALID_EVENT_DATA_ERROR);
   }
-  return { event: eventName, data };
 }

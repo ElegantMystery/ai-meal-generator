@@ -1,12 +1,12 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 
 from .db import close_pool, get_conn, init_pool
 from .routes.embed_routes import router as embed_router
 from .routes.generate_routes import router as gen_router
-from .security import validate_security_configuration
+from .security import require_rag_secret, validate_security_configuration
 
 logging.basicConfig(level=logging.INFO)
 
@@ -32,7 +32,7 @@ def health():
     return {"ok": True}
 
 
-@app.get("/ready")
+@app.get("/ready", dependencies=[Depends(require_rag_secret)])
 def readiness():
     try:
         with get_conn() as conn:

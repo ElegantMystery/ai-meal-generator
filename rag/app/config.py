@@ -7,9 +7,6 @@ RAG_ENV = os.getenv("RAG_ENV", "production").strip().lower()
 RAG_SHARED_SECRET = os.getenv("RAG_SHARED_SECRET")
 
 EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
-CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-5.2")
-
-RETRIEVAL_K = int(os.getenv("RETRIEVAL_K", "200"))
 
 MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY")
 ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL", "https://api.minimax.io/anthropic")

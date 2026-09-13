@@ -12,12 +12,13 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
 import java.util.UUID;
+
+import static com.mealgen.backend.security.AuthenticatedPrincipal.email;
 
 @RestController
 @RequestMapping("/api/mealplans")
@@ -30,7 +31,7 @@ public class MealPlanController {
 
     @GetMapping
     public List<MealPlanResponse> listMine(Authentication authentication) {
-        return mealPlanService.listMine(getEmail(authentication));
+        return mealPlanService.listMine(email(authentication));
     }
 
     @PostMapping
@@ -38,7 +39,7 @@ public class MealPlanController {
             Authentication authentication,
             @RequestBody MealPlanCreateRequest req
     ) {
-        return mealPlanService.createMine(getEmail(authentication), req);
+        return mealPlanService.createMine(email(authentication), req);
     }
 
     @GetMapping("/{id}")
@@ -46,7 +47,7 @@ public class MealPlanController {
             Authentication authentication,
             @PathVariable Long id
     ) {
-        return mealPlanService.getMineById(getEmail(authentication), id);
+        return mealPlanService.getMineById(email(authentication), id);
     }
 
     @DeleteMapping("/{id}")
@@ -54,7 +55,7 @@ public class MealPlanController {
             Authentication authentication,
             @PathVariable Long id
     ) {
-        mealPlanService.deleteMine(getEmail(authentication), id);
+        mealPlanService.deleteMine(email(authentication), id);
         return ResponseEntity.noContent().build();
     }
 
@@ -67,7 +68,7 @@ public class MealPlanController {
         if (days < 1 || days > 14) {
             throw new IllegalArgumentException("days must be between 1 and 14");
         }
-        return mealPlanGenerateService.generate(getEmail(authentication), store, days);
+        return mealPlanGenerateService.generate(email(authentication), store, days);
     }
 
     @PostMapping(value = "/generate-ai", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -79,7 +80,7 @@ public class MealPlanController {
             @RequestParam(defaultValue = "7") int days
     ) {
         return mealPlanService.streamGenerateAi(
-                getEmail(authentication), store, days, idempotencyKey, correlationId);
+                email(authentication), store, days, idempotencyKey, correlationId);
     }
 
     @GetMapping("/generation-requests/{id}")
@@ -87,7 +88,7 @@ public class MealPlanController {
             Authentication authentication,
             @PathVariable UUID id
     ) {
-        return mealPlanService.getGenerationRequest(getEmail(authentication), id);
+        return mealPlanService.getGenerationRequest(email(authentication), id);
     }
 
     @GetMapping("/generation-requests")
@@ -95,7 +96,7 @@ public class MealPlanController {
             Authentication authentication,
             @RequestParam("idempotencyKey") String idempotencyKey
     ) {
-        return mealPlanService.getGenerationRequest(getEmail(authentication), idempotencyKey);
+        return mealPlanService.getGenerationRequest(email(authentication), idempotencyKey);
     }
 
     @GetMapping("/{id}/shopping-list")
@@ -103,28 +104,6 @@ public class MealPlanController {
             Authentication authentication,
             @PathVariable("id") Long id
     ) {
-        return shoppingListService.getShoppingList(getEmail(authentication), id);
-    }
-
-    private String getEmail(Authentication authentication) {
-        if (authentication == null || !authentication.isAuthenticated()) {
-            throw new IllegalStateException("Not authenticated");
-        }
-
-        Object principal = authentication.getPrincipal();
-
-        // Handle OAuth2 users (Google login)
-        if (principal instanceof OAuth2User oauth2User) {
-            Object email = oauth2User.getAttributes().get("email");
-            if (email == null) throw new IllegalStateException("OAuth2 principal missing email");
-            return email.toString();
-        }
-
-        // String principals remain supported for controller-level test authentication.
-        if (principal instanceof String email) {
-            return email;
-        }
-
-        throw new IllegalStateException("Unknown principal type: " + principal.getClass());
+        return shoppingListService.getShoppingList(email(authentication), id);
     }
 }

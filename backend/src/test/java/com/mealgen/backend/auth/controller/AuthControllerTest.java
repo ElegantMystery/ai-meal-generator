@@ -1,6 +1,7 @@
 package com.mealgen.backend.auth.controller;
 
 import com.mealgen.backend.auth.model.User;
+import com.mealgen.backend.auth.exception.AuthUserNotFoundException;
 import com.mealgen.backend.auth.repository.UserRepository;
 import com.mealgen.backend.auth.service.AuthService;
 import com.mealgen.backend.subscription.service.SubscriptionService;
@@ -14,12 +15,14 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 
 import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -88,5 +91,96 @@ class AuthControllerTest {
 
         verify(session).invalidate();
         assertThat(response.getStatusCode().value()).isEqualTo(200);
+    }
+
+    @Test
+    void logout_returnsSafeFailureWhenSessionWasAlreadyInvalidated() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        HttpSession session = mock(HttpSession.class);
+        when(request.getSession(false)).thenReturn(session);
+        doThrow(new IllegalStateException("session id must not leak"))
+                .when(session).invalidate();
+
+        ResponseEntity<?> response = authController.logout(
+                request, mock(HttpServletResponse.class));
+
+        assertThat(response.getStatusCode().value()).isEqualTo(500);
+        assertThat(response.getBody().toString()).doesNotContain("session id");
+    }
+
+    @Test
+    void logout_doesNotSwallowUnexpectedRuntimeFailure() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        RuntimeException failure = new RuntimeException("programming failure");
+        when(request.getSession(false)).thenThrow(failure);
+
+        assertThatThrownBy(() -> authController.logout(
+                request, mock(HttpServletResponse.class))).isSameAs(failure);
+    }
+
+    @Test
+    void logout_doesNotSwallowUnexpectedIllegalStateDuringSessionLookup() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        IllegalStateException failure = new IllegalStateException("programming failure");
+        when(request.getSession(false)).thenThrow(failure);
+
+        assertThatThrownBy(() -> authController.logout(
+                request, mock(HttpServletResponse.class))).isSameAs(failure);
+    }
+
+    @Test
+    void completeOnboarding_sanitizesExpectedDatabaseFailure() {
+        OAuth2User oauth2User = mock(OAuth2User.class);
+        when(oauth2User.getName()).thenReturn("sub123");
+        User user = User.builder().id(1L).email("alice@example.com").build();
+        when(userRepository.findByProviderId("sub123")).thenReturn(Optional.of(user));
+        doThrow(new DataAccessResourceFailureException("database password leaked"))
+                .when(authService).completeOnboarding("alice@example.com");
+
+        ResponseEntity<?> response = authController.completeOnboarding(oauth2User);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(500);
+        assertThat(response.getBody().toString()).doesNotContain("password");
+    }
+
+    @Test
+    void completeOnboarding_sanitizesExpectedMissingUserRace() {
+        OAuth2User oauth2User = mock(OAuth2User.class);
+        when(oauth2User.getName()).thenReturn("sub123");
+        User user = User.builder().id(1L).email("alice@example.com").build();
+        when(userRepository.findByProviderId("sub123")).thenReturn(Optional.of(user));
+        doThrow(new AuthUserNotFoundException())
+                .when(authService).completeOnboarding("alice@example.com");
+
+        ResponseEntity<?> response = authController.completeOnboarding(oauth2User);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(500);
+        assertThat(response.getBody().toString()).contains("Failed to complete onboarding");
+    }
+
+    @Test
+    void completeOnboarding_doesNotSwallowUnexpectedRuntimeFailure() {
+        OAuth2User oauth2User = mock(OAuth2User.class);
+        when(oauth2User.getName()).thenReturn("sub123");
+        User user = User.builder().id(1L).email("alice@example.com").build();
+        when(userRepository.findByProviderId("sub123")).thenReturn(Optional.of(user));
+        RuntimeException failure = new RuntimeException("programming failure");
+        doThrow(failure).when(authService).completeOnboarding("alice@example.com");
+
+        assertThatThrownBy(() -> authController.completeOnboarding(oauth2User))
+                .isSameAs(failure);
+    }
+
+    @Test
+    void completeOnboarding_doesNotSwallowUnexpectedIllegalStateException() {
+        OAuth2User oauth2User = mock(OAuth2User.class);
+        when(oauth2User.getName()).thenReturn("sub123");
+        User user = User.builder().id(1L).email("alice@example.com").build();
+        when(userRepository.findByProviderId("sub123")).thenReturn(Optional.of(user));
+        IllegalStateException failure = new IllegalStateException("programming failure");
+        doThrow(failure).when(authService).completeOnboarding("alice@example.com");
+
+        assertThatThrownBy(() -> authController.completeOnboarding(oauth2User))
+                .isSameAs(failure);
     }
 }

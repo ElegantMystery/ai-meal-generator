@@ -1,6 +1,7 @@
 package com.mealgen.backend.auth.service;
 
 import com.mealgen.backend.auth.dto.AuthResponse;
+import com.mealgen.backend.auth.exception.AuthUserNotFoundException;
 import com.mealgen.backend.auth.model.User;
 import com.mealgen.backend.auth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -18,14 +19,14 @@ public class AuthService {
 
     public AuthResponse getUserByEmail(String email) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalStateException("User not found"));
+                .orElseThrow(AuthUserNotFoundException::new);
         return toAuthResponse(user);
     }
 
     @Transactional
     public void completeOnboarding(String email) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalStateException("User not found"));
+                .orElseThrow(AuthUserNotFoundException::new);
         user.setOnboardingCompleted(true);
         userRepository.save(user);
         logger.info("User completed onboarding: id={}", user.getId());

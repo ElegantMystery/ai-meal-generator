@@ -10,6 +10,7 @@ from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
 import pytest
+from psycopg import OperationalError
 
 from app.agent.tools import ToolContext, dispatch
 from app.retrieval import _CATEGORY_QUOTAS_TJ, _CATEGORY_QUOTAS_WF
@@ -268,6 +269,38 @@ def test_submit_plan_with_missing_ids_returns_errors():
     assert result["ok"] is False
     assert ctx.submitted is False
     assert ctx.repair_attempted is True
+
+
+def test_submit_plan_propagates_database_failure():
+    ctx = _ctx()
+    failure = OperationalError("database connection failed")
+
+    with patch(
+        "app.agent.tools.verify_item_ids_belong_to_store",
+        side_effect=failure,
+    ):
+        with pytest.raises(OperationalError) as exc_info:
+            dispatch("submit_plan", {"plan_json": _minimal_plan(1)}, ctx)
+
+    assert exc_info.value is failure
+    assert ctx.submitted is False
+    assert ctx.repair_attempted is False
+
+
+def test_submit_plan_propagates_unexpected_validator_failure():
+    ctx = _ctx()
+    failure = RuntimeError("unexpected validator failure")
+
+    with patch(
+        "app.agent.tools.parse_and_validate_plan_json",
+        side_effect=failure,
+    ):
+        with pytest.raises(RuntimeError) as exc_info:
+            dispatch("submit_plan", {"plan_json": _minimal_plan(1)}, ctx)
+
+    assert exc_info.value is failure
+    assert ctx.submitted is False
+    assert ctx.repair_attempted is False
 
 
 # ---------------------------------------------------------------------------

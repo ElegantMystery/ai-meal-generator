@@ -1,5 +1,7 @@
 package com.mealgen.backend.mealplan.service;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mealgen.backend.auth.model.User;
 import com.mealgen.backend.auth.repository.UserRepository;
 import com.mealgen.backend.items.model.Item;
@@ -15,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
@@ -52,6 +55,10 @@ class ShoppingListServiceTest {
 
     @Mock
     private Query nativeQuery;
+
+    @Spy
+    private ObjectMapper objectMapper = new ObjectMapper()
+            .configure(JsonParser.Feature.ALLOW_COMMENTS, true);
 
     @InjectMocks
     private ShoppingListService shoppingListService;
@@ -403,6 +410,22 @@ class ShoppingListServiceTest {
         ShoppingListResponse response = shoppingListService.getShoppingList(USER_EMAIL, MEAL_PLAN_ID);
 
         assertThat(response.getItems()).isEmpty();
+    }
+
+    @Test
+    void configuredCompatibilityMapper_isUsedForStoredPlanJson() {
+        long itemId = 401L;
+        testMealPlan.setPlanJson("/* accepted by the injected mapper */\n"
+                + planJsonWithOneItem(itemId, 1.0));
+        Item item = Item.builder().id(itemId).name("Beans").price(1.99).build();
+        when(itemRepository.findByIdIn(any())).thenReturn(List.of(item));
+        mockNutritionQuery(new ArrayList<>());
+
+        ShoppingListResponse response = shoppingListService.getShoppingList(
+                USER_EMAIL, MEAL_PLAN_ID);
+
+        assertThat(response.getItems()).hasSize(1);
+        assertThat(response.getItems().getFirst().getId()).isEqualTo(itemId);
     }
 
     @Test

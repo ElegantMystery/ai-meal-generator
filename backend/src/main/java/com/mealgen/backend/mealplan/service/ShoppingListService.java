@@ -2,6 +2,7 @@ package com.mealgen.backend.mealplan.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.mealgen.backend.auth.model.User;
 import com.mealgen.backend.auth.repository.UserRepository;
 import com.mealgen.backend.items.model.Item;
@@ -27,7 +28,7 @@ public class ShoppingListService {
     private final UserRepository userRepository;
     private final ItemRepository itemRepository;
     private final EntityManager entityManager;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     /**
      * Helper class to hold parsed nutrition values
@@ -78,8 +79,7 @@ public class ShoppingListService {
                 ? parsed.get("serving_count").asInt() : null;
 
             return values;
-        } catch (Exception e) {
-            // Log error but don't fail - just return null
+        } catch (JsonProcessingException e) {
             return null;
         }
     }
@@ -108,7 +108,7 @@ public class ShoppingListService {
         JsonNode root;
         try {
             root = objectMapper.readTree(planJson);
-        } catch (Exception e) {
+        } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to parse planJson", e);
         }
 

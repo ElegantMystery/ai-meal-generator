@@ -441,6 +441,19 @@ class TestParseAndValidatePlanJsonWithDishes:
             parse_and_validate_plan_json("{invalid json")
         assert exc_info.value.status_code == 500
 
+    def test_parse_unexpected_json_parser_failure_propagates(self, monkeypatch):
+        failure = RuntimeError("unexpected parser failure")
+
+        def fail_to_parse(_content):
+            raise failure
+
+        monkeypatch.setattr(json, "loads", fail_to_parse)
+
+        with pytest.raises(RuntimeError) as exc_info:
+            parse_and_validate_plan_json("{}")
+
+        assert exc_info.value is failure
+
     def test_parse_schema_violation_raises_500(self):
         """servingsUsed=0 should fail validation."""
         from fastapi import HTTPException

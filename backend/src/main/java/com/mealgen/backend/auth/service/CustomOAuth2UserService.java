@@ -23,76 +23,71 @@ public class CustomOAuth2UserService extends OidcUserService {
     @Override
     @Transactional
     public OidcUser loadUser(OidcUserRequest userRequest) {
-        try {
-            // Get user info from Google via OIDC
-            OidcUser oidcUser = super.loadUser(userRequest);
+        // Get user info from Google via OIDC
+        OidcUser oidcUser = super.loadUser(userRequest);
 
-            String registrationId = userRequest.getClientRegistration().getRegistrationId(); // "google"
+        String registrationId = userRequest.getClientRegistration().getRegistrationId(); // "google"
 
-            // Standard Google OIDC claims
-            String sub = oidcUser.getSubject();
-            String email = oidcUser.getAttribute("email");
-            String name = oidcUser.getAttribute("name");
+        // Standard Google OIDC claims
+        String sub = oidcUser.getSubject();
+        String email = oidcUser.getAttribute("email");
+        String name = oidcUser.getAttribute("name");
 
-            if (email == null || email.isEmpty()) {
-                logger.error("Email is null or empty from OIDC attributes");
-                throw new IllegalStateException("Email is required but not provided by OIDC provider");
-            }
-
-            if (sub == null || sub.isEmpty()) {
-                logger.error("Sub (provider ID) is null or empty from OIDC attributes");
-                throw new IllegalStateException("Provider ID is required but not provided by OIDC provider");
-            }
-
-
-            // Create or update local user
-            boolean[] isNewUser = {false};
-            User user = userRepository.findByEmail(email)
-                    .orElseGet(() -> {
-                        isNewUser[0] = true;
-                        return User.builder()
-                                .email(email)
-                                .name(name)
-                                .provider(registrationId)
-                                .providerId(sub)
-                                .build();
-                    });
-
-            if (user.getProviderId() == null || !user.getProviderId().equals(sub)) {
-                user.setProviderId(sub);
-            }
-            if (user.getProvider() == null || !user.getProvider().equals(registrationId)) {
-                user.setProvider(registrationId);
-            }
-            if (name != null && (user.getName() == null || !user.getName().equals(name))) {
-                user.setName(name);
-            }
-
-            // Save user (will update if exists, insert if new) — log after save so we have the ID
-            User savedUser = userRepository.save(user);
-            if (isNewUser[0]) {
-                MDC.put("event", "SIGNUP_SUCCESS");
-                MDC.put("provider", registrationId);
-                logger.info("New OAuth user created: id={}", savedUser.getId());
-                MDC.remove("event");
-                MDC.remove("provider");
-            } else {
-                MDC.put("event", "OAUTH_LOGIN_SUCCESS");
-                MDC.put("provider", registrationId);
-                logger.info("OAuth user logged in: id={}", savedUser.getId());
-                MDC.remove("event");
-                MDC.remove("provider");
-            }
-
-            // Return OidcUser for Spring Security
-            return new DefaultOidcUser(
-                    oidcUser.getAuthorities(),
-                    oidcUser.getIdToken(),
-                    oidcUser.getUserInfo()
-            );
-        } catch (Exception e) {
-            logger.error("Error processing OIDC user errorType={}", e.getClass().getSimpleName());
-            throw e; // Re-throw to let Spring Security handle it
+        if (email == null || email.isEmpty()) {
+            logger.error("Email is null or empty from OIDC attributes");
+            throw new IllegalStateException("Email is required but not provided by OIDC provider");
         }
+
+        if (sub == null || sub.isEmpty()) {
+            logger.error("Sub (provider ID) is null or empty from OIDC attributes");
+            throw new IllegalStateException("Provider ID is required but not provided by OIDC provider");
+        }
+
+
+        // Create or update local user
+        boolean[] isNewUser = {false};
+        User user = userRepository.findByEmail(email)
+                .orElseGet(() -> {
+                    isNewUser[0] = true;
+                    return User.builder()
+                            .email(email)
+                            .name(name)
+                            .provider(registrationId)
+                            .providerId(sub)
+                            .build();
+                });
+
+        if (user.getProviderId() == null || !user.getProviderId().equals(sub)) {
+            user.setProviderId(sub);
+        }
+        if (user.getProvider() == null || !user.getProvider().equals(registrationId)) {
+            user.setProvider(registrationId);
+        }
+        if (name != null && (user.getName() == null || !user.getName().equals(name))) {
+            user.setName(name);
+        }
+
+        // Save user (will update if exists, insert if new) — log after save so we have the ID
+        User savedUser = userRepository.save(user);
+        if (isNewUser[0]) {
+            MDC.put("event", "SIGNUP_SUCCESS");
+            MDC.put("provider", registrationId);
+            logger.info("New OAuth user created: id={}", savedUser.getId());
+            MDC.remove("event");
+            MDC.remove("provider");
+        } else {
+            MDC.put("event", "OAUTH_LOGIN_SUCCESS");
+            MDC.put("provider", registrationId);
+            logger.info("OAuth user logged in: id={}", savedUser.getId());
+            MDC.remove("event");
+            MDC.remove("provider");
+        }
+
+        // Return OidcUser for Spring Security
+        return new DefaultOidcUser(
+                oidcUser.getAuthorities(),
+                oidcUser.getIdToken(),
+                oidcUser.getUserInfo()
+        );
     }
 }

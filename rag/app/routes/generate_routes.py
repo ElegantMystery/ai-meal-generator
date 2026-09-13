@@ -37,6 +37,8 @@ async def _agent_stream(req: GenerateRequest) -> AsyncIterator[str]:
             logger.info("SSE event=%s correlationId=%s", event_name, correlation_id)
             yield _sse_frame(event_name, data)
     except Exception as e:
+        # Final streaming boundary: failures outside the runner's normal tool and
+        # provider paths still need a sanitized terminal event after headers are sent.
         code = classify_generation_error(e)
         logger.error("generation_failed code=%s requestId=%s correlationId=%s errorType=%s",
                      code, request_id, correlation_id, type(e).__name__)

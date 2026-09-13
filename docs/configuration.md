@@ -24,3 +24,9 @@ Copy `.env.example` to `.env` for local Compose. Never commit real values.
 
 Production-only Spring and infrastructure settings are injected by the deployment
 environment. Stripe behavior is documented in `stripe-webhook-operations.md`.
+
+`CHAT_MODEL` and `RETRIEVAL_K` were unused legacy RAG settings and have been
+removed. Generation uses `AGENT_MODEL`; retrieval limits are supplied by the
+retrieval/tool functions. Repository, deployed application source, production
+environment/Compose/scripts, and GitHub Actions configuration were checked for
+consumers before removal.

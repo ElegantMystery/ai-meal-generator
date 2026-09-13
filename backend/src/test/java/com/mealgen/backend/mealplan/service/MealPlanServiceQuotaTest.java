@@ -2,6 +2,7 @@ package com.mealgen.backend.mealplan.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonParser;
 import com.mealgen.backend.auth.model.User;
 import com.mealgen.backend.auth.repository.UserRepository;
 import com.mealgen.backend.mealplan.ai.RagClient;
@@ -18,8 +19,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.InjectMocks;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -55,22 +61,15 @@ class MealPlanServiceQuotaTest {
     @Mock SubscriptionService subscriptionService;
     @Mock GenerationObservability generationObservability;
 
-    private MealPlanService service;
+    @Spy ObjectMapper objectMapper = new ObjectMapper()
+            .configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, true);
+
+    @InjectMocks private MealPlanService service;
     private User user;
     private QuotaReservation reservation;
 
     @BeforeEach
     void setUp() {
-        service = new MealPlanService(
-                userRepository,
-                preferencesRepository,
-                mealPlanRepository,
-                ragClient,
-                persistenceService,
-                generationRequestService,
-                subscriptionService,
-                generationObservability
-        );
         user = User.builder().id(1L).email("free@example.com").build();
         reservation = QuotaReservation.free(LocalDate.of(2026, 8, 1));
     }
@@ -197,6 +196,46 @@ class MealPlanServiceQuotaTest {
 
         assertError(events, "GENERATION_VALIDATION_FAILED",
                 "The generated meal plan was invalid. Please try again.");
+    }
+
+    @Test
+    void configuredCompatibilityMapper_isUsedForCompletePayload() {
+        arrangeReservation();
+        when(ragClient.streamGenerate(any())).thenReturn(Flux.just(event(
+                "complete", "{'title':'Plan','planJson':'{}'}")));
+        when(persistenceService.persistFromComplete(any(), any(), any())).thenReturn(
+                MealPlanResponse.builder().id(10L).title("Plan").build());
+
+        service.streamGenerateAi(user.getEmail(), "TRADER_JOES", 7, "key-1")
+                .collectList().block();
+
+        verify(persistenceService).persistFromComplete(any(), eq(user), any());
+    }
+
+    @Test
+    void malformedUpstreamError_doesNotAttachRawJsonExceptionToLogs() {
+        arrangeReservation();
+        when(ragClient.streamGenerate(any())).thenReturn(Flux.just(event(
+                "error", "not-json-provider-secret")));
+        Logger logger = (Logger) org.slf4j.LoggerFactory.getLogger(MealPlanService.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            service.streamGenerateAi(user.getEmail(), "TRADER_JOES", 7, "key-1")
+                    .collectList().block();
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+
+        ILoggingEvent invalidPayloadLog = appender.list.stream()
+                .filter(event -> event.getFormattedMessage().contains("invalid_generation_error"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Missing invalid payload log"));
+        assertThat(invalidPayloadLog.getThrowableProxy()).isNull();
+        assertThat(invalidPayloadLog.getFormattedMessage()).doesNotContain("provider-secret");
     }
 
     @Test

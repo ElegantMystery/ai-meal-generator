@@ -341,15 +341,29 @@ the previous monolithic operational guide. CI runs
 
 ### AUD-015 — Reduce duplicated and fragile application plumbing
 
-- [ ] Inject the configured Spring `ObjectMapper` instead of constructing isolated
+- [x] Inject the configured Spring `ObjectMapper` instead of constructing isolated
       instances in services.
-- [ ] Centralize authenticated-user/email extraction.
-- [ ] Centralize RAG route authentication.
-- [ ] Replace broad exception catches with typed failures at clear boundaries.
-- [ ] Review handwritten SSE parsing for CRLF, comments, cancellation, maximum
+- [x] Centralize authenticated-user/email extraction.
+- [x] Centralize RAG route authentication.
+- [x] Replace broad exception catches with typed failures at clear boundaries.
+- [x] Review handwritten SSE parsing for CRLF, comments, cancellation, maximum
       frame size, and malformed event behavior.
-- [ ] Remove dead configuration such as unused chat-model settings after verifying
+- [x] Remove dead configuration such as unused chat-model settings after verifying
       there are no external consumers.
+
+Implemented on 2026-09-12. Backend persistence and Stripe handling share one
+Spring-managed Jackson 2 compatibility mapper, while controller principal
+validation uses one fail-closed helper. RAG generation, embedding, and readiness
+routes share `require_rag_secret`; only liveness remains public. Expected
+validation failures stay repairable, while operational and programming failures
+reach the fixed public generation-error boundary.
+
+The browser SSE reader now parses CRLF/LF/CR incrementally, supports comments and
+multiline data, enforces a 1 MiB UTF-8 frame limit, rejects malformed/truncated
+events, and cancels/releases the reader on abort or failure. The unused
+`CHAT_MODEL` and `RETRIEVAL_K` settings were removed after repository, deployment,
+live-host, and GitHub Actions consumer checks. See `docs/api-contract.md` and
+`docs/configuration.md` for the resulting contracts.
 
 ## Completion definition
 

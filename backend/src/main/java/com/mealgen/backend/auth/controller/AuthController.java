@@ -1,6 +1,7 @@
 package com.mealgen.backend.auth.controller;
 
 import com.mealgen.backend.auth.dto.AuthResponse;
+import com.mealgen.backend.auth.exception.AuthUserNotFoundException;
 import com.mealgen.backend.auth.model.User;
 import com.mealgen.backend.auth.repository.UserRepository;
 import com.mealgen.backend.auth.service.AuthService;
@@ -12,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.dao.DataAccessException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -82,7 +84,7 @@ public class AuthController {
         try {
             authService.completeOnboarding(userOpt.get().getEmail());
             return ResponseEntity.ok(Map.of("message", "Onboarding completed"));
-        } catch (Exception e) {
+        } catch (DataAccessException | AuthUserNotFoundException e) {
             logger.error("Error completing onboarding errorType={}", e.getClass().getSimpleName());
             return ResponseEntity.status(500).body(Map.of("error", "Failed to complete onboarding"));
         }
@@ -90,17 +92,17 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<?> logout(HttpServletRequest request, HttpServletResponse response) {
-        try {
-            HttpSession session = request.getSession(false);
-            if (session != null) {
+        HttpSession session = request.getSession(false);
+        if (session != null) {
+            try {
                 session.invalidate();
-                logger.info("Session invalidated successfully");
+            } catch (IllegalStateException e) {
+                logger.error("Error during logout errorType={}", e.getClass().getSimpleName());
+                return ResponseEntity.status(500).body(Map.of("error", "Logout failed"));
             }
-            SecurityContextHolder.clearContext();
-            return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
-        } catch (Exception e) {
-            logger.error("Error during logout errorType={}", e.getClass().getSimpleName());
-            return ResponseEntity.status(500).body(Map.of("error", "Logout failed"));
+            logger.info("Session invalidated successfully");
         }
+        SecurityContextHolder.clearContext();
+        return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
     }
 }
