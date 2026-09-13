@@ -10,12 +10,14 @@ import com.mealgen.backend.subscription.service.SubscriptionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.oauth2.core.user.OAuth2User;
+import com.stripe.exception.StripeException;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
+
+import static com.mealgen.backend.security.AuthenticatedPrincipal.email;
 
 @RestController
 @RequestMapping("/api/subscription")
@@ -44,14 +46,14 @@ public class SubscriptionController {
     }
 
     @PostMapping("/checkout")
-    public ResponseEntity<?> checkout(Authentication authentication) throws Exception {
+    public ResponseEntity<?> checkout(Authentication authentication) throws StripeException {
         User user = resolveUser(authentication);
         String url = subscriptionService.createCheckoutSession(user);
         return ResponseEntity.ok(Map.of("url", url));
     }
 
     @PostMapping("/portal")
-    public ResponseEntity<?> portal(Authentication authentication) throws Exception {
+    public ResponseEntity<?> portal(Authentication authentication) throws StripeException {
         User user = resolveUser(authentication);
         String url = subscriptionService.createPortalSession(user);
         return ResponseEntity.ok(Map.of("url", url));
@@ -62,28 +64,8 @@ public class SubscriptionController {
     // -------------------------------------------------------------------------
 
     private User resolveUser(Authentication authentication) {
-        String email = extractEmail(authentication);
-        return userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalStateException("User not found for email: " + email));
-    }
-
-    private String extractEmail(Authentication authentication) {
-        if (authentication == null || !authentication.isAuthenticated()) {
-            throw new IllegalStateException("Not authenticated");
-        }
-
-        Object principal = authentication.getPrincipal();
-
-        if (principal instanceof OAuth2User oauth2User) {
-            Object email = oauth2User.getAttributes().get("email");
-            if (email == null) throw new IllegalStateException("OAuth2 principal missing email");
-            return email.toString();
-        }
-
-        if (principal instanceof String email) {
-            return email;
-        }
-
-        throw new IllegalStateException("Unknown principal type: " + principal.getClass());
+        String authenticatedEmail = email(authentication);
+        return userRepository.findByEmail(authenticatedEmail)
+                .orElseThrow(() -> new IllegalStateException("User not found"));
     }
 }

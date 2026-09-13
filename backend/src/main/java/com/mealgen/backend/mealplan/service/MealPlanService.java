@@ -2,6 +2,7 @@ package com.mealgen.backend.mealplan.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mealgen.backend.auth.model.User;
@@ -38,6 +39,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 
 @Service
@@ -64,8 +66,7 @@ public class MealPlanService {
     private final GenerationRequestService generationRequestService;
     private final SubscriptionService subscriptionService;
     private final GenerationObservability generationObservability;
-    // ObjectMapper is not exposed as a bean in this Spring Boot 4 setup — instantiate directly.
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     public List<MealPlanResponse> listMine(String email) {
         User user = getUserByEmail(email);
@@ -116,7 +117,7 @@ public class MealPlanService {
 
     private User getUserByEmail(String email) {
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalStateException("User not found for email: " + email));
+                .orElseThrow(() -> new IllegalStateException("User not found"));
     }
 
     private LocalDate parseDate(String s) {
@@ -157,7 +158,7 @@ public class MealPlanService {
         }
 
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalStateException("User not found for email: " + email));
+                .orElseThrow(() -> new IllegalStateException("User not found"));
 
         UserPreferences prefs = preferencesRepository.findByUserId(user.getId()).orElse(null);
 
@@ -211,24 +212,25 @@ public class MealPlanService {
                             String eventName = sse.event();
                             String rawData = sse.data();
                             if ("complete".equals(eventName) && rawData != null) {
+                                JsonNode data;
                                 try {
-                                    JsonNode data = objectMapper.readTree(rawData);
+                                    data = objectMapper.readTree(rawData);
                                     JsonNode planDoc = objectMapper.readTree(data.path("planJson").asText("{}"));
                                     JsonNode meta = planDoc.path("_meta");
                                     generationObservability.providerTokens(
                                             meta.path("inputTokens").asLong(0),
                                             meta.path("outputTokens").asLong(0));
-                                    MealPlanResponse response = mealPlanPersistenceService.persistFromComplete(
-                                            generationRequest.getId(), user, data);
-                                    quotaSettled.set(true);
-                                    subscriptionService.completeGeneration(user.getId(), reservation);
-                                    if (metricSettled.compareAndSet(false, true)) {
-                                        generationObservability.succeeded(generationTimer, correlationId);
-                                    }
-                                    savedEvent.set(buildSavedEvent(response));
-                                } catch (Exception e) {
+                                } catch (JsonProcessingException e) {
                                     throw new IllegalStateException("Failed to parse complete event data", e);
                                 }
+                                MealPlanResponse response = mealPlanPersistenceService.persistFromComplete(
+                                        generationRequest.getId(), user, data);
+                                quotaSettled.set(true);
+                                subscriptionService.completeGeneration(user.getId(), reservation);
+                                if (metricSettled.compareAndSet(false, true)) {
+                                    generationObservability.succeeded(generationTimer, correlationId);
+                                }
+                                savedEvent.set(buildSavedEvent(response));
                             } else if ("error".equals(eventName)) {
                                 failGeneration(user.getId(), generationRequest.getId(), reservation,
                                         quotaSettled, "GENERATION_UPSTREAM_ERROR", "agent_error");
@@ -315,7 +317,7 @@ public class MealPlanService {
                     .event("generation_status")
                     .data(objectMapper.writeValueAsString(response))
                     .build();
-        } catch (Exception error) {
+        } catch (JsonProcessingException error) {
             throw new IllegalStateException("Failed to serialise generation status", error);
         }
     }
@@ -325,7 +327,7 @@ public class MealPlanService {
             byte[] canonicalPayload = objectMapper.writeValueAsBytes(payload);
             return HexFormat.of().formatHex(
                     MessageDigest.getInstance("SHA-256").digest(canonicalPayload));
-        } catch (Exception error) {
+        } catch (JsonProcessingException | NoSuchAlgorithmException error) {
             throw new IllegalStateException("Failed to fingerprint generation request", error);
         }
     }
@@ -350,7 +352,7 @@ public class MealPlanService {
                     .event("mealplan_saved")
                     .data(objectMapper.writeValueAsString(response))
                     .build();
-        } catch (Exception e) {
+        } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to serialise mealplan_saved event", e);
         }
     }
@@ -363,8 +365,8 @@ public class MealPlanService {
                 if (PUBLIC_ERROR_CODES.contains(candidate)) {
                     code = candidate;
                 }
-            } catch (Exception e) {
-                log.warn("invalid_generation_error requestId={}", requestId, e);
+            } catch (JsonProcessingException ignored) {
+                log.warn("invalid_generation_error requestId={}", requestId);
             }
         }
         return errorEvent(code, requestId);

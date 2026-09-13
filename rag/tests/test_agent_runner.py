@@ -317,6 +317,7 @@ def test_run_agent_sanitizes_anthropic_api_failure(monkeypatch):
     [
         (OperationalError("database credentials leaked"), "GENERATION_DATABASE_UNAVAILABLE"),
         (ValueError("plan validation internals"), "GENERATION_VALIDATION_FAILED"),
+        (RuntimeError("programming error details"), "GENERATION_INTERNAL_ERROR"),
     ],
 )
 def test_run_agent_sanitizes_tool_failures(monkeypatch, failure, expected_code):
@@ -334,3 +335,4 @@ def test_run_agent_sanitizes_tool_failures(monkeypatch, failure, expected_code):
     assert error["requestId"] == "req-test-123"
     assert "credentials" not in error["message"]
     assert "internals" not in error["message"]
+    assert "programming" not in error["message"]

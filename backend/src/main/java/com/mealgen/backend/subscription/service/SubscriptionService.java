@@ -1,5 +1,8 @@
 package com.mealgen.backend.subscription.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mealgen.backend.auth.model.User;
 import com.mealgen.backend.auth.repository.UserRepository;
 import com.mealgen.backend.subscription.exception.QuotaExceededException;
@@ -8,6 +11,7 @@ import com.mealgen.backend.subscription.model.Subscription;
 import com.mealgen.backend.subscription.model.SubscriptionTier;
 import com.mealgen.backend.subscription.repository.SubscriptionRepository;
 import com.stripe.Stripe;
+import com.stripe.exception.StripeException;
 import com.stripe.model.Customer;
 import com.stripe.model.Event;
 import com.stripe.model.checkout.Session;
@@ -42,6 +46,7 @@ public class SubscriptionService {
     private final UserRepository userRepository;
     private final Clock clock;
     private final QuotaObservability quotaObservability;
+    private final ObjectMapper objectMapper;
 
     @Value("${stripe.secret-key}")
     private String stripeSecretKey;
@@ -182,7 +187,7 @@ public class SubscriptionService {
     // -------------------------------------------------------------------------
 
     @Transactional
-    public String createCheckoutSession(User user) throws Exception {
+    public String createCheckoutSession(User user) throws StripeException {
         Stripe.apiKey = stripeSecretKey;
 
         // Get or create Stripe customer
@@ -209,7 +214,7 @@ public class SubscriptionService {
     // -------------------------------------------------------------------------
 
     @Transactional
-    public String createPortalSession(User user) throws Exception {
+    public String createPortalSession(User user) throws StripeException {
         Stripe.apiKey = stripeSecretKey;
 
         String customerId = getOrCreateCustomerId(user);
@@ -232,7 +237,7 @@ public class SubscriptionService {
     @Transactional
     public void handleCheckoutCompleted(Event event) {
         Stripe.apiKey = stripeSecretKey;
-        com.fasterxml.jackson.databind.JsonNode obj = eventObject(event);
+        JsonNode obj = eventObject(event);
         String customerId = requiredJsonText(obj, "customer", "checkout customer id");
         String subscriptionId = requiredJsonText(obj, "subscription", "checkout subscription id");
         com.stripe.model.Subscription stripeSub = retrieveSubscription(subscriptionId);
@@ -243,7 +248,7 @@ public class SubscriptionService {
     @Transactional
     public void handleSubscriptionUpdated(Event event) {
         Stripe.apiKey = stripeSecretKey;
-        com.fasterxml.jackson.databind.JsonNode obj = eventObject(event);
+        JsonNode obj = eventObject(event);
         String subscriptionId = requiredJsonText(obj, "id", "subscription id");
         com.stripe.model.Subscription stripeSub = retrieveSubscription(subscriptionId);
         String customerId = requireText(stripeSub.getCustomer(), "subscription customer id");
@@ -313,25 +318,24 @@ public class SubscriptionService {
     private com.stripe.model.Subscription retrieveSubscription(String subscriptionId) {
         try {
             return com.stripe.model.Subscription.retrieve(subscriptionId);
-        } catch (Exception e) {
+        } catch (StripeException e) {
             throw new StripeWebhookProcessingException(
                     "Failed to retrieve Stripe subscription " + subscriptionId, e);
         }
     }
 
-    private com.fasterxml.jackson.databind.JsonNode eventObject(Event event) {
+    private JsonNode eventObject(Event event) {
         try {
-            return new com.fasterxml.jackson.databind.ObjectMapper()
-                    .readTree(event.toJson())
+            return objectMapper.readTree(event.toJson())
                     .path("data")
                     .path("object");
-        } catch (Exception e) {
+        } catch (JsonProcessingException e) {
             throw new StripeWebhookProcessingException("Invalid Stripe event payload", e);
         }
     }
 
     private String requiredJsonText(
-            com.fasterxml.jackson.databind.JsonNode object,
+            JsonNode object,
             String field,
             String description
     ) {
@@ -345,7 +349,7 @@ public class SubscriptionService {
         return value;
     }
 
-    private String getOrCreateCustomerId(User user) throws Exception {
+    private String getOrCreateCustomerId(User user) throws StripeException {
         // Return cached customer ID if already present on user
         if (user.getStripeCustomerId() != null && !user.getStripeCustomerId().isBlank()) {
             return user.getStripeCustomerId();

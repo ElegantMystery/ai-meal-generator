@@ -1,5 +1,6 @@
 package com.mealgen.backend.subscription;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mealgen.backend.auth.model.User;
 import com.mealgen.backend.auth.repository.UserRepository;
 import com.mealgen.backend.subscription.model.Subscription;
@@ -42,7 +43,8 @@ class SubscriptionServiceTest {
     void setUp() {
         Clock clock = Clock.fixed(Instant.parse("2026-08-19T12:00:00Z"), ZoneOffset.UTC);
         subscriptionService = new SubscriptionService(
-                subscriptionRepository, userRepository, clock, quotaObservability);
+                subscriptionRepository, userRepository, clock, quotaObservability,
+                new ObjectMapper());
         freeUser = User.builder()
                 .id(1L)
                 .email("free@example.com")

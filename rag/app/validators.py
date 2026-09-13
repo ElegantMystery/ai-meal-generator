@@ -113,14 +113,15 @@ def _unwrap_xml_item_wrappers(obj):
 def parse_and_validate_plan_json(content: str) -> MealPlanDoc:
     """
     Parse JSON text and validate against the strict schema.
-    Throws HTTPException(500) with readable details if invalid.
+    Raises HTTPException(500) with repairable details for invalid model output.
+    Unexpected parser or programming failures propagate to the generation boundary.
     """
     if not content or not content.strip():
         raise HTTPException(status_code=500, detail="LLM returned empty response")
 
     try:
         raw = json.loads(content)
-    except Exception:
+    except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="LLM did not return valid JSON")
 
     raw = _unwrap_xml_item_wrappers(raw)

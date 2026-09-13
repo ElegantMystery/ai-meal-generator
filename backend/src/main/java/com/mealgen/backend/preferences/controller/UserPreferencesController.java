@@ -4,8 +4,9 @@ import com.mealgen.backend.preferences.dto.UserPreferencesDto;
 import com.mealgen.backend.preferences.service.UserPreferencesService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
+
+import static com.mealgen.backend.security.AuthenticatedPrincipal.email;
 
 @RestController
 @RequestMapping("/api/preferences")
@@ -16,8 +17,7 @@ public class UserPreferencesController {
 
     @GetMapping("/me")
     public UserPreferencesDto getMyPreferences(Authentication authentication) {
-        String email = getEmail(authentication);
-        return preferencesService.getMyPreferences(email);
+        return preferencesService.getMyPreferences(email(authentication));
     }
 
     @PutMapping("/me")
@@ -25,29 +25,6 @@ public class UserPreferencesController {
             Authentication authentication,
             @RequestBody UserPreferencesDto dto
     ) {
-        String email = getEmail(authentication);
-        return preferencesService.upsertMyPreferences(email, dto);
-    }
-
-    private String getEmail(Authentication authentication) {
-        if (authentication == null || !authentication.isAuthenticated()) {
-            throw new IllegalStateException("Not authenticated");
-        }
-
-        Object principal = authentication.getPrincipal();
-
-        // Handle OAuth2 users (Google login)
-        if (principal instanceof OAuth2User oauth2User) {
-            Object email = oauth2User.getAttributes().get("email");
-            if (email == null) throw new IllegalStateException("OAuth2 principal missing email");
-            return email.toString();
-        }
-
-        // String principals remain supported for controller-level test authentication.
-        if (principal instanceof String email) {
-            return email;
-        }
-
-        throw new IllegalStateException("Unknown principal type: " + principal.getClass());
+        return preferencesService.upsertMyPreferences(email(authentication), dto);
     }
 }

@@ -15,6 +15,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from fastapi import HTTPException
+
 from ..db import get_conn
 from ..retrieval import (
     _compact_ingredients,
@@ -401,9 +403,8 @@ def _submit_plan(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
     try:
         content = json.dumps(plan)
         doc = parse_and_validate_plan_json(content)
-    except Exception as e:
-        # parse_and_validate_plan_json raises HTTPException; capture the detail
-        detail = getattr(e, "detail", str(e))
+    except HTTPException as exc:
+        detail = exc.detail
         if not ctx.repair_attempted:
             ctx.repair_attempted = True
         return {"ok": False, "errors": [detail] if not isinstance(detail, list) else detail}
@@ -415,8 +416,8 @@ def _submit_plan(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
     ids = extract_item_ids(doc)
     try:
         verify_item_ids_belong_to_store(ctx.store, ids)
-    except Exception as e:
-        detail = getattr(e, "detail", str(e))
+    except HTTPException as exc:
+        detail = exc.detail
         if not ctx.repair_attempted:
             ctx.repair_attempted = True
         return {"ok": False, "errors": [detail]}

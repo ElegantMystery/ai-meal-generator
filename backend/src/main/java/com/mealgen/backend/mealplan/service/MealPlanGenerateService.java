@@ -1,6 +1,7 @@
 package com.mealgen.backend.mealplan.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.mealgen.backend.auth.model.User;
 import com.mealgen.backend.auth.repository.UserRepository;
 import com.mealgen.backend.items.model.Item;
@@ -29,12 +30,12 @@ public class MealPlanGenerateService {
     private final ItemRepository itemRepository;
     private final MealPlanRepository mealPlanRepository;
     private final SubscriptionService subscriptionService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     @Transactional
     public MealPlanResponse generate(String email, String store, int days) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalStateException("User not found for email: " + email));
+                .orElseThrow(() -> new IllegalStateException("User not found"));
 
         // Joins this transaction: any later failure rolls the reservation back.
         QuotaReservation reservation = subscriptionService.reserveGeneration(user);
@@ -115,7 +116,7 @@ public class MealPlanGenerateService {
         String planJson;
         try {
             planJson = objectMapper.writeValueAsString(plan);
-        } catch (Exception e) {
+        } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to serialize plan JSON", e);
         }
 

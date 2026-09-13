@@ -18,7 +18,7 @@ public class UserPreferencesService {
 
     public UserPreferencesDto getMyPreferences(String email) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalStateException("User not found for email: " + email));
+                .orElseThrow(() -> new IllegalStateException("User not found"));
 
         return preferencesRepository.findByUserId(user.getId())
                 .map(this::toDto)
@@ -28,7 +28,7 @@ public class UserPreferencesService {
     @Transactional
     public UserPreferencesDto upsertMyPreferences(String email, UserPreferencesDto dto) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalStateException("User not found for email: " + email));
+                .orElseThrow(() -> new IllegalStateException("User not found"));
 
         UserPreferences prefs = preferencesRepository.findByUserId(user.getId())
                 .orElseGet(() -> UserPreferences.builder().user(user).build());

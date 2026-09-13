@@ -39,14 +39,23 @@ Google login begins at `GET /oauth2/authorization/google`.
 
 `POST /api/mealplans/generate-ai` requires `Idempotency-Key`, accepts optional
 `X-Correlation-ID`, and emits `phase`, `tool_call`, `tool_result`,
-`assistant_text`, `complete`, `mealplan_saved`, and `error` SSE events.
+`assistant_text`, `generation_status`, `complete`, `mealplan_saved`, and `error`
+SSE events.
+
+The browser accepts UTF-8 SSE frames terminated by an empty CRLF, LF, or CR
+line. It ignores comment-only frames, joins repeated `data` fields with a
+newline, and requires each dispatched event's data to be valid JSON. An
+undispatched frame is limited to 1 MiB (1,048,576 UTF-8 bytes), including
+non-empty-line terminators and excluding the terminating empty line. Malformed,
+oversized, or truncated frames fail the generation stream and release its
+reader; aborts stop dispatch before any later buffered event.
 
 ## RAG
 
 | Method and path | Purpose |
 |---|---|
 | `GET /health` | Process liveness |
-| `GET /ready` | Database and provider readiness |
+| `GET /ready` | Authenticated database readiness |
 | `POST /generate` | Internal SSE agent generation |
 | `POST /embed/backfill/items` | Backfill item embeddings |
 | `POST /embed/backfill/nutrition` | Backfill nutrition embeddings |

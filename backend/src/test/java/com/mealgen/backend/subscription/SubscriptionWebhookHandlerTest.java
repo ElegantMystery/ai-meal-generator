@@ -1,5 +1,7 @@
 package com.mealgen.backend.subscription;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mealgen.backend.auth.model.User;
 import com.mealgen.backend.auth.repository.UserRepository;
 import com.mealgen.backend.subscription.exception.StripeWebhookProcessingException;
@@ -12,6 +14,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
+import org.mockito.InjectMocks;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Clock;
@@ -33,13 +37,15 @@ class SubscriptionWebhookHandlerTest {
     @Mock Event event;
     @Mock com.stripe.model.Subscription stripeSubscription;
 
-    private SubscriptionService service;
+    @Spy Clock clock = Clock.systemUTC();
+    @Spy ObjectMapper objectMapper = new ObjectMapper()
+            .configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, true);
+
+    @InjectMocks private SubscriptionService service;
     private User user;
 
     @BeforeEach
     void setUp() {
-        service = new SubscriptionService(
-                subscriptionRepository, userRepository, Clock.systemUTC(), quotaObservability);
         user = User.builder()
                 .id(1L)
                 .email("user@example.com")
@@ -102,6 +108,41 @@ class SubscriptionWebhookHandlerTest {
         assertThatThrownBy(() -> service.handleSubscriptionUpdated(event))
                 .isInstanceOf(StripeWebhookProcessingException.class)
                 .hasMessageContaining("Invalid Stripe event payload");
+    }
+
+    @Test
+    void configuredCompatibilityMapper_isUsedForStripePayload() {
+        when(event.toJson()).thenReturn("{'data':{'object':{'id':'sub_old'}}}");
+        when(subscriptionRepository.findByStripeSubscriptionId("sub_old"))
+                .thenReturn(Optional.empty());
+
+        service.handleSubscriptionDeleted(event);
+
+        verify(subscriptionRepository).findByStripeSubscriptionId("sub_old");
+    }
+
+    @Test
+    void unexpectedPayloadRuntimeFailure_isNotMisclassifiedAsMalformedJson() {
+        RuntimeException failure = new RuntimeException("programming failure");
+        when(event.toJson()).thenThrow(failure);
+
+        assertThatThrownBy(() -> service.handleSubscriptionDeleted(event))
+                .isSameAs(failure);
+    }
+
+    @Test
+    void unexpectedStripeRuntimeFailure_isNotMisclassifiedAsProviderFailure() {
+        when(event.toJson()).thenReturn(eventJson("sub_123", "cus_123"));
+        RuntimeException failure = new RuntimeException("programming failure");
+
+        try (MockedStatic<com.stripe.model.Subscription> stripe =
+                     mockStatic(com.stripe.model.Subscription.class)) {
+            stripe.when(() -> com.stripe.model.Subscription.retrieve("sub_123"))
+                    .thenThrow(failure);
+
+            assertThatThrownBy(() -> service.handleSubscriptionUpdated(event))
+                    .isSameAs(failure);
+        }
     }
 
     @Test

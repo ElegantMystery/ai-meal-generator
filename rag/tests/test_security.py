@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
+from httpx import ASGITransport, AsyncClient
 
 from app import config
 
@@ -13,6 +14,14 @@ def _authenticate(secret: str | None) -> None:
     from app.security import require_rag_secret
 
     asyncio.run(require_rag_secret(secret))
+
+
+async def _request_app(app, path, body=None, headers=None):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        if body is not None:
+            return await client.post(path, json=body, headers=headers)
+        return await client.get(path, headers=headers)
 
 
 def test_production_startup_rejects_missing_secret(monkeypatch):
@@ -94,6 +103,78 @@ def test_generation_and_embedding_routes_share_fail_closed_auth(monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         _authenticate(None)
     assert exc_info.value.status_code == 401
+
+
+def test_readiness_route_uses_shared_fail_closed_auth():
+    from app.main import app
+    from app.security import require_rag_secret
+
+    readiness_route = next(route for route in app.routes if route.path == "/ready")
+
+    assert [dependency.call for dependency in readiness_route.dependant.dependencies] == [
+        require_rag_secret
+    ]
+
+
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        (
+            "/generate",
+            {
+                "userId": 1,
+                "store": "TRADER_JOES",
+                "days": 1,
+                "preferences": {},
+            },
+        ),
+        ("/embed/backfill/items", {"store": "TRADER_JOES", "limit": 1}),
+        ("/embed/backfill/nutrition", {"store": "TRADER_JOES", "limit": 1}),
+        ("/embed/backfill/ingredients", {"store": "TRADER_JOES", "limit": 1}),
+        ("/ready", None),
+    ],
+)
+@pytest.mark.parametrize("provided_secret", [None, "wrong-secret"])
+def test_protected_routes_reject_missing_or_incorrect_secret(
+    monkeypatch, path, body, provided_secret
+):
+    from app import main
+
+    monkeypatch.setattr(config, "RAG_SHARED_SECRET", "expected-secret")
+    get_conn = MagicMock()
+    monkeypatch.setattr(main, "get_conn", get_conn)
+    headers = {"X-RAG-SECRET": provided_secret} if provided_secret else {}
+    response = asyncio.run(_request_app(main.app, path, body, headers))
+
+    assert response.status_code == 401
+    get_conn.assert_not_called()
+
+
+def test_health_remains_public_when_rag_authentication_is_configured(monkeypatch):
+    from app import main
+
+    monkeypatch.setattr(config, "RAG_SHARED_SECRET", "expected-secret")
+    health_route = next(route for route in main.app.routes if route.path == "/health")
+
+    assert health_route.dependant.dependencies == []
+    assert main.health() == {"ok": True}
+
+
+def test_readiness_accepts_valid_secret_and_checks_database(monkeypatch):
+    from app import main
+
+    monkeypatch.setattr(config, "RAG_SHARED_SECRET", "expected-secret")
+    connection = MagicMock()
+    context = MagicMock()
+    context.__enter__.return_value = connection
+    get_conn = MagicMock(return_value=context)
+    monkeypatch.setattr(main, "get_conn", get_conn)
+
+    _authenticate("expected-secret")
+    response = main.readiness()
+
+    assert response == {"status": "UP", "database": "UP"}
+    connection.execute.assert_called_once_with("SELECT 1")
 
 
 def test_valid_secret_uses_constant_time_comparison(monkeypatch):

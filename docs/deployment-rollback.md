@@ -6,7 +6,10 @@ matches the intended Git SHA. A stage failure automatically restores the prior
 `IMAGE_TAG` and restarts all application services at that revision.
 
 The RAG readiness check includes `SELECT 1`, so its health covers both the RAG
-process and database connectivity. The post-deploy smoke test checks the public
+process and database connectivity. `GET /ready` uses the shared `X-RAG-SECRET`
+authentication dependency; the Compose health probe reads the secret from the
+container environment and sends it as a header. Only `GET /health` is public.
+The post-deploy smoke test checks the public
 frontend, backend health, SSE buffering headers, and the revision served by
 nginx.
 
