@@ -6,7 +6,6 @@ TDD: These tests are written FIRST (RED), then the implementation is updated (GR
 import json
 import pytest
 from pydantic import ValidationError
-
 from app.validators import (
     AmountUsed,
     AggregatedAmountUsed,
@@ -20,6 +19,7 @@ from app.validators import (
     extract_item_ids,
     _unwrap_xml_item_wrappers,
     find_mixed_amount_unit_errors,
+    find_quantity_limit_errors,
 )
 
 
@@ -27,6 +27,20 @@ def PlanItem(*args, **kwargs):
     """Build a generated-plan item while keeping legacy test setup concise."""
     kwargs.setdefault("amountUsed", {"value": 1, "unit": "count"})
     return PlanItemModel(*args, **kwargs)
+
+
+def _doc_with_item(item: PlanItemModel) -> MealPlanDoc:
+    return MealPlanDoc(
+        title="Test",
+        startDate="2026-09-13",
+        endDate="2026-09-13",
+        plan=[
+            DayPlan(
+                date="2026-09-13",
+                meals=[Meal(name="Dinner", dishes=[Dish(dishName="Dish", items=[item])])],
+            )
+        ],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -48,13 +62,29 @@ class TestPlanItemServingsUsed:
         )
         assert item.amountUsed == AmountUsed(value=1.25, unit=unit)
 
-    @pytest.mark.parametrize("value", [0, -0.1, 10000.1])
+    @pytest.mark.parametrize("value", [0, -0.1, 120000.1])
     def test_amount_used_rejects_out_of_range_values(self, value):
         with pytest.raises(ValidationError):
             PlanItem(
                 id=1,
                 name="Ingredient",
                 amountUsed={"value": value, "unit": "g"},
+            )
+
+    def test_amount_used_allows_twelve_person_scaled_quantity(self):
+        item = PlanItem(
+            id=1,
+            name="Ingredient",
+            amountUsed={"value": 120_000, "unit": "g"},
+        )
+        assert item.amountUsed.value == 120_000
+
+    def test_amount_used_rejects_more_than_twelve_person_limit(self):
+        with pytest.raises(ValidationError):
+            PlanItem(
+                id=1,
+                name="Ingredient",
+                amountUsed={"value": 120_000.1, "unit": "g"},
             )
 
     def test_amount_used_rejects_noncanonical_unit(self):
@@ -77,13 +107,13 @@ class TestPlanItemServingsUsed:
         with pytest.raises(ValidationError):
             PlanItem(id=3, name="Eggs", servingsUsed=0)
 
-    def test_plan_item_servings_used_capped_at_20(self):
+    def test_plan_item_servings_used_capped_at_twelve_person_limit(self):
         with pytest.raises(ValidationError):
-            PlanItem(id=4, name="Bread", servingsUsed=21)
+            PlanItem(id=4, name="Bread", servingsUsed=241)
 
-    def test_plan_item_servings_used_boundary_20_is_valid(self):
-        item = PlanItem(id=5, name="Granola", servingsUsed=20)
-        assert item.servingsUsed == 20
+    def test_plan_item_servings_used_boundary_twelve_person_limit_is_valid(self):
+        item = PlanItem(id=5, name="Granola", servingsUsed=240)
+        assert item.servingsUsed == 240
 
     def test_plan_item_servings_used_boundary_1_is_valid(self):
         item = PlanItem(id=6, name="Yogurt", servingsUsed=1)
@@ -96,6 +126,33 @@ class TestPlanItemServingsUsed:
     def test_plan_item_servings_used_negative_rejected(self):
         with pytest.raises(ValidationError):
             PlanItem(id=7, name="Butter", servingsUsed=-1)
+
+    def test_one_person_quantity_limits_reject_scaled_values(self):
+        doc = _doc_with_item(
+            PlanItem(
+                id=8,
+                name="Bulk ingredient",
+                servingsUsed=21,
+                amountUsed={"value": 10_001, "unit": "g"},
+            )
+        )
+
+        errors = find_quantity_limit_errors(doc, servings=1)
+
+        assert len(errors) == 2
+        assert all("Item 8" in error for error in errors)
+
+    def test_twelve_person_quantity_limits_accept_scaled_values(self):
+        doc = _doc_with_item(
+            PlanItem(
+                id=9,
+                name="Bulk ingredient",
+                servingsUsed=240,
+                amountUsed={"value": 120_000, "unit": "g"},
+            )
+        )
+
+        assert find_quantity_limit_errors(doc, servings=12) == []
 
 
 # ---------------------------------------------------------------------------

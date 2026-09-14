@@ -25,13 +25,27 @@ public class GenerationRequestService {
 
     @Transactional
     public GenerationRequestClaim claim(User user, String idempotencyKey, String fingerprint) {
+        return claim(user, idempotencyKey, fingerprint, null);
+    }
+
+    @Transactional
+    public GenerationRequestClaim claim(
+            User user,
+            String idempotencyKey,
+            String fingerprint,
+            String compatibleLegacyFingerprint
+    ) {
         validateIdempotencyKey(idempotencyKey);
         OffsetDateTime now = now();
         int inserted = repository.insertPending(
                 UUID.randomUUID(), user.getId(), idempotencyKey, fingerprint, now);
         GenerationRequest request = repository.findByUserIdAndIdempotencyKey(user.getId(), idempotencyKey)
                 .orElseThrow(() -> new IllegalStateException("Generation request claim was not persisted"));
-        if (!request.getRequestFingerprint().equals(fingerprint)) {
+        String persistedFingerprint = request.getRequestFingerprint();
+        boolean currentMatch = persistedFingerprint.equals(fingerprint);
+        boolean compatibleLegacyMatch = compatibleLegacyFingerprint != null
+                && persistedFingerprint.equals(compatibleLegacyFingerprint);
+        if (!currentMatch && !compatibleLegacyMatch) {
             throw new IdempotencyConflictException();
         }
         return new GenerationRequestClaim(request, inserted == 1);

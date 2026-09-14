@@ -148,13 +148,22 @@ public class MealPlanService {
      */
     public Flux<ServerSentEvent<String>> streamGenerateAi(
             String email, String store, int days, String idempotencyKey) {
-        return streamGenerateAi(email, store, days, idempotencyKey, null);
+        return streamGenerateAi(email, store, days, 1, idempotencyKey, null);
     }
 
     public Flux<ServerSentEvent<String>> streamGenerateAi(
             String email, String store, int days, String idempotencyKey, String suppliedCorrelationId) {
+        return streamGenerateAi(email, store, days, 1, idempotencyKey, suppliedCorrelationId);
+    }
+
+    public Flux<ServerSentEvent<String>> streamGenerateAi(
+            String email, String store, int days, int servings,
+            String idempotencyKey, String suppliedCorrelationId) {
         if (days < 1 || days > 14) {
             throw new IllegalArgumentException("days must be between 1 and 14");
+        }
+        if (servings < 1 || servings > 12) {
+            throw new IllegalArgumentException("servings must be between 1 and 12");
         }
 
         User user = userRepository.findByEmail(email)
@@ -171,10 +180,17 @@ public class MealPlanService {
         payload.put("userId", user.getId());
         payload.put("store", store);
         payload.put("days", days);
+        payload.put("servings", servings);
         payload.put("preferences", preferences);
 
+        String compatibleLegacyFingerprint = null;
+        if (servings == 1) {
+            Map<String, Object> legacyPayload = new LinkedHashMap<>(payload);
+            legacyPayload.remove("servings");
+            compatibleLegacyFingerprint = fingerprint(legacyPayload);
+        }
         GenerationRequestClaim claim = generationRequestService.claim(
-                user, idempotencyKey, fingerprint(payload));
+                user, idempotencyKey, fingerprint(payload), compatibleLegacyFingerprint);
         GenerationRequest generationRequest = claim.request();
         if (!claim.owner()) {
             return Flux.just(generationStatusEvent(

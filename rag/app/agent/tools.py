@@ -31,6 +31,7 @@ from ..validators import (
     parse_and_validate_plan_json,
     extract_item_ids,
     find_mixed_amount_unit_errors,
+    find_quantity_limit_errors,
 )
 from ..ingredient_validation import (
     ProductIngredientData,
@@ -174,6 +175,7 @@ class ToolContext:
     store: str
     days: int
     start_date: str
+    servings: int = 1
     request_id: str = "unknown"
     dietary_restriction: Optional[str] = None
     plan_doc: Optional[MealPlanDoc] = None
@@ -461,6 +463,10 @@ def _submit_plan(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
     unit_errors = find_mixed_amount_unit_errors(doc)
     if unit_errors:
         return _repair_response(ctx, unit_errors)
+
+    quantity_errors = find_quantity_limit_errors(doc, ctx.servings)
+    if quantity_errors:
+        return _repair_response(ctx, quantity_errors)
 
     # Flatten dishes -> meal.items (dedupe + sum servingsUsed)
     doc = flatten_dishes_to_items(doc)

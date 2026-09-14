@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 _ALLOWED_STORES = {"TRADER_JOES", "WHOLE_FOODS"}
 
@@ -16,6 +16,7 @@ class GenerateRequest(BaseModel):
     correlationId: Optional[str] = None
     store: str
     days: int
+    servings: int = Field(default=1, strict=True, ge=1, le=12)
     preferences: Preferences
 
     @field_validator("store")

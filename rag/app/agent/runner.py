@@ -22,7 +22,7 @@ from anthropic import Anthropic, APIError
 from .. import config
 from ..generation_errors import GenerationErrorCode, classify_generation_error, public_error
 from ..models import GenerateRequest
-from .prompt import SYSTEM_PROMPT
+from .prompt import build_system_prompt
 from .tools import TOOL_DEFINITIONS, ToolContext, dispatch
 
 logger = logging.getLogger(__name__)
@@ -290,6 +290,7 @@ async def run_agent(req: GenerateRequest) -> AsyncIterator[Event]:
         store=req.store,
         days=req.days,
         start_date=str(start),
+        servings=req.servings,
         request_id=correlation_id,
         dietary_restriction=prefs.get("dietaryRestrictions"),
     )
@@ -297,6 +298,7 @@ async def run_agent(req: GenerateRequest) -> AsyncIterator[Event]:
     user_brief = {
         "store": req.store,
         "days": req.days,
+        "servings": req.servings,
         "startDate": str(start),
         "endDate": str(end),
         "preferences": prefs,
@@ -329,7 +331,7 @@ async def run_agent(req: GenerateRequest) -> AsyncIterator[Event]:
                 client.messages.create,
                 model=config.AGENT_MODEL,
                 max_tokens=16384,
-                system=SYSTEM_PROMPT,
+                system=build_system_prompt(req.servings),
                 tools=TOOL_DEFINITIONS,
                 messages=messages,
             )

@@ -64,6 +64,50 @@ class GenerationRequestServiceTest {
     }
 
     @Test
+    void claim_defaultServingsRetryAcceptsExistingLegacyFingerprint() {
+        GenerationRequest existing = request("key-1", "legacy-without-servings");
+        when(repository.insertPending(
+                any(), eq(7L), eq("key-1"), eq("current-with-servings"), any())).thenReturn(0);
+        when(repository.findByUserIdAndIdempotencyKey(7L, "key-1"))
+                .thenReturn(Optional.of(existing));
+
+        GenerationRequestClaim claim = service.claim(
+                user, "key-1", "current-with-servings", "legacy-without-servings");
+
+        assertThat(claim.owner()).isFalse();
+        assertThat(claim.request()).isSameAs(existing);
+    }
+
+    @Test
+    void claim_nonDefaultServingsRetryDoesNotAcceptLegacyFingerprint() {
+        GenerationRequest existing = request("key-1", "legacy-without-servings");
+        when(repository.insertPending(
+                any(), eq(7L), eq("key-1"), eq("current-for-two"), any())).thenReturn(0);
+        when(repository.findByUserIdAndIdempotencyKey(7L, "key-1"))
+                .thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> service.claim(
+                user, "key-1", "current-for-two", null))
+                .isInstanceOf(IdempotencyConflictException.class);
+    }
+
+    @Test
+    void claim_newRequestAlwaysPersistsCurrentServingsAwareFingerprint() {
+        GenerationRequest inserted = request("key-1", "current-with-servings");
+        when(repository.insertPending(
+                any(), eq(7L), eq("key-1"), eq("current-with-servings"), any())).thenReturn(1);
+        when(repository.findByUserIdAndIdempotencyKey(7L, "key-1"))
+                .thenReturn(Optional.of(inserted));
+
+        assertThat(service.claim(
+                user, "key-1", "current-with-servings", "legacy-without-servings").owner())
+                .isTrue();
+
+        verify(repository).insertPending(
+                any(), eq(7L), eq("key-1"), eq("current-with-servings"), any());
+    }
+
+    @Test
     void start_reservesAndRecordsTheExactQuotaReservation() {
         UUID id = UUID.randomUUID();
         QuotaReservation reservation = QuotaReservation.free(LocalDate.of(2026, 8, 1));

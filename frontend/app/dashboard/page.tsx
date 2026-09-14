@@ -41,12 +41,39 @@ type MealPlan = {
 
 type StoreOption = "TRADER_JOES" | "WHOLE_FOODS";
 
+type ActiveMealPlanGeneration = {
+  idempotencyKey: string;
+  requestId?: string;
+  store?: StoreOption;
+  days?: number;
+  servings?: unknown;
+};
+
 type GenerationStatus = {
   id: string;
   status: "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "ABANDONED";
   failureCode: string | null;
   mealPlanId: number | null;
 };
+
+function recoveredServings(value: unknown): number {
+  return typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 1 &&
+    value <= 12
+    ? value
+    : 1;
+}
+
+function readActiveGeneration(): ActiveMealPlanGeneration | null {
+  const raw = localStorage.getItem("activeMealPlanGeneration");
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as ActiveMealPlanGeneration;
+  } catch {
+    return null;
+  }
+}
 
 // Type guard for quota exceeded errors — handles both Axios and fetch/SSE error shapes
 function isQuotaExceeded(err: unknown): boolean {
@@ -133,6 +160,7 @@ export default function DashboardPage() {
 
   const [store, setStore] = useState<StoreOption>("TRADER_JOES");
   const [days, setDays] = useState<number>(7);
+  const [servings, setServings] = useState<number>(1);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const generationKeyRef = useRef<string | null>(null);
@@ -157,10 +185,8 @@ export default function DashboardPage() {
     const controller = new AbortController();
     void (async () => {
       try {
-        const active = JSON.parse(raw) as {
-          idempotencyKey: string;
-          requestId?: string;
-        };
+        const active = JSON.parse(raw) as ActiveMealPlanGeneration;
+        setServings(recoveredServings(active.servings));
         generationKeyRef.current = active.idempotencyKey;
         setCreatingAi(true);
         setAiStatus("Recovering your meal plan…");
@@ -308,7 +334,7 @@ export default function DashboardPage() {
     setError(null);
     try {
       const res = await api.post<MealPlan>("/api/mealplans/generate", null, {
-        params: { store, days },
+        params: { store, days, servings },
       });
       setMealplans((prev) => [res.data, ...prev]);
       await refetchSubscription();
@@ -337,17 +363,28 @@ export default function DashboardPage() {
     let toolCalls = 0;
     let saved: MealPlan | null = null;
     generationStatusRef.current = null;
-    const idempotencyKey = generationKeyRef.current ?? crypto.randomUUID();
+    const durableGeneration = readActiveGeneration();
+    const reusableKey = generationKeyRef.current;
+    const canReuseKey =
+      reusableKey !== null &&
+      durableGeneration?.idempotencyKey === reusableKey &&
+      durableGeneration.store === store &&
+      durableGeneration.days === days &&
+      durableGeneration.servings === servings;
+    const idempotencyKey = canReuseKey
+      ? reusableKey
+      : crypto.randomUUID();
     generationKeyRef.current = idempotencyKey;
     localStorage.setItem(
       "activeMealPlanGeneration",
-      JSON.stringify({ idempotencyKey, store, days }),
+      JSON.stringify({ idempotencyKey, store, days, servings }),
     );
 
     try {
       await streamMealPlan({
         store,
         days,
+        servings,
         idempotencyKey,
         signal: controller.signal,
         onEvent: (ev) => {
@@ -367,6 +404,9 @@ export default function DashboardPage() {
                 JSON.stringify({
                   idempotencyKey,
                   requestId: generationStatusRef.current.id,
+                  store,
+                  days,
+                  servings,
                 }),
               );
               break;
@@ -504,7 +544,9 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between gap-2">
               <div>
                 <CardTitle>Generate Plan</CardTitle>
-                <CardDescription>Pick a store and duration.</CardDescription>
+                <CardDescription>
+                  Pick a store, duration, and servings.
+                </CardDescription>
               </div>
               {subscriptionStatus && (
                 <QuotaBadge
@@ -538,6 +580,22 @@ export default function DashboardPage() {
                 <option value={5}>5 days</option>
                 <option value={7}>7 days</option>
                 <option value={14}>14 days</option>
+              </Select>
+
+              <Select
+                id="servings"
+                label="Servings"
+                value={servings}
+                onChange={(e) => setServings(Number(e.target.value))}
+                disabled={creating || creatingAi}
+              >
+                {Array.from({ length: 12 }, (_, index) => index + 1).map(
+                  (value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ),
+                )}
               </Select>
 
               <div className="pt-1 space-y-2">

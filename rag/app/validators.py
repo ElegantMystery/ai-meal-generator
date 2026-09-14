@@ -10,14 +10,15 @@ logger = logging.getLogger(__name__)
 
 
 class AmountUsed(BaseModel):
-    value: float = Field(gt=0, le=10_000)
+    # A generated item may represent the full quantity for as many as 12 diners.
+    value: float = Field(gt=0, le=120_000)
     unit: Literal["g", "ml", "count"]
 
 
 class PlanItem(BaseModel):
     id: int
     name: str
-    servingsUsed: float = Field(default=1.0, ge=0.05, le=20.0)
+    servingsUsed: float = Field(default=1.0, ge=0.05, le=240.0)
     amountUsed: AmountUsed
 
 
@@ -146,6 +147,32 @@ def find_mixed_amount_unit_errors(doc: MealPlanDoc, max_errors: int = 8) -> List
             )
             if len(errors) >= max_errors:
                 break
+    return errors
+
+
+def find_quantity_limit_errors(
+    doc: MealPlanDoc, servings: int, max_errors: int = 8
+) -> List[str]:
+    """Apply per-request limits after the broad 12-person schema bounds."""
+    max_servings_used = 20 * servings
+    max_amount_used = 10_000 * servings
+    errors: List[str] = []
+    for day in doc.plan:
+        for meal in day.meals:
+            for dish in meal.dishes:
+                for item in dish.items:
+                    if item.servingsUsed > max_servings_used:
+                        errors.append(
+                            f"Item {item.id} servingsUsed exceeds {max_servings_used}. "
+                            f"Use the quantity for {servings} diner(s)."
+                        )
+                    if item.amountUsed.value > max_amount_used:
+                        errors.append(
+                            f"Item {item.id} amountUsed exceeds {max_amount_used}. "
+                            f"Use the physical quantity for {servings} diner(s)."
+                        )
+                    if len(errors) >= max_errors:
+                        return errors
     return errors
 
 

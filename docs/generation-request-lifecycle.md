@@ -8,7 +8,7 @@ or lost during a backend restart.
 
 Clients send a nonblank `Idempotency-Key` header of at most 255 characters to
 `POST /api/mealplans/generate-ai`. A key belongs to one authenticated user and
-one request payload. Reusing it with changed store, days, or preferences returns
+one request payload. Reusing it with changed store, days, servings, or preferences returns
 HTTP 409. Concurrent submissions with the same user and key create one request;
 only the insert winner reserves quota and calls RAG.
 
@@ -39,8 +39,11 @@ request ownership:
 
 The response contains the request ID, status, safe failure code, saved meal-plan
 ID, and timestamps. The dashboard stores active recovery metadata in
-`localStorage`, polls after a lost connection or refresh, and fetches the saved
-meal plan once the request succeeds.
+`localStorage`, including store, days, and servings. It polls after a lost
+connection or refresh and fetches the saved meal plan once the request succeeds.
+Legacy recovery records default to one serving. A retry reuses its idempotency
+key only while all generation settings still match; changed settings start a new
+request with a new key.
 
 ## Cleanup and retention
 
