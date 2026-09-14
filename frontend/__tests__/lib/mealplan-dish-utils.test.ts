@@ -198,6 +198,28 @@ describe("hasDishes()", () => {
 // ---------------------------------------------------------------------------
 
 describe("getDishItemLabel()", () => {
+  it("shows a physical amount when amountUsed is available", () => {
+    expect(
+      getDishItemLabel({
+        id: 1,
+        name: "Spaghetti",
+        servingsUsed: 2,
+        amountUsed: { value: 170, unit: "g" },
+      }),
+    ).toBe("170 g Spaghetti");
+  });
+
+  it("formats decimal physical amounts without trailing zeros", () => {
+    expect(
+      getDishItemLabel({
+        id: 2,
+        name: "Olive Oil",
+        servingsUsed: 0.2,
+        amountUsed: { value: 14.5, unit: "ml" },
+      }),
+    ).toBe("14.5 ml Olive Oil");
+  });
+
   // --- existing cases (regression) ---
 
   it("returns just the name when servingsUsed is 1", () => {

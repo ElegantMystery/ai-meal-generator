@@ -24,11 +24,57 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ShoppingListService {
 
+    private static final Set<String> PHYSICAL_AMOUNT_UNITS = Set.of("g", "ml", "count");
+
     private final MealPlanRepository mealPlanRepository;
     private final UserRepository userRepository;
     private final ItemRepository itemRepository;
     private final EntityManager entityManager;
     private final ObjectMapper objectMapper;
+    private final PackageSizeParser packageSizeParser = new PackageSizeParser();
+
+    private static class ItemUsage {
+        double servingsUsed;
+        double amountUsed;
+        String amountUnit;
+        int occurrences;
+        int physicalAmountOccurrences;
+        boolean mixedAmountUnits;
+
+        void add(double servings, JsonNode amountNode) {
+            servingsUsed += servings;
+            occurrences++;
+            if (amountNode == null || !amountNode.isObject()) {
+                return;
+            }
+            JsonNode valueNode = amountNode.get("value");
+            JsonNode unitNode = amountNode.get("unit");
+            if (valueNode == null || !valueNode.isNumber() || unitNode == null || !unitNode.isTextual()) {
+                return;
+            }
+            double value = valueNode.asDouble();
+            String unit = unitNode.asText();
+            if (!Double.isFinite(value) || value <= 0 || !PHYSICAL_AMOUNT_UNITS.contains(unit)) {
+                return;
+            }
+            if (amountUnit != null && !amountUnit.equals(unit)) {
+                mixedAmountUnits = true;
+                return;
+            }
+            amountUnit = unit;
+            amountUsed += value;
+            physicalAmountOccurrences++;
+        }
+
+        boolean hasCompletePhysicalAmount() {
+            return !mixedAmountUnits
+                    && physicalAmountOccurrences == occurrences
+                    && amountUnit != null;
+        }
+    }
+
+    private record Quantity(int packages, boolean estimated) {
+    }
 
     /**
      * Helper class to hold parsed nutrition values
@@ -114,7 +160,7 @@ public class ShoppingListService {
 
         // Sum servingsUsed per item across all meals.
         // Key: item ID, Value: total servingsUsed (sum across all meal occurrences)
-        Map<Long, Double> servingsUsedMap = new HashMap<>();
+        Map<Long, ItemUsage> usageByItemId = new HashMap<>();
         JsonNode plan = root.get("plan");
         if (plan != null && plan.isArray()) {
             for (JsonNode day : plan) {
@@ -133,7 +179,8 @@ public class ShoppingListService {
                                     if (servingsNode != null && !servingsNode.isNull() && servingsNode.isNumber()) {
                                         servingsUsed = servingsNode.asDouble();
                                     }
-                                    servingsUsedMap.merge(id, servingsUsed, Double::sum);
+                                    usageByItemId.computeIfAbsent(id, ignored -> new ItemUsage())
+                                            .add(servingsUsed, item.get("amountUsed"));
                                 }
                             }
                         }
@@ -142,7 +189,7 @@ public class ShoppingListService {
             }
         }
 
-        if (servingsUsedMap.isEmpty()) {
+        if (usageByItemId.isEmpty()) {
             return ShoppingListResponse.builder()
                     .mealplanId(mealplanId)
                     .items(List.of())
@@ -150,7 +197,7 @@ public class ShoppingListService {
                     .build();
         }
 
-        List<Long> ids = new ArrayList<>(servingsUsedMap.keySet());
+        List<Long> ids = new ArrayList<>(usageByItemId.keySet());
         List<Item> dbItems = itemRepository.findByIdIn(ids);
 
         Map<Long, Item> itemById = dbItems.stream()
@@ -167,38 +214,31 @@ public class ShoppingListService {
             }
         }
 
-        // Compute qty for each item:
-        //   qty = ceil(totalServingsUsed / serving_count)   if serving_count present and > 0
-        //   qty = ceil(totalServingsUsed)                   otherwise (fallback)
-        //   minimum qty is always 1
-        Map<Long, Integer> qtyByItemId = new HashMap<>();
-        for (Map.Entry<Long, Double> entry : servingsUsedMap.entrySet()) {
+        Map<Long, Quantity> quantityByItemId = new HashMap<>();
+        for (Map.Entry<Long, ItemUsage> entry : usageByItemId.entrySet()) {
             long itemId = entry.getKey();
-            double totalServingsUsed = entry.getValue();
-
-            NutritionValues nv = parsedNutritionByItemId.get(itemId);
-            Integer servingCount = (nv != null) ? nv.servingCount : null;
-
-            int qty;
-            if (servingCount != null && servingCount > 0) {
-                qty = (int) Math.ceil(totalServingsUsed / servingCount);
-            } else {
-                qty = (int) Math.ceil(totalServingsUsed);
-            }
-            qtyByItemId.put(itemId, Math.max(1, qty));
+            ItemUsage usage = entry.getValue();
+            Item item = itemById.get(itemId);
+            NutritionValues nutrition = parsedNutritionByItemId.get(itemId);
+            quantityByItemId.put(itemId, calculateQuantity(usage, item, nutrition));
         }
 
         // Build response items, sorted by qty desc then name
         List<ShoppingListItemDto> items = ids.stream()
                 .map(id -> {
                     Item it = itemById.get(id);
-                    int qty = qtyByItemId.getOrDefault(id, 1);
+                    ItemUsage usage = usageByItemId.get(id);
+                    Quantity quantity = quantityByItemId.getOrDefault(id, new Quantity(1, true));
+                    int qty = quantity.packages();
                     if (it == null) {
                         // Item missing from DB (should not happen if verify_id works, but safe)
                         return ShoppingListItemDto.builder()
                                 .id(id)
                                 .name("Unknown Item")
                                 .qty(qty)
+                                .neededAmount(neededAmount(usage))
+                                .neededUnit(neededUnit(usage))
+                                .quantityEstimated(true)
                                 .build();
                     }
                     Double price = it.getPrice();
@@ -212,6 +252,9 @@ public class ShoppingListService {
                             .unitSize(it.getUnitSize())
                             .imageUrl(it.getImageUrl())
                             .lineTotal(lineTotal)
+                            .neededAmount(neededAmount(usage))
+                            .neededUnit(neededUnit(usage))
+                            .quantityEstimated(quantity.estimated())
                             .build();
                 })
                 .sorted(Comparator
@@ -229,6 +272,8 @@ public class ShoppingListService {
         int days = calculateDays(mp, root);
 
         // Calculate nutrition totals using servingsUsed (not occurrence count)
+        Map<Long, Double> servingsUsedMap = usageByItemId.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().servingsUsed));
         NutritionTotals nutritionTotals = calculateNutritionTotals(servingsUsedMap, parsedNutritionByItemId);
 
         // Calories: sum estimatedCalories from LLM dish entries in plan_json.
@@ -261,6 +306,37 @@ public class ShoppingListService {
                 .fiberPerDay(fiberPerDay)
                 .sugarPerDay(sugarPerDay)
                 .build();
+    }
+
+    private Quantity calculateQuantity(ItemUsage usage, Item item, NutritionValues nutrition) {
+        if (usage.hasCompletePhysicalAmount()) {
+            Optional<PackageSizeParser.PackageSize> packageSize = packageSizeParser.parse(item);
+            if (packageSize.isPresent() && packageSize.get().unit().equals(usage.amountUnit)) {
+                return new Quantity(packageCount(usage.amountUsed, packageSize.get().amount()), false);
+            }
+        }
+
+        Integer servingCount = nutrition == null ? null : nutrition.servingCount;
+        if (servingCount != null && servingCount > 0) {
+            return new Quantity(packageCount(usage.servingsUsed, servingCount), false);
+        }
+        return new Quantity(1, true);
+    }
+
+    private int packageCount(double needed, double perPackage) {
+        double packages = Math.ceil(needed / perPackage);
+        if (!Double.isFinite(packages) || packages >= Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+        return Math.max(1, (int) packages);
+    }
+
+    private Double neededAmount(ItemUsage usage) {
+        return usage != null && usage.hasCompletePhysicalAmount() ? usage.amountUsed : null;
+    }
+
+    private String neededUnit(ItemUsage usage) {
+        return usage != null && usage.hasCompletePhysicalAmount() ? usage.amountUnit : null;
     }
 
     /**

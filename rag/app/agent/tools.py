@@ -30,6 +30,13 @@ from ..validators import (
     flatten_dishes_to_items,
     parse_and_validate_plan_json,
     extract_item_ids,
+    find_mixed_amount_unit_errors,
+)
+from ..ingredient_validation import (
+    ProductIngredientData,
+    build_ingredient_vocabulary,
+    parse_product_ingredients,
+    validate_ingredient_mentions,
 )
 from ..verify import verify_item_ids_belong_to_store
 
@@ -146,7 +153,8 @@ TOOL_DEFINITIONS: List[Dict[str, Any]] = [
                     "type": "object",
                     "description": (
                         "The full meal plan: {title, startDate, endDate, "
-                        "plan: [{date, meals: [{name, dishes: [{dishName, items: [{id, name, servingsUsed}]}]}]}]}"
+                        "plan: [{date, meals: [{name, dishes: [{dishName, items: "
+                        "[{id, name, servingsUsed, amountUsed: {value, unit}}]}]}]}]}"
                     ),
                 },
             },
@@ -394,6 +402,47 @@ def _validate_item_ids(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]
     return {"valid": sorted(found), "missing": missing}
 
 
+def _load_ingredient_validation_data(
+    store: str, item_ids: List[int]
+) -> tuple[Dict[int, ProductIngredientData], set[str]]:
+    """Load selected product contents and the current recipe ingredient vocabulary."""
+    unique_ids = sorted(set(item_ids))
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT i.id, i.name, ing.ingredients
+            FROM items i
+            LEFT JOIN item_ingredients ing ON ing.item_id = i.id
+            WHERE i.store ILIKE %s AND i.id = ANY(%s)
+            """,
+            (store, unique_ids),
+        )
+        selected_rows = cur.fetchall()
+        cur.execute(
+            """
+            SELECT ingredients_json
+            FROM recipes
+            WHERE ingredients_json IS NOT NULL
+            """
+        )
+        recipe_rows = cur.fetchall()
+
+    products = {
+        row["id"]: ProductIngredientData(
+            id=row["id"],
+            name=row["name"],
+            ingredients=parse_product_ingredients(row.get("ingredients")),
+        )
+        for row in selected_rows
+    }
+    return products, build_ingredient_vocabulary(recipe_rows)
+
+
+def _repair_response(ctx: ToolContext, errors: List[Any]) -> Dict[str, Any]:
+    ctx.repair_attempted = True
+    return {"ok": False, "errors": errors}
+
+
 def _submit_plan(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
     plan = args.get("plan_json")
     if not isinstance(plan, dict):
@@ -405,9 +454,13 @@ def _submit_plan(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
         doc = parse_and_validate_plan_json(content)
     except HTTPException as exc:
         detail = exc.detail
-        if not ctx.repair_attempted:
-            ctx.repair_attempted = True
-        return {"ok": False, "errors": [detail] if not isinstance(detail, list) else detail}
+        return _repair_response(
+            ctx, [detail] if not isinstance(detail, list) else detail
+        )
+
+    unit_errors = find_mixed_amount_unit_errors(doc)
+    if unit_errors:
+        return _repair_response(ctx, unit_errors)
 
     # Flatten dishes -> meal.items (dedupe + sum servingsUsed)
     doc = flatten_dishes_to_items(doc)
@@ -417,10 +470,12 @@ def _submit_plan(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
     try:
         verify_item_ids_belong_to_store(ctx.store, ids)
     except HTTPException as exc:
-        detail = exc.detail
-        if not ctx.repair_attempted:
-            ctx.repair_attempted = True
-        return {"ok": False, "errors": [detail]}
+        return _repair_response(ctx, [exc.detail])
+
+    products, vocabulary = _load_ingredient_validation_data(ctx.store, ids)
+    ingredient_errors = validate_ingredient_mentions(doc, products, vocabulary)
+    if ingredient_errors:
+        return _repair_response(ctx, ingredient_errors)
 
     ctx.plan_doc = doc
     ctx.submitted = True

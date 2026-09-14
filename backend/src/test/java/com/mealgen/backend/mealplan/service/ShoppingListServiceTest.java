@@ -115,6 +115,47 @@ class ShoppingListServiceTest {
                 """.formatted(itemId, itemId, servingsUsed);
     }
 
+    private String planJsonWithOneAmount(long itemId, double servingsUsed, double amount, String unit) {
+        return """
+                {
+                  "days": 1,
+                  "plan": [{
+                    "date": "2026-01-01",
+                    "meals": [{
+                      "name": "Dinner",
+                      "items": [{
+                        "id": %d,
+                        "name": "Item %d",
+                        "servingsUsed": %s,
+                        "amountUsed": { "value": %s, "unit": "%s" }
+                      }]
+                    }]
+                  }]
+                }
+                """.formatted(itemId, itemId, servingsUsed, amount, unit);
+    }
+
+    private String planJsonWithRepeatedAmounts(long itemId, double first, double second, String unit) {
+        return """
+                {
+                  "days": 2,
+                  "plan": [{
+                    "date": "2026-01-01",
+                    "meals": [
+                      { "name": "Lunch", "items": [{
+                        "id": %d, "name": "Item", "servingsUsed": 1,
+                        "amountUsed": { "value": %s, "unit": "%s" }
+                      }]},
+                      { "name": "Dinner", "items": [{
+                        "id": %d, "name": "Item", "servingsUsed": 1,
+                        "amountUsed": { "value": %s, "unit": "%s" }
+                      }]}
+                    ]
+                  }]
+                }
+                """.formatted(itemId, first, unit, itemId, second, unit);
+    }
+
     /**
      * Build a planJson where itemId appears in multiple meals with the given servingsUsed values.
      */
@@ -198,6 +239,9 @@ class ShoppingListServiceTest {
         ShoppingListItemDto dto = response.getItems().get(0);
         assertThat(dto.getId()).isEqualTo(itemId);
         assertThat(dto.getQty()).isEqualTo(1);
+        assertThat(dto.getNeededAmount()).isNull();
+        assertThat(dto.getNeededUnit()).isNull();
+        assertThat(dto.getQuantityEstimated()).isFalse();
     }
 
     @Test
@@ -233,8 +277,7 @@ class ShoppingListServiceTest {
     }
 
     @Test
-    void qty_isCeilOfTotalServingsUsed_whenServingCountIsNull() {
-        // serving_count missing → qty = ceil(totalServingsUsed) = ceil(2.5) = 3
+    void qty_isOneEstimatedPackage_whenServingCountIsNull() {
         long itemId = 103L;
         testMealPlan.setPlanJson(planJsonWithOneItem(itemId, 2.5));
 
@@ -246,12 +289,12 @@ class ShoppingListServiceTest {
         ShoppingListResponse response = shoppingListService.getShoppingList(USER_EMAIL, MEAL_PLAN_ID);
 
         assertThat(response.getItems()).hasSize(1);
-        assertThat(response.getItems().get(0).getQty()).isEqualTo(3);
+        assertThat(response.getItems().get(0).getQty()).isEqualTo(1);
+        assertThat(response.getItems().get(0).getQuantityEstimated()).isTrue();
     }
 
     @Test
-    void qty_isCeilOfTotalServingsUsed_whenNoNutritionDataForItem() {
-        // No nutrition row at all → qty = ceil(totalServingsUsed) = ceil(2.5) = 3
+    void qty_isOneEstimatedPackage_whenNoNutritionDataForItem() {
         long itemId = 104L;
         testMealPlan.setPlanJson(planJsonWithOneItem(itemId, 2.5));
 
@@ -263,7 +306,167 @@ class ShoppingListServiceTest {
         ShoppingListResponse response = shoppingListService.getShoppingList(USER_EMAIL, MEAL_PLAN_ID);
 
         assertThat(response.getItems()).hasSize(1);
-        assertThat(response.getItems().get(0).getQty()).isEqualTo(3);
+        assertThat(response.getItems().get(0).getQty()).isEqualTo(1);
+        assertThat(response.getItems().get(0).getQuantityEstimated()).isTrue();
+    }
+
+    @Test
+    void physicalMassUsesPackageSizeInsteadOfTreatingServingsAsPackages() {
+        long itemId = 110L;
+        testMealPlan.setPlanJson(planJsonWithOneAmount(itemId, 3.0, 170, "g"));
+        Item item = Item.builder().id(itemId).name("Spaghetti").unitSize("1 lb").price(3.00).build();
+        when(itemRepository.findByIdIn(any())).thenReturn(List.of(item));
+        mockNutritionQuery(oneNutritionRow(itemId, nutritionJson(null)));
+
+        ShoppingListItemDto dto = shoppingListService.getShoppingList(USER_EMAIL, MEAL_PLAN_ID).getItems().getFirst();
+
+        assertThat(dto.getQty()).isEqualTo(1);
+        assertThat(dto.getNeededAmount()).isEqualTo(170.0);
+        assertThat(dto.getNeededUnit()).isEqualTo("g");
+        assertThat(dto.getQuantityEstimated()).isFalse();
+        assertThat(dto.getLineTotal()).isEqualTo(3.00);
+    }
+
+    @Test
+    void repeatedPhysicalAmountsAreSummedAndCanExceedOnePackage() {
+        long itemId = 111L;
+        testMealPlan.setPlanJson(planJsonWithRepeatedAmounts(itemId, 300, 250, "g"));
+        Item item = Item.builder().id(itemId).name("Farfalle").unitSize("1 lb").price(2.50).build();
+        when(itemRepository.findByIdIn(any())).thenReturn(List.of(item));
+        mockNutritionQuery(List.of());
+
+        ShoppingListItemDto dto = shoppingListService.getShoppingList(USER_EMAIL, MEAL_PLAN_ID).getItems().getFirst();
+
+        assertThat(dto.getQty()).isEqualTo(2);
+        assertThat(dto.getNeededAmount()).isEqualTo(550.0);
+        assertThat(dto.getQuantityEstimated()).isFalse();
+        assertThat(dto.getLineTotal()).isEqualTo(5.00);
+    }
+
+    @Test
+    void supportsPhysicalVolumeAndCountQuantities() {
+        long milkId = 112L;
+        long eggId = 113L;
+        testMealPlan.setPlanJson("""
+                { "days": 1, "plan": [{ "meals": [{ "items": [
+                  { "id": 112, "servingsUsed": 1, "amountUsed": { "value": 1200, "unit": "ml" } },
+                  { "id": 113, "servingsUsed": 1, "amountUsed": { "value": 13, "unit": "count" } }
+                ] }] }] }
+                """);
+        Item milk = Item.builder().id(milkId).name("Milk").unitSize("1 l").build();
+        Item eggs = Item.builder().id(eggId).name("Eggs").unitSize("1 dozen").build();
+        when(itemRepository.findByIdIn(any())).thenReturn(List.of(milk, eggs));
+        mockNutritionQuery(List.of());
+
+        ShoppingListResponse response = shoppingListService.getShoppingList(USER_EMAIL, MEAL_PLAN_ID);
+
+        assertThat(response.getItems()).filteredOn(it -> it.getId().equals(milkId)).singleElement()
+                .satisfies(it -> {
+                    assertThat(it.getQty()).isEqualTo(2);
+                    assertThat(it.getNeededUnit()).isEqualTo("ml");
+                    assertThat(it.getQuantityEstimated()).isFalse();
+                });
+        assertThat(response.getItems()).filteredOn(it -> it.getId().equals(eggId)).singleElement()
+                .satisfies(it -> {
+                    assertThat(it.getQty()).isEqualTo(2);
+                    assertThat(it.getNeededUnit()).isEqualTo("count");
+                    assertThat(it.getQuantityEstimated()).isFalse();
+                });
+    }
+
+    @Test
+    void physicalAmountUsesExplicitTrailingWholeFoodsPackageSize() {
+        long itemId = 114L;
+        testMealPlan.setPlanJson(planJsonWithOneAmount(itemId, 3.0, 170, "g"));
+        Item item = Item.builder().id(itemId).name("Organic Spaghetti, 1 lb").unitSize(null).build();
+        when(itemRepository.findByIdIn(any())).thenReturn(List.of(item));
+        mockNutritionQuery(List.of());
+
+        ShoppingListItemDto dto = shoppingListService.getShoppingList(USER_EMAIL, MEAL_PLAN_ID).getItems().getFirst();
+
+        assertThat(dto.getQty()).isEqualTo(1);
+        assertThat(dto.getQuantityEstimated()).isFalse();
+    }
+
+    @Test
+    void compositeNameSuffixDoesNotUseInnerUnitAsAnExactPackageSize() {
+        long itemId = 121L;
+        testMealPlan.setPlanJson(planJsonWithOneAmount(itemId, 1.0, 700, "ml"));
+        Item item = Item.builder()
+                .id(itemId)
+                .name("Tomato Juice 6 x 12 fl oz")
+                .unitSize(null)
+                .price(8.00)
+                .build();
+        when(itemRepository.findByIdIn(any())).thenReturn(List.of(item));
+        mockNutritionQuery(List.of());
+
+        ShoppingListItemDto dto = shoppingListService.getShoppingList(USER_EMAIL, MEAL_PLAN_ID).getItems().getFirst();
+
+        assertThat(dto.getQty()).isEqualTo(1);
+        assertThat(dto.getQuantityEstimated()).isTrue();
+        assertThat(dto.getLineTotal()).isEqualTo(8.00);
+    }
+
+    @Test
+    void incompatiblePhysicalUnitFallsBackToOneEstimatedPackageButKeepsNeededAmount() {
+        long itemId = 115L;
+        testMealPlan.setPlanJson(planJsonWithOneAmount(itemId, 2.0, 2, "count"));
+        Item item = Item.builder().id(itemId).name("Romaine").unitSize("18 oz").build();
+        when(itemRepository.findByIdIn(any())).thenReturn(List.of(item));
+        mockNutritionQuery(List.of());
+
+        ShoppingListItemDto dto = shoppingListService.getShoppingList(USER_EMAIL, MEAL_PLAN_ID).getItems().getFirst();
+
+        assertThat(dto.getQty()).isEqualTo(1);
+        assertThat(dto.getNeededAmount()).isEqualTo(2.0);
+        assertThat(dto.getNeededUnit()).isEqualTo("count");
+        assertThat(dto.getQuantityEstimated()).isTrue();
+    }
+
+    @Test
+    void incompatiblePhysicalUnitUsesServingCountBeforeEstimatedFallback() {
+        long itemId = 120L;
+        testMealPlan.setPlanJson(planJsonWithOneAmount(itemId, 6.0, 2, "count"));
+        Item item = Item.builder().id(itemId).name("Romaine").unitSize("18 oz").build();
+        when(itemRepository.findByIdIn(any())).thenReturn(List.of(item));
+        mockNutritionQuery(oneNutritionRow(itemId, nutritionJson(2)));
+
+        ShoppingListItemDto dto = shoppingListService.getShoppingList(USER_EMAIL, MEAL_PLAN_ID).getItems().getFirst();
+
+        assertThat(dto.getQty()).isEqualTo(3);
+        assertThat(dto.getNeededAmount()).isEqualTo(2.0);
+        assertThat(dto.getNeededUnit()).isEqualTo("count");
+        assertThat(dto.getQuantityEstimated()).isFalse();
+    }
+
+    @Test
+    void observedOverbuyCasesUseOnePackageWhenPhysicalNeedFits() {
+        long spaghetti = 116L;
+        long squash = 117L;
+        long farfalle = 118L;
+        long romaine = 119L;
+        testMealPlan.setPlanJson("""
+                { "days": 3, "plan": [{ "meals": [{ "items": [
+                  { "id": 116, "servingsUsed": 3, "amountUsed": { "value": 170, "unit": "g" } },
+                  { "id": 117, "servingsUsed": 2, "amountUsed": { "value": 400, "unit": "g" } },
+                  { "id": 118, "servingsUsed": 2, "amountUsed": { "value": 200, "unit": "g" } },
+                  { "id": 119, "servingsUsed": 1.5, "amountUsed": { "value": 300, "unit": "g" } }
+                ] }] }] }
+                """);
+        when(itemRepository.findByIdIn(any())).thenReturn(List.of(
+                Item.builder().id(spaghetti).name("Spaghetti").unitSize("1 lb").build(),
+                Item.builder().id(squash).name("Squash").unitSize("2 lb").build(),
+                Item.builder().id(farfalle).name("Farfalle").unitSize("1 lb").build(),
+                Item.builder().id(romaine).name("Romaine").unitSize("18 oz").build()));
+        mockNutritionQuery(List.of());
+
+        ShoppingListResponse response = shoppingListService.getShoppingList(USER_EMAIL, MEAL_PLAN_ID);
+
+        assertThat(response.getItems()).allSatisfy(it -> {
+            assertThat(it.getQty()).isEqualTo(1);
+            assertThat(it.getQuantityEstimated()).isFalse();
+        });
     }
 
     @Test

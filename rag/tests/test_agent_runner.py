@@ -122,9 +122,12 @@ def _captured_plan_doc():
                             {
                                 "dishName": "Salad",
                                 "items": [
-                                    {"id": 1, "name": "Lettuce", "servingsUsed": 1.0},
-                                    {"id": 2, "name": "Tomato", "servingsUsed": 0.3},
-                                    {"id": 3, "name": "Olive Oil", "servingsUsed": 0.2},
+                                    {"id": 1, "name": "Lettuce", "servingsUsed": 1.0,
+                                     "amountUsed": {"value": 85, "unit": "g"}},
+                                    {"id": 2, "name": "Tomato", "servingsUsed": 0.3,
+                                     "amountUsed": {"value": 50, "unit": "g"}},
+                                    {"id": 3, "name": "Olive Oil", "servingsUsed": 0.2,
+                                     "amountUsed": {"value": 10, "unit": "ml"}},
                                 ],
                             }
                         ],
