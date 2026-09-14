@@ -18,6 +18,7 @@ describe("CSRF browser integration", () => {
     await expect(streamMealPlan({
       store: "TRADER_JOES",
       days: 3,
+      servings: 1,
       idempotencyKey: "test-key",
       correlationId: "00000000-0000-4000-8000-000000000001",
       onEvent: jest.fn(),

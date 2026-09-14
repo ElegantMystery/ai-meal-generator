@@ -36,6 +36,7 @@ function readStream(
   return streamMealPlan({
     store: "TRADER_JOES",
     days: 3,
+    servings: 4,
     idempotencyKey: "test-key",
     correlationId: "00000000-0000-4000-8000-000000000001",
     onEvent,
@@ -49,6 +50,18 @@ afterEach(() => {
 });
 
 describe("streamMealPlan SSE parsing", () => {
+  test("includes servings in the generation query without changing the SSE request shape", async () => {
+    installResponse(streamFromTextChunks([]));
+
+    await readStream(jest.fn());
+
+    const requestedUrl = new URL((global.fetch as jest.Mock).mock.calls[0][0]);
+    expect(requestedUrl.searchParams.get("servings")).toBe("4");
+    expect((global.fetch as jest.Mock).mock.calls[0][1]).toEqual(
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    );
+  });
+
   test("dispatches a chunk-ending CR frame before another byte or EOF arrives", async () => {
     let controller!: ReadableStreamDefaultController<Uint8Array>;
     let nextRead!: () => void;

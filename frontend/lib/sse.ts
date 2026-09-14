@@ -20,6 +20,7 @@ export type SseHandler = (event: SseEvent) => void;
 export type StreamMealPlanOptions = {
   store: string;
   days: number;
+  servings: number;
   idempotencyKey: string;
   onEvent: SseHandler;
   signal?: AbortSignal;
@@ -46,6 +47,7 @@ export async function streamMealPlan(
   const url = new URL(`${apiBaseUrl}/api/mealplans/generate-ai`);
   url.searchParams.set("store", opts.store);
   url.searchParams.set("days", String(opts.days));
+  url.searchParams.set("servings", String(opts.servings));
 
   const res = await fetch(url.toString(), {
     method: "POST",

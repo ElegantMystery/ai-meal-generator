@@ -20,6 +20,11 @@ browser to backend to RAG. Before opening the upstream stream, the backend reser
 one of a FREE user's three monthly generations. Quota exhaustion returns HTTP 429
 with `{"error":"QUOTA_EXCEEDED"}`. PRO reservations are unlimited.
 
+Generation accepts 1–12 servings and defaults to one. The serving count is part
+of the idempotent request fingerprint and RAG brief. RAG emits already-scaled
+physical ingredient amounts, so shopping package calculation consumes those
+amounts directly without applying another multiplier.
+
 The cold-start agent discovers products with `list_categories`, `search_items`,
 `get_item_details`, and `list_recipes`; validates IDs; and terminates with
 `submit_plan`. MiniMax-M3 is the generation provider through its

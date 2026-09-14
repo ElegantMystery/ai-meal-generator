@@ -37,6 +37,9 @@ import reactor.core.publisher.Flux;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -300,7 +303,7 @@ class MealPlanServiceQuotaTest {
                 .user(user)
                 .status(GenerationRequestStatus.RUNNING)
                 .build();
-        when(generationRequestService.claim(eq(user), eq("key-1"), any()))
+        when(generationRequestService.claim(eq(user), eq("key-1"), any(), any()))
                 .thenReturn(new GenerationRequestClaim(request, false));
         when(generationRequestService.getOwned(user, request.getId())).thenReturn(
                 GenerationRequestResponse.builder()
@@ -320,7 +323,7 @@ class MealPlanServiceQuotaTest {
         when(preferencesRepository.findByUserId(user.getId())).thenReturn(Optional.empty());
         GenerationRequest first = duplicateRequest(UUID.randomUUID());
         GenerationRequest second = duplicateRequest(UUID.randomUUID());
-        when(generationRequestService.claim(eq(user), eq("key-1"), any()))
+        when(generationRequestService.claim(eq(user), eq("key-1"), any(), any()))
                 .thenReturn(new GenerationRequestClaim(first, false),
                         new GenerationRequestClaim(second, false));
         when(generationRequestService.getOwned(eq(user), any())).thenAnswer(invocation ->
@@ -334,9 +337,86 @@ class MealPlanServiceQuotaTest {
 
         ArgumentCaptor<String> fingerprints = ArgumentCaptor.forClass(String.class);
         verify(generationRequestService, times(2))
-                .claim(eq(user), eq("key-1"), fingerprints.capture());
+                .claim(eq(user), eq("key-1"), fingerprints.capture(), any());
         assertThat(fingerprints.getAllValues()).hasSize(2).allMatch(
                 fingerprints.getAllValues().getFirst()::equals);
+    }
+
+    @Test
+    void ragPayloadIncludesRequestedServings() {
+        arrangeReservation();
+        when(ragClient.streamGenerate(any())).thenReturn(Flux.empty());
+
+        service.streamGenerateAi(user.getEmail(), "TRADER_JOES", 7, 4, "key-1", null)
+                .collectList().block();
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> payload = ArgumentCaptor.forClass(Map.class);
+        verify(ragClient).streamGenerate(payload.capture());
+        assertThat(payload.getValue()).containsEntry("servings", 4);
+    }
+
+    @Test
+    void idempotencyFingerprintChangesWhenOnlyServingsChanges() {
+        when(userRepository.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
+        when(preferencesRepository.findByUserId(user.getId())).thenReturn(Optional.empty());
+        GenerationRequest first = duplicateRequest(UUID.randomUUID());
+        GenerationRequest second = duplicateRequest(UUID.randomUUID());
+        when(generationRequestService.claim(eq(user), eq("key-1"), any(), any()))
+                .thenReturn(new GenerationRequestClaim(first, false),
+                        new GenerationRequestClaim(second, false));
+        when(generationRequestService.getOwned(eq(user), any())).thenAnswer(invocation ->
+                GenerationRequestResponse.builder()
+                        .id(invocation.getArgument(1))
+                        .status(GenerationRequestStatus.RUNNING)
+                        .build());
+
+        service.streamGenerateAi(user.getEmail(), "TRADER_JOES", 7, 1, "key-1", null)
+                .collectList().block();
+        service.streamGenerateAi(user.getEmail(), "TRADER_JOES", 7, 2, "key-1", null)
+                .collectList().block();
+
+        ArgumentCaptor<String> fingerprints = ArgumentCaptor.forClass(String.class);
+        verify(generationRequestService, times(2))
+                .claim(eq(user), eq("key-1"), fingerprints.capture(), any());
+        assertThat(fingerprints.getAllValues().get(0))
+                .isNotEqualTo(fingerprints.getAllValues().get(1));
+    }
+
+    @Test
+    void defaultServingsSuppliesTheExactPreServingsFingerprintForRolloutCompatibility()
+            throws Exception {
+        when(userRepository.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
+        when(preferencesRepository.findByUserId(user.getId())).thenReturn(Optional.empty());
+        GenerationRequest existing = duplicateRequest(UUID.randomUUID());
+        when(generationRequestService.claim(eq(user), eq("key-1"), any(), any()))
+                .thenReturn(new GenerationRequestClaim(existing, false));
+        when(generationRequestService.getOwned(user, existing.getId())).thenReturn(
+                GenerationRequestResponse.builder()
+                        .id(existing.getId())
+                        .status(GenerationRequestStatus.RUNNING)
+                        .build());
+
+        service.streamGenerateAi(user.getEmail(), "TRADER_JOES", 7, "key-1")
+                .collectList().block();
+
+        Map<String, Object> preferences = new LinkedHashMap<>();
+        preferences.put("dietaryRestrictions", null);
+        preferences.put("allergies", null);
+        preferences.put("targetCaloriesPerDay", null);
+        Map<String, Object> legacyPayload = new LinkedHashMap<>();
+        legacyPayload.put("userId", user.getId());
+        legacyPayload.put("store", "TRADER_JOES");
+        legacyPayload.put("days", 7);
+        legacyPayload.put("preferences", preferences);
+        String expectedLegacyFingerprint = HexFormat.of().formatHex(
+                MessageDigest.getInstance("SHA-256")
+                        .digest(objectMapper.writeValueAsBytes(legacyPayload)));
+
+        ArgumentCaptor<String> legacyFingerprint = ArgumentCaptor.forClass(String.class);
+        verify(generationRequestService).claim(
+                eq(user), eq("key-1"), any(), legacyFingerprint.capture());
+        assertThat(legacyFingerprint.getValue()).isEqualTo(expectedLegacyFingerprint);
     }
 
     @Test
@@ -382,7 +462,7 @@ class MealPlanServiceQuotaTest {
                 .requestFingerprint("fingerprint")
                 .status(GenerationRequestStatus.PENDING)
                 .build();
-        when(generationRequestService.claim(eq(user), eq("key-1"), any()))
+        when(generationRequestService.claim(eq(user), eq("key-1"), any(), any()))
                 .thenReturn(new GenerationRequestClaim(request, true));
         lenient().when(generationRequestService.getOwned(user, request.getId())).thenReturn(
                 GenerationRequestResponse.builder()

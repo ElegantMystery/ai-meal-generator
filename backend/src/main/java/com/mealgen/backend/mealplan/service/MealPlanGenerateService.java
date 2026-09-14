@@ -34,6 +34,14 @@ public class MealPlanGenerateService {
 
     @Transactional
     public MealPlanResponse generate(String email, String store, int days) {
+        return generate(email, store, days, 1);
+    }
+
+    @Transactional
+    public MealPlanResponse generate(String email, String store, int days, int servings) {
+        if (servings < 1 || servings > 12) {
+            throw new IllegalArgumentException("servings must be between 1 and 12");
+        }
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalStateException("User not found"));
 
@@ -74,12 +82,14 @@ public class MealPlanGenerateService {
         LocalDate end = start.plusDays(Math.max(days, 1) - 1);
 
         // Deterministic randomness (so repeated calls same day are similar per user)
-        long seed = Objects.hash(user.getId(), store.toUpperCase(Locale.ROOT), start.toString(), days);
+        long seed = Objects.hash(
+                user.getId(), store.toUpperCase(Locale.ROOT), start.toString(), days, servings);
         Random rng = new Random(seed);
 
         Map<String, Object> plan = new LinkedHashMap<>();
         plan.put("store", store.toUpperCase(Locale.ROOT));
         plan.put("days", days);
+        plan.put("servings", servings);
 
         Map<String, Object> prefSummary = new LinkedHashMap<>();
         prefSummary.put("dietaryRestrictions", prefs == null ? null : prefs.getDietaryRestrictions());
@@ -103,9 +113,9 @@ public class MealPlanGenerateService {
             dayPlan.put("date", date.toString());
 
             dayPlan.put("meals", List.of(
-                    meal("Breakfast", List.of(breakfast)),
-                    meal("Lunch", List.of(lunchProtein, lunchVeg)),
-                    meal("Dinner", List.of(dinnerProtein, dinnerCarb, dinnerVeg))
+                    meal("Breakfast", List.of(breakfast), servings),
+                    meal("Lunch", List.of(lunchProtein, lunchVeg), servings),
+                    meal("Dinner", List.of(dinnerProtein, dinnerCarb, dinnerVeg), servings)
             ));
 
             dayPlans.add(dayPlan);
@@ -142,17 +152,22 @@ public class MealPlanGenerateService {
                 .build();
     }
 
-    private Map<String, Object> meal(String name, List<Item> items) {
+    private Map<String, Object> meal(String name, List<Item> items, int servings) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("name", name);
-        m.put("items", items.stream().map(i -> Map.of(
-                "id", i.getId(),
-                "name", i.getName(),
-                "price", i.getPrice(),
-                "categoryPath", i.getCategoryPath(),
-                "imageUrl", i.getImageUrl()
-        )).toList());
+        m.put("items", items.stream().map(item -> planItem(item, servings)).toList());
         return m;
+    }
+
+    private Map<String, Object> planItem(Item item, int servings) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", item.getId());
+        result.put("name", item.getName());
+        result.put("price", item.getPrice());
+        result.put("categoryPath", item.getCategoryPath());
+        result.put("imageUrl", item.getImageUrl());
+        result.put("servingsUsed", servings);
+        return result;
     }
 
     private Item pickOne(List<Item> list, Random rng) {

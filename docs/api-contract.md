@@ -42,7 +42,13 @@ Google login begins at `GET /oauth2/authorization/google`.
 `assistant_text`, `generation_status`, `complete`, `mealplan_saved`, and `error`
 SSE events.
 
-New agent-generated plans store one-adult portions. Every dish item contains both
+Both `POST /api/mealplans/generate` and `POST /api/mealplans/generate-ai` accept
+the query parameter `servings`. It is an integer from 1 through 12 and defaults
+to `1` when omitted. For AI generation, `servings` is part of the durable
+request fingerprint and is forwarded to RAG. Reusing an idempotency key with a
+different serving count returns the existing idempotency-conflict response.
+
+New agent-generated plans store portions for the request's serving count. Every dish item contains both
 the nutrition-oriented `servingsUsed` value and a physical `amountUsed` value:
 
 ```json
@@ -55,8 +61,9 @@ the nutrition-oriented `servingsUsed` value and a physical `amountUsed` value:
 ```
 
 `amountUsed.unit` is one of `g`, `ml`, or `count`; its value is greater than
-zero and no greater than 10,000. Existing plans without `amountUsed` remain
-valid and readable.
+zero and no greater than `10,000 × servings` per dish item. `servingsUsed` is
+similarly bounded at `20 × servings`. Existing plans without `amountUsed`, and
+generation clients that omit `servings`, remain valid as one-person plans.
 
 `GET /api/mealplans/{id}/shopping-list` returns `qty` as the number of packages
 to buy. Each item also includes nullable `neededAmount` and `neededUnit` fields
@@ -83,3 +90,8 @@ reader; aborts stop dispatch before any later buffered event.
 | `POST /embed/backfill/items` | Backfill item embeddings |
 | `POST /embed/backfill/nutrition` | Backfill nutrition embeddings |
 | `POST /embed/backfill/ingredients` | Backfill ingredient embeddings |
+
+`POST /generate` accepts `servings` as an optional integer from 1 through 12,
+defaulting to `1`. Generated meals, `servingsUsed`, and physical `amountUsed`
+values represent the requested total serving count; downstream shopping
+calculation does not multiply them again.

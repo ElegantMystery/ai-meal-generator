@@ -164,6 +164,241 @@ describe("Dashboard — durable generation recovery", () => {
     expect(await screen.findByText("Recovered Plan")).toBeInTheDocument();
     expect(localStorage.getItem("activeMealPlanGeneration")).toBeNull();
   });
+
+  it("keeps the selected servings in recovery state after receiving a request id", async () => {
+    mockStreamMealPlan.mockImplementationOnce(async ({ onEvent }) => {
+      expect(JSON.parse(localStorage.getItem("activeMealPlanGeneration") ?? "{}"))
+        .toEqual(expect.objectContaining({ servings: 4 }));
+      onEvent({
+        event: "generation_status",
+        data: {
+          id: "00000000-0000-0000-0000-000000000004",
+          status: "RUNNING",
+          failureCode: null,
+          mealPlanId: null,
+        },
+      });
+      expect(JSON.parse(localStorage.getItem("activeMealPlanGeneration") ?? "{}"))
+        .toEqual(expect.objectContaining({
+          requestId: "00000000-0000-0000-0000-000000000004",
+          servings: 4,
+        }));
+    });
+    render(<DashboardPage />);
+    fireEvent.change(await screen.findByLabelText("Servings"), {
+      target: { value: "4" },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /generate with ai/i }));
+    });
+
+    await waitFor(() => expect(mockStreamMealPlan).toHaveBeenCalled());
+  });
+
+  it("hydrates the servings selector from a saved generation after reload", async () => {
+    localStorage.setItem(
+      "activeMealPlanGeneration",
+      JSON.stringify({
+        idempotencyKey: "recover-four",
+        requestId: "00000000-0000-0000-0000-000000000014",
+        servings: 4,
+      }),
+    );
+    mockApi.get.mockImplementation((url: string) => {
+      if (url === "/api/preferences/me") return Promise.resolve({ data: null });
+      if (url === "/api/mealplans") return Promise.resolve({ data: [] });
+      if (url === "/api/mealplans/generation-requests/00000000-0000-0000-0000-000000000014") {
+        return Promise.resolve({
+          data: {
+            id: "00000000-0000-0000-0000-000000000014",
+            status: "FAILED",
+            failureCode: "GENERATION_FAILED",
+            mealPlanId: null,
+          },
+        });
+      }
+      return Promise.reject(new Error(`unknown url: ${url}`));
+    });
+
+    render(<DashboardPage />);
+
+    await waitFor(() => expect(screen.getByLabelText("Servings")).toHaveValue("4"));
+  });
+
+  it("defaults legacy recovery state without servings to one", async () => {
+    localStorage.setItem(
+      "activeMealPlanGeneration",
+      JSON.stringify({
+        idempotencyKey: "recover-legacy",
+        requestId: "00000000-0000-0000-0000-000000000015",
+      }),
+    );
+    mockApi.get.mockImplementation((url: string) => {
+      if (url === "/api/preferences/me") return Promise.resolve({ data: null });
+      if (url === "/api/mealplans") return Promise.resolve({ data: [] });
+      if (url === "/api/mealplans/generation-requests/00000000-0000-0000-0000-000000000015") {
+        return Promise.resolve({
+          data: {
+            id: "00000000-0000-0000-0000-000000000015",
+            status: "FAILED",
+            failureCode: "GENERATION_FAILED",
+            mealPlanId: null,
+          },
+        });
+      }
+      return Promise.reject(new Error(`unknown url: ${url}`));
+    });
+
+    render(<DashboardPage />);
+
+    await waitFor(() => expect(screen.getByLabelText("Servings")).toHaveValue("1"));
+  });
+
+  it.each([0, 13, 2.5, "4", null])(
+    "defaults invalid recovered servings %p to one",
+    async (invalidServings) => {
+      localStorage.setItem(
+        "activeMealPlanGeneration",
+        JSON.stringify({
+          idempotencyKey: "recover-invalid",
+          requestId: "00000000-0000-0000-0000-000000000016",
+          servings: invalidServings,
+        }),
+      );
+      mockApi.get.mockImplementation((url: string) => {
+        if (url === "/api/preferences/me") return Promise.resolve({ data: null });
+        if (url === "/api/mealplans") return Promise.resolve({ data: [] });
+        if (url === "/api/mealplans/generation-requests/00000000-0000-0000-0000-000000000016") {
+          return Promise.resolve({
+            data: {
+              id: "00000000-0000-0000-0000-000000000016",
+              status: "FAILED",
+              failureCode: "GENERATION_FAILED",
+              mealPlanId: null,
+            },
+          });
+        }
+        return Promise.reject(new Error(`unknown url: ${url}`));
+      });
+
+      render(<DashboardPage />);
+
+      await waitFor(() => expect(screen.getByLabelText("Servings")).toHaveValue("1"));
+    },
+  );
+});
+
+describe("Dashboard — servings", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    setupDefaultMocks();
+  });
+
+  it("offers accessible integer servings from 1 through 12 and defaults to one", async () => {
+    render(<DashboardPage />);
+
+    const control = await screen.findByLabelText("Servings") as HTMLSelectElement;
+    expect(control).toHaveValue("1");
+    expect(Array.from(control.options).map((option) => option.value)).toEqual(
+      Array.from({ length: 12 }, (_, index) => String(index + 1)),
+    );
+  });
+
+  it("sends the selected servings through AI generation", async () => {
+    mockStreamMealPlan.mockImplementationOnce(async ({ onEvent }) => {
+      onEvent({
+        event: "mealplan_saved",
+        data: {
+          id: 45,
+          title: "AI Plan",
+          startDate: null,
+          endDate: null,
+          planJson: null,
+          createdAt: null,
+        },
+      });
+    });
+    render(<DashboardPage />);
+    fireEvent.change(await screen.findByLabelText("Servings"), {
+      target: { value: "6" },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /generate with ai/i }));
+    });
+
+    expect(mockStreamMealPlan).toHaveBeenCalledWith(
+      expect.objectContaining({ servings: 6 }),
+    );
+  });
+
+  it("sends the selected servings through rule-based generation", async () => {
+    mockApi.post.mockResolvedValueOnce({
+      data: {
+        id: 46,
+        title: "Rule Plan",
+        startDate: null,
+        endDate: null,
+        planJson: null,
+        createdAt: null,
+      },
+    });
+    render(<DashboardPage />);
+    fireEvent.change(await screen.findByLabelText("Servings"), {
+      target: { value: "3" },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /generate \(rule-based\)/i }));
+    });
+
+    expect(mockApi.post).toHaveBeenCalledWith(
+      "/api/mealplans/generate",
+      null,
+      { params: { store: "TRADER_JOES", days: 7, servings: 3 } },
+    );
+  });
+
+  it("uses a fresh idempotency key when retrying with changed servings", async () => {
+    mockStreamMealPlan.mockRejectedValue(new Error("SSE disconnected"));
+    render(<DashboardPage />);
+    const servingsControl = await screen.findByLabelText("Servings");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /generate with ai/i }));
+    });
+    const firstKey = mockStreamMealPlan.mock.calls[0][0].idempotencyKey;
+    await waitFor(() => expect(screen.getByRole("button", { name: /generate with ai/i })).toBeEnabled());
+    fireEvent.change(servingsControl, { target: { value: "2" } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /generate with ai/i }));
+    });
+
+    const secondKey = mockStreamMealPlan.mock.calls[1][0].idempotencyKey;
+    expect(secondKey).not.toBe(firstKey);
+    expect(JSON.parse(localStorage.getItem("activeMealPlanGeneration") ?? "{}"))
+      .toEqual(expect.objectContaining({ idempotencyKey: secondKey, servings: 2 }));
+  });
+
+  it("reuses the idempotency key when retrying with the same selection", async () => {
+    mockStreamMealPlan.mockRejectedValue(new Error("SSE disconnected"));
+    render(<DashboardPage />);
+    await screen.findByLabelText("Servings");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /generate with ai/i }));
+    });
+    const firstKey = mockStreamMealPlan.mock.calls[0][0].idempotencyKey;
+    await waitFor(() => expect(screen.getByRole("button", { name: /generate with ai/i })).toBeEnabled());
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /generate with ai/i }));
+    });
+
+    expect(mockStreamMealPlan.mock.calls[1][0].idempotencyKey).toBe(firstKey);
+  });
 });
 
 describe("Dashboard — QuotaBadge integration", () => {

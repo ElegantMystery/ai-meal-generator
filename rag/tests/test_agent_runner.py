@@ -88,13 +88,14 @@ def _tool(name: str, args: Dict[str, Any], block_id: str | None = None) -> _Fake
 # ---------------------------------------------------------------------------
 
 
-def _make_req() -> GenerateRequest:
+def _make_req(servings: int = 1) -> GenerateRequest:
     return GenerateRequest(
         userId=1,
         requestId="req-test-123",
         correlationId="00000000-0000-4000-8000-000000000001",
         store="TRADER_JOES",
         days=1,
+        servings=servings,
         preferences=Preferences(),
     )
 
@@ -202,6 +203,45 @@ def test_run_agent_happy_path_emits_complete(monkeypatch):
     assert plan_doc["_meta"]["correlationId"] == "00000000-0000-4000-8000-000000000001"
     assert plan_doc["_meta"]["inputTokens"] == 30
     assert plan_doc["_meta"]["outputTokens"] == 15
+
+
+def test_run_agent_passes_servings_to_prompt_and_preserves_scaled_amount(monkeypatch):
+    monkeypatch.setattr(runner_mod.config, "MINIMAX_API_KEY", "fake-key")
+    monkeypatch.setattr(runner_mod.config, "AGENT_MAX_TURNS", 2)
+
+    plan = _captured_plan_doc()
+    plan["plan"][0]["meals"][0]["dishes"][0]["items"][0]["amountUsed"]["value"] = 510
+    responses = [
+        _FakeResponse(
+            content=[_tool("submit_plan", {"plan_json": plan})],
+            stop_reason="tool_use",
+        ),
+        _FakeResponse(content=[_text("Done!")], stop_reason="end_turn"),
+    ]
+
+    def _fake_dispatch(name, args, ctx):
+        assert name == "submit_plan"
+        assert ctx.servings == 6
+        from app.validators import MealPlanDoc
+
+        ctx.plan_doc = MealPlanDoc.model_validate(args["plan_json"])
+        ctx.submitted = True
+        return {"ok": True}
+
+    fake_client = MagicMock()
+    fake_client.messages.create.side_effect = responses
+    with patch.object(runner_mod, "dispatch", _fake_dispatch):
+        with patch.object(runner_mod, "Anthropic", return_value=fake_client):
+            events = _collect_sync(_make_req(servings=6))
+
+    first_call = fake_client.messages.create.call_args_list[0].kwargs
+    assert "Every meal is for 6 adults" in first_call["system"]
+    assert '"servings": 6' in first_call["messages"][0]["content"]
+
+    complete = next(data for name, data in events if name == "complete")
+    output = __import__("json").loads(complete["planJson"])
+    amount = output["plan"][0]["meals"][0]["dishes"][0]["items"][0]["amountUsed"]
+    assert amount == {"value": 510.0, "unit": "g"}
 
 
 def test_run_agent_emits_repair_phase_on_resubmit(monkeypatch):

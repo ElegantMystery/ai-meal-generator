@@ -1,6 +1,6 @@
 """System prompt for the meal-plan generation agent."""
 
-SYSTEM_PROMPT = """You are an autonomous meal-planning agent for a grocery-store meal app.
+_BASE_SYSTEM_PROMPT = """You are an autonomous meal-planning agent for a grocery-store meal app.
 
 You build a multi-day meal plan from a single store's real inventory by calling tools.
 You CANNOT see any items or recipes until you call tools to fetch them. Be deliberate.
@@ -142,3 +142,38 @@ Do NOT emit XML anywhere. `plan_json` is JSON only.
 - After `submit_plan` returns `{ok: true}`, reply with ONE short sentence and stop.
   Do not call any further tools.
 """
+
+
+def build_system_prompt(servings: int) -> str:
+    """Return generation instructions sized for the request's diner count."""
+    diner = "adult" if servings == 1 else "adults"
+    audience = f"{servings} {diner}" if servings == 1 else f"all {servings} {diner}"
+    amount_limit = 10_000 * servings
+    prompt = _BASE_SYSTEM_PROMPT.replace(
+        "Every meal is one adult portion.",
+        f"Every meal is for {servings} {diner}; every meal and every dish serves "
+        f"{audience}.",
+    )
+    prompt = prompt.replace(
+        "this one-adult dish portion, independent of package size.",
+        f"the whole dish and must be already scaled for {audience}, "
+        "independent of package size. Do not output per-person amounts. Do not "
+        "multiply quantities a second time.",
+    )
+    prompt = prompt.replace("no greater than 10,000", f"no greater than {amount_limit:,}")
+    prompt = prompt.replace("at most 10,000", f"at most {amount_limit:,}")
+    prompt = prompt.replace(
+        "# servingsUsed -- portion per dish preparation",
+        "# servingsUsed -- portion per dish preparation\n\n"
+        "The ranges below are per-adult guidance. Scale both servingsUsed and "
+        f"amountUsed exactly once for {audience}.",
+    )
+    prompt = prompt.replace(
+        "servingsUsed is between 0.05 and 20.0.",
+        f"servingsUsed is between 0.05 and {20 * servings:.1f}.",
+    )
+    return prompt
+
+
+# Compatibility for imports that need the historical one-person prompt.
+SYSTEM_PROMPT = build_system_prompt(1)
