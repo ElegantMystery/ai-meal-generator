@@ -42,6 +42,29 @@ Google login begins at `GET /oauth2/authorization/google`.
 `assistant_text`, `generation_status`, `complete`, `mealplan_saved`, and `error`
 SSE events.
 
+New agent-generated plans store one-adult portions. Every dish item contains both
+the nutrition-oriented `servingsUsed` value and a physical `amountUsed` value:
+
+```json
+{
+  "id": 123,
+  "name": "Organic Spaghetti",
+  "servingsUsed": 1.5,
+  "amountUsed": { "value": 170, "unit": "g" }
+}
+```
+
+`amountUsed.unit` is one of `g`, `ml`, or `count`; its value is greater than
+zero and no greater than 10,000. Existing plans without `amountUsed` remain
+valid and readable.
+
+`GET /api/mealplans/{id}/shopping-list` returns `qty` as the number of packages
+to buy. Each item also includes nullable `neededAmount` and `neededUnit` fields
+and a `quantityEstimated` boolean. The service calculates exact package counts
+when the physical amount and package size have compatible units. It otherwise
+uses legacy serving metadata when available, or returns one package with
+`quantityEstimated: true` when it cannot calculate a reliable quantity.
+
 The browser accepts UTF-8 SSE frames terminated by an empty CRLF, LF, or CR
 line. It ignores comment-only frames, joins repeated `data` fields with a
 newline, and requires each dispatched event's data to be valid JSON. An

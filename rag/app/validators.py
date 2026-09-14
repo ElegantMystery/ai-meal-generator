@@ -4,15 +4,37 @@ import logging
 from typing import Dict, List, Literal, Optional
 
 from fastapi import HTTPException
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 logger = logging.getLogger(__name__)
+
+
+class AmountUsed(BaseModel):
+    value: float = Field(gt=0, le=10_000)
+    unit: Literal["g", "ml", "count"]
 
 
 class PlanItem(BaseModel):
     id: int
     name: str
     servingsUsed: float = Field(default=1.0, ge=0.05, le=20.0)
+    amountUsed: AmountUsed
+
+
+class AggregatedAmountUsed(BaseModel):
+    """Physical amount after multiple individually bounded dish uses are summed."""
+
+    value: float = Field(gt=0)
+    unit: Literal["g", "ml", "count"]
+
+
+class AggregatedPlanItem(BaseModel):
+    """Flattened meal item whose totals may exceed a single-use plan bound."""
+
+    id: int
+    name: str
+    servingsUsed: float = Field(gt=0)
+    amountUsed: AggregatedAmountUsed
 
 
 class Dish(BaseModel):
@@ -26,7 +48,14 @@ class Meal(BaseModel):
     # Lock meal types so UI stays consistent
     name: Literal["Breakfast", "Lunch", "Dinner"]
     dishes: List[Dish] = Field(default_factory=list, min_length=1, max_length=5)
-    items: List[PlanItem] = Field(default_factory=list, max_length=20)
+    items: List[AggregatedPlanItem] = Field(default_factory=list, max_length=20)
+
+    @field_validator("items", mode="before")
+    @classmethod
+    def coerce_plan_items(cls, value):
+        if isinstance(value, list):
+            return [item.model_dump() if isinstance(item, PlanItem) else item for item in value]
+        return value
 
 
 class DayPlan(BaseModel):
@@ -55,7 +84,7 @@ def flatten_dishes_to_items(doc: MealPlanDoc) -> MealPlanDoc:
     """
     Post-process a MealPlanDoc after LLM generation:
     - For each meal, iterate all dishes and collect all items.
-    - Deduplicate by item id, summing servingsUsed across dishes.
+    - Deduplicate by item id, summing servingsUsed and amountUsed across dishes.
     - Set meal.items to the deduplicated list (preserves first-seen item name).
     - Backward compat: shopping list service walks meal.items and needs it populated.
 
@@ -68,21 +97,56 @@ def flatten_dishes_to_items(doc: MealPlanDoc) -> MealPlanDoc:
                 continue
 
             # Collect deduplicated items from all dishes in this meal
-            # Use raw dicts to accumulate servingsUsed without the per-dish le=10 cap
+            # Use raw dicts to accumulate quantities before constructing flattened items.
             seen_ids: Dict[int, str] = {}     # id -> name (first-seen)
             seen_used: Dict[int, float] = {}  # id -> total servingsUsed across dishes
+            seen_amounts: Dict[int, float] = {}
+            seen_units: Dict[int, Literal["g", "ml", "count"]] = {}
             for dish in meal.dishes:
                 for item in dish.items:
                     if item.id not in seen_ids:
                         seen_ids[item.id] = item.name
+                        seen_units[item.id] = item.amountUsed.unit
                     seen_used[item.id] = seen_used.get(item.id, 0.0) + item.servingsUsed
+                    seen_amounts[item.id] = (
+                        seen_amounts.get(item.id, 0.0) + item.amountUsed.value
+                    )
 
             meal.items = [
-                PlanItem(id=iid, name=seen_ids[iid], servingsUsed=seen_used[iid])
+                AggregatedPlanItem(
+                    id=iid,
+                    name=seen_ids[iid],
+                    servingsUsed=seen_used[iid],
+                    amountUsed=AggregatedAmountUsed(
+                        value=seen_amounts[iid], unit=seen_units[iid]
+                    ),
+                )
                 for iid in seen_ids
             ]
 
     return doc
+
+
+def find_mixed_amount_unit_errors(doc: MealPlanDoc, max_errors: int = 8) -> List[str]:
+    """Return bounded repair messages for products expressed in multiple units."""
+    units_by_id: Dict[int, set[str]] = {}
+    for day in doc.plan:
+        for meal in day.meals:
+            for dish in meal.dishes:
+                for item in dish.items:
+                    units_by_id.setdefault(item.id, set()).add(item.amountUsed.unit)
+
+    errors = []
+    for item_id in sorted(units_by_id):
+        units = sorted(units_by_id[item_id])
+        if len(units) > 1:
+            errors.append(
+                f"Item {item_id} uses mixed amount units: {', '.join(units)}. "
+                "Use one unit for this product throughout the plan."
+            )
+            if len(errors) >= max_errors:
+                break
+    return errors
 
 
 def _unwrap_xml_item_wrappers(obj):

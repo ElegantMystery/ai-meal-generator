@@ -8,7 +8,9 @@ import pytest
 from pydantic import ValidationError
 
 from app.validators import (
-    PlanItem,
+    AmountUsed,
+    AggregatedAmountUsed,
+    PlanItem as PlanItemModel,
     Dish,
     Meal,
     DayPlan,
@@ -17,7 +19,14 @@ from app.validators import (
     parse_and_validate_plan_json,
     extract_item_ids,
     _unwrap_xml_item_wrappers,
+    find_mixed_amount_unit_errors,
 )
+
+
+def PlanItem(*args, **kwargs):
+    """Build a generated-plan item while keeping legacy test setup concise."""
+    kwargs.setdefault("amountUsed", {"value": 1, "unit": "count"})
+    return PlanItemModel(*args, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -25,6 +34,37 @@ from app.validators import (
 # ---------------------------------------------------------------------------
 
 class TestPlanItemServingsUsed:
+    def test_amount_used_is_required_for_generated_items(self):
+        with pytest.raises(ValidationError):
+            PlanItemModel(id=1, name="Oats", servingsUsed=1)
+
+    @pytest.mark.parametrize("unit", ["g", "ml", "count"])
+    def test_amount_used_accepts_canonical_units(self, unit):
+        item = PlanItem(
+            id=1,
+            name="Ingredient",
+            servingsUsed=1,
+            amountUsed={"value": 1.25, "unit": unit},
+        )
+        assert item.amountUsed == AmountUsed(value=1.25, unit=unit)
+
+    @pytest.mark.parametrize("value", [0, -0.1, 10000.1])
+    def test_amount_used_rejects_out_of_range_values(self, value):
+        with pytest.raises(ValidationError):
+            PlanItem(
+                id=1,
+                name="Ingredient",
+                amountUsed={"value": value, "unit": "g"},
+            )
+
+    def test_amount_used_rejects_noncanonical_unit(self):
+        with pytest.raises(ValidationError):
+            PlanItem(
+                id=1,
+                name="Ingredient",
+                amountUsed={"value": 1, "unit": "oz"},
+            )
+
     def test_plan_item_servings_used_defaults_to_1(self):
         item = PlanItem(id=1, name="Oats")
         assert item.servingsUsed == 1
@@ -237,6 +277,74 @@ def _make_doc_with_dishes(meals_per_day=None) -> MealPlanDoc:
 
 
 class TestFlattenDishesToItems:
+    def test_flatten_allows_aggregates_above_per_dish_bounds(self):
+        repeated = [
+            Dish(dishName=f"Dish {number}", items=[PlanItem(
+                id=1,
+                name="Bulk Ingredient",
+                servingsUsed=15,
+                amountUsed={"value": 6000, "unit": "g"},
+            )])
+            for number in (1, 2)
+        ]
+        doc = MealPlanDoc(
+            title="Large aggregate",
+            startDate="2026-03-03",
+            endDate="2026-03-03",
+            plan=[DayPlan(date="2026-03-03", meals=[Meal(
+                name="Dinner", dishes=repeated
+            )])],
+        )
+
+        flattened = flatten_dishes_to_items(doc).plan[0].meals[0].items[0]
+
+        assert flattened.servingsUsed == 30
+        assert flattened.amountUsed.value == 12000
+
+    def test_flatten_sums_physical_amounts(self):
+        amount = lambda value: {"value": value, "unit": "g"}
+        doc = MealPlanDoc(
+            title="Amounts",
+            startDate="2026-03-03",
+            endDate="2026-03-03",
+            plan=[DayPlan(date="2026-03-03", meals=[Meal(
+                name="Lunch",
+                dishes=[
+                    Dish(dishName="First", items=[PlanItem(
+                        id=1, name="Pasta", servingsUsed=1, amountUsed=amount(80)
+                    )]),
+                    Dish(dishName="Second", items=[PlanItem(
+                        id=1, name="Pasta", servingsUsed=0.5, amountUsed=amount(40)
+                    )]),
+                ],
+            )])],
+        )
+
+        item = flatten_dishes_to_items(doc).plan[0].meals[0].items[0]
+        assert item.servingsUsed == 1.5
+        assert item.amountUsed == AggregatedAmountUsed(value=120, unit="g")
+
+    def test_mixed_units_for_same_product_are_rejected_across_plan(self):
+        item_g = PlanItem(id=1, name="Milk", amountUsed={"value": 100, "unit": "g"})
+        item_ml = PlanItem(id=1, name="Milk", amountUsed={"value": 100, "unit": "ml"})
+        doc = MealPlanDoc(
+            title="Mixed",
+            startDate="2026-03-03",
+            endDate="2026-03-04",
+            plan=[
+                DayPlan(date="2026-03-03", meals=[Meal(
+                    name="Breakfast", dishes=[Dish(dishName="One", items=[item_g])]
+                )]),
+                DayPlan(date="2026-03-04", meals=[Meal(
+                    name="Breakfast", dishes=[Dish(dishName="Two", items=[item_ml])]
+                )]),
+            ],
+        )
+
+        assert find_mixed_amount_unit_errors(doc) == [
+            "Item 1 uses mixed amount units: g, ml. Use one unit for this product throughout the plan."
+        ]
+
     def test_flatten_dishes_to_items_deduplicates_and_sums_servings(self):
         """
         Item id=1 (Oats) appears in two dishes:
@@ -405,14 +513,18 @@ class TestParseAndValidatePlanJsonWithDishes:
                                     "description": "Creamy and filling",
                                     "estimatedCalories": 400,
                                     "items": [
-                                        {"id": 1, "name": "Oats", "servingsUsed": 2},
-                                        {"id": 2, "name": "Almond Milk", "servingsUsed": 1},
+                                        {"id": 1, "name": "Oats", "servingsUsed": 2,
+                                         "amountUsed": {"value": 80, "unit": "g"}},
+                                        {"id": 2, "name": "Almond Milk", "servingsUsed": 1,
+                                         "amountUsed": {"value": 200, "unit": "ml"}},
                                     ],
                                 }
                             ],
                             "items": [
-                                {"id": 1, "name": "Oats", "servingsUsed": 2},
-                                {"id": 2, "name": "Almond Milk", "servingsUsed": 1},
+                                {"id": 1, "name": "Oats", "servingsUsed": 2,
+                                 "amountUsed": {"value": 80, "unit": "g"}},
+                                {"id": 2, "name": "Almond Milk", "servingsUsed": 1,
+                                 "amountUsed": {"value": 200, "unit": "ml"}},
                             ],
                         }
                     ],
@@ -515,9 +627,12 @@ class TestUnwrapXmlItemWrappers:
                     {"name": "Breakfast", "dishes": {"item": {
                         "dishName": "Yogurt Bowl", "estimatedCalories": "480",
                         "items": {"item": [
-                            {"id": "4153", "name": "Greek Yogurt", "servingsUsed": "1.5"},
-                            {"id": "4011", "name": "Blueberries", "servingsUsed": "1"},
-                            {"id": "5486", "name": "Granola", "servingsUsed": "0.5"},
+                            {"id": "4153", "name": "Greek Yogurt", "servingsUsed": "1.5",
+                             "amountUsed": {"value": "170", "unit": "g"}},
+                            {"id": "4011", "name": "Blueberries", "servingsUsed": "1",
+                             "amountUsed": {"value": "75", "unit": "g"}},
+                            {"id": "5486", "name": "Granola", "servingsUsed": "0.5",
+                             "amountUsed": {"value": "30", "unit": "g"}},
                         ]},
                     }}}
                 ]}}
@@ -535,9 +650,12 @@ class TestUnwrapXmlItemWrappers:
             "title": "T", "startDate": "2026-08-04", "endDate": "2026-08-04",
             "plan": [{"date": "2026-08-04", "meals": [{"name": "Lunch", "dishes": [
                 {"dishName": "D", "items": [
-                    {"id": 1, "name": "a", "servingsUsed": 1.0},
-                    {"id": 2, "name": "b", "servingsUsed": 1.0},
-                    {"id": 3, "name": "c", "servingsUsed": 1.0},
+                    {"id": 1, "name": "a", "servingsUsed": 1.0,
+                     "amountUsed": {"value": 1, "unit": "count"}},
+                    {"id": 2, "name": "b", "servingsUsed": 1.0,
+                     "amountUsed": {"value": 1, "unit": "count"}},
+                    {"id": 3, "name": "c", "servingsUsed": 1.0,
+                     "amountUsed": {"value": 1, "unit": "count"}},
                 ]},
             ]}]}],
         })

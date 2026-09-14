@@ -15,4 +15,7 @@ public class ShoppingListItemDto {
     private String unitSize;
     private String imageUrl;
     private Double lineTotal; // price * qty (nullable if price null)
+    private Double neededAmount;
+    private String neededUnit;
+    private Boolean quantityEstimated;
 }

@@ -11,6 +11,10 @@ export type PlanItem = {
   id: number;
   name: string;
   servingsUsed?: number;
+  amountUsed?: {
+    value: number;
+    unit: "g" | "ml" | "count";
+  };
 };
 
 export type PlanDish = {
@@ -81,6 +85,10 @@ export function hasDishes(meal: {
 // ---------------------------------------------------------------------------
 
 export function getDishItemLabel(item: PlanItem): string {
+  if (item.amountUsed) {
+    const amount = String(parseFloat(item.amountUsed.value.toPrecision(10)));
+    return `${amount} ${item.amountUsed.unit} ${item.name}`;
+  }
   const n = item.servingsUsed ?? 1;
   if (n > 1) {
     // Strip trailing zeros by relying on JS number-to-string coercion.

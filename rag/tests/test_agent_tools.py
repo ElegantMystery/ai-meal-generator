@@ -226,9 +226,12 @@ def _minimal_plan(item_id: int) -> Dict[str, Any]:
                             {
                                 "dishName": "Salad",
                                 "items": [
-                                    {"id": item_id, "name": "Lettuce", "servingsUsed": 1.0},
-                                    {"id": item_id + 1, "name": "Tomato", "servingsUsed": 0.5},
-                                    {"id": item_id + 2, "name": "Olive Oil", "servingsUsed": 0.2},
+                                    {"id": item_id, "name": "Lettuce", "servingsUsed": 1.0,
+                                     "amountUsed": {"value": 85, "unit": "g"}},
+                                    {"id": item_id + 1, "name": "Tomato", "servingsUsed": 0.5,
+                                     "amountUsed": {"value": 80, "unit": "g"}},
+                                    {"id": item_id + 2, "name": "Olive Oil", "servingsUsed": 0.2,
+                                     "amountUsed": {"value": 10, "unit": "ml"}},
                                 ],
                             }
                         ],
@@ -271,6 +274,88 @@ def test_submit_plan_with_missing_ids_returns_errors():
     assert ctx.repair_attempted is True
 
 
+def test_submit_plan_rejects_mixed_units_for_same_product():
+    ctx = _ctx()
+    plan = _minimal_plan(1)
+    second_dish = {
+        "dishName": "Side",
+        "items": [
+            {
+                "id": 1,
+                "name": "Lettuce",
+                "servingsUsed": 0.5,
+                "amountUsed": {"value": 1, "unit": "count"},
+            }
+        ],
+    }
+    plan["plan"][0]["meals"][0]["dishes"].append(second_dish)
+
+    result = dispatch("submit_plan", {"plan_json": plan}, ctx)
+
+    assert result["ok"] is False
+    assert "mixed amount units" in result["errors"][0]
+    assert ctx.repair_attempted is True
+
+
+def test_submit_plan_accepts_aggregate_above_per_dish_quantity_bounds():
+    ctx = _ctx()
+    plan = _minimal_plan(1)
+    meal = plan["plan"][0]["meals"][0]
+    meal["dishes"] = [
+        {
+            "dishName": f"Bulk dish {number}",
+            "items": [{
+                "id": 1,
+                "name": "Bulk Ingredient",
+                "servingsUsed": 15,
+                "amountUsed": {"value": 6000, "unit": "g"},
+            }],
+        }
+        for number in (1, 2)
+    ]
+    cur = _CursorStub([[{"id": 1}]])
+
+    with _patch_conn(cur):
+        result = dispatch("submit_plan", {"plan_json": plan}, ctx)
+
+    assert result["ok"] is True
+    item = ctx.plan_doc.plan[0].meals[0].items[0]
+    assert item.servingsUsed == 30
+    assert item.amountUsed.value == 12000
+
+
+def test_submit_plan_returns_ingredient_error_then_accepts_repaired_copy():
+    ctx = _ctx()
+    plan = _minimal_plan(1)
+    dish = plan["plan"][0]["meals"][0]["dishes"][0]
+    dish["dishName"] = "Avocado Salad"
+    dish["description"] = "Fresh avocado with vegetables"
+
+    selected_rows = [
+        {"id": 1, "name": "Lettuce", "ingredients": None},
+        {"id": 2, "name": "Tomato", "ingredients": None},
+        {"id": 3, "name": "Olive Oil", "ingredients": None},
+    ]
+    recipe_rows = [{"ingredients_json": '[{"name":"avocado"}]'}]
+    verification_rows = [{"id": 1}, {"id": 2}, {"id": 3}]
+    cur = _CursorStub([
+        verification_rows, selected_rows, recipe_rows,
+        verification_rows, selected_rows, recipe_rows,
+    ])
+
+    with _patch_conn(cur):
+        rejected = dispatch("submit_plan", {"plan_json": plan}, ctx)
+        dish["dishName"] = "Garden Salad"
+        dish["description"] = "Crisp vegetables"
+        accepted = dispatch("submit_plan", {"plan_json": plan}, ctx)
+
+    assert rejected["ok"] is False
+    assert "Day 1 Lunch dish 1" in rejected["errors"][0]
+    assert "avocado" in rejected["errors"][0]
+    assert accepted["ok"] is True
+    assert ctx.submitted is True
+
+
 def test_submit_plan_propagates_database_failure():
     ctx = _ctx()
     failure = OperationalError("database connection failed")
@@ -281,6 +366,23 @@ def test_submit_plan_propagates_database_failure():
     ):
         with pytest.raises(OperationalError) as exc_info:
             dispatch("submit_plan", {"plan_json": _minimal_plan(1)}, ctx)
+
+    assert exc_info.value is failure
+    assert ctx.submitted is False
+    assert ctx.repair_attempted is False
+
+
+def test_submit_plan_propagates_ingredient_metadata_database_failure():
+    ctx = _ctx()
+    failure = OperationalError("ingredient query failed")
+
+    with patch("app.agent.tools.verify_item_ids_belong_to_store"):
+        with patch(
+            "app.agent.tools._load_ingredient_validation_data",
+            side_effect=failure,
+        ):
+            with pytest.raises(OperationalError) as exc_info:
+                dispatch("submit_plan", {"plan_json": _minimal_plan(1)}, ctx)
 
     assert exc_info.value is failure
     assert ctx.submitted is False

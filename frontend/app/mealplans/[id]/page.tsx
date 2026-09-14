@@ -24,6 +24,11 @@ import {
   hasDishes,
   getDishItemLabel,
 } from "@/lib/mealplan-dish-utils";
+import {
+  buildShoppingListClipboardText,
+  formatShoppingQuantityDetails,
+  type ShoppingListItem,
+} from "@/lib/shopping-list-utils";
 
 type MealPlan = {
   id: number;
@@ -32,16 +37,6 @@ type MealPlan = {
   endDate: string | null;
   planJson: string | null;
   createdAt: string | null;
-};
-
-type ShoppingListItem = {
-  id: number;
-  name: string;
-  qty: number;
-  price?: number | null;
-  unitSize?: string | null;
-  imageUrl?: string | null;
-  lineTotal?: number | null;
 };
 
 type ShoppingListResponse = {
@@ -172,13 +167,7 @@ export default function MealPlanDetailPage() {
 
   const copyShoppingList = async () => {
     if (!shopping) return;
-    const text = shopping.items
-      .map((it) => {
-        const priceStr = it.price != null ? ` ($${it.price.toFixed(2)})` : "";
-        const unitStr = it.unitSize ? ` - ${it.unitSize}` : "";
-        return `${it.qty}x ${it.name}${unitStr}${priceStr}`;
-      })
-      .join("\n");
+    const text = buildShoppingListClipboardText(shopping.items);
     try {
       await navigator.clipboard.writeText(text);
       toast("Shopping list copied to clipboard!", "success");
@@ -415,11 +404,9 @@ export default function MealPlanDetailPage() {
                           {it.name}
                         </p>
                       </div>
-                      {it.unitSize && (
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          {it.unitSize}
-                        </p>
-                      )}
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {formatShoppingQuantityDetails(it)}
+                      </p>
                     </div>
 
                     <div className="text-right text-sm shrink-0">
