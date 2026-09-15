@@ -31,6 +31,28 @@ Use the project-level `.venv` for Python. Install hash-locked dependencies with
 `--require-hashes`; see `docs/python-dependencies.md`. New Flyway migrations must
 be applied before integration testing.
 
+## Agent roles and PR ownership
+
+The user identifies each session as either the coordinator/reviewer (the
+"Scrum Master" session) or a developer. This shared guide does not grant a
+session merge authority merely because it has read the file.
+
+- **Coordinator/reviewer:** Prioritize work, create comprehensive GitHub Issues
+  with clear acceptance criteria, and assign new issues to the user by default.
+  Validate each PR against its issue, CI, correctness, security, and performance.
+  Leave actionable PR comments when validation fails and re-review after changes.
+  Decide merge order; merge passing PRs and close their issues. Do not merge a PR
+  with failing checks or unresolved critical/high findings.
+- **Developer:** Own implementation and tests for an assigned issue on a separate
+  feature branch or worktree. Run the required checks, open a PR linked to the
+  issue, and address review feedback. Do not merge the PR or close the issue.
+
+When one PR merges before another, the developer of the remaining PR updates it
+against current `main`, resolves Git conflicts, and reruns affected checks. The
+coordinator decides the intended combined behavior when changes disagree; ask
+the user before choosing if the product requirement is ambiguous. Avoid parallel
+assignments that edit the same behavior without an agreed dependency or order.
+
 ## Engineering conventions
 
 - Preserve the end-to-end SSE contract for `/api/mealplans/generate-ai`.
