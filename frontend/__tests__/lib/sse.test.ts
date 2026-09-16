@@ -46,7 +46,7 @@ function readStream(
 
 afterEach(() => {
   jest.restoreAllMocks();
-  delete (global as typeof globalThis & { fetch?: typeof fetch }).fetch;
+  Reflect.deleteProperty(global, "fetch");
 });
 
 describe("streamMealPlan SSE parsing", () => {
