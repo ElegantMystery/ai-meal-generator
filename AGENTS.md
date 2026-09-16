@@ -19,7 +19,7 @@ UTC calendar month; quota exhaustion is HTTP 429 with `QUOTA_EXCEEDED`.
 
 ## Required workflow
 
-For every task:
+For tasks that change repository files:
 
 1. Pull `main` and create `feat/<name>`; never implement directly on `main`.
 2. Write or update tests before implementation when behavior changes.
