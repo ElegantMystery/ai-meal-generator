@@ -19,7 +19,6 @@ credentials only from the configured frontend origins.
 | `POST /api/auth/logout` and `/logout` | Browser session | Session auth + CSRF |
 | `POST /api/mealplans` | Saved plans | Session auth + CSRF |
 | `DELETE /api/mealplans/{id}` | Saved plans | Session auth + CSRF |
-| `POST /api/mealplans/generate` | Plan, quota | Session auth + CSRF |
 | `POST /api/mealplans/generate-ai` | Generation, plan, quota | Session auth + CSRF + idempotency |
 | `PUT /api/preferences/me` | Preferences | Session auth + CSRF |
 | `POST /api/subscription/checkout` | Stripe checkout session | Session auth + CSRF |

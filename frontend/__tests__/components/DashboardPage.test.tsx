@@ -333,31 +333,20 @@ describe("Dashboard — servings", () => {
     );
   });
 
-  it("sends the selected servings through rule-based generation", async () => {
-    mockApi.post.mockResolvedValueOnce({
-      data: {
-        id: 46,
-        title: "Rule Plan",
-        startDate: null,
-        endDate: null,
-        planJson: null,
-        createdAt: null,
-      },
-    });
+  it("offers only AI generation and never posts to the retired endpoint", async () => {
     render(<DashboardPage />);
     fireEvent.change(await screen.findByLabelText("Servings"), {
       target: { value: "3" },
     });
 
+    expect(screen.getByRole("button", { name: /generate with ai/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /rule-based/i })).not.toBeInTheDocument();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /generate \(rule-based\)/i }));
+      fireEvent.click(screen.getByRole("button", { name: /generate with ai/i }));
     });
 
-    expect(mockApi.post).toHaveBeenCalledWith(
-      "/api/mealplans/generate",
-      null,
-      { params: { store: "TRADER_JOES", days: 7, servings: 3 } },
-    );
+    expect(mockStreamMealPlan).toHaveBeenCalledWith(expect.objectContaining({ servings: 3 }));
+    expect(mockApi.post).not.toHaveBeenCalled();
   });
 
   it("uses a fresh idempotency key when retrying with changed servings", async () => {
@@ -460,25 +449,6 @@ describe("Dashboard — UpgradeModal on 429 QUOTA_EXCEEDED", () => {
     });
   });
 
-  it("shows UpgradeModal when rule-based generate returns 429 QUOTA_EXCEEDED", async () => {
-    const quotaError = {
-      response: { status: 429, data: { error: "QUOTA_EXCEEDED" } },
-    };
-    mockApi.post.mockRejectedValueOnce(quotaError);
-    render(<DashboardPage />);
-    await waitFor(() => screen.getByRole("button", { name: /generate \(rule-based\)/i }));
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /generate \(rule-based\)/i }));
-    });
-
-    await waitFor(() => {
-      expect(
-        screen.getByText(/you've reached your free plan limit/i)
-      ).toBeInTheDocument();
-    });
-  });
-
   it("shows generic error (not upgrade modal) for non-403 errors", async () => {
     mockStreamMealPlan.mockRejectedValueOnce(new Error("Server Error"));
     render(<DashboardPage />);
@@ -565,29 +535,6 @@ describe("Dashboard — refetch after successful generation", () => {
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /generate with ai/i }));
-    });
-
-    await waitFor(() => {
-      expect(mockRefetch).toHaveBeenCalled();
-    });
-  });
-
-  it("calls refetch after rule-based meal plan is generated", async () => {
-    mockApi.post.mockResolvedValueOnce({
-      data: {
-        id: 43,
-        title: "Rule Plan",
-        startDate: null,
-        endDate: null,
-        planJson: null,
-        createdAt: null,
-      },
-    });
-    render(<DashboardPage />);
-    await waitFor(() => screen.getByRole("button", { name: /generate \(rule-based\)/i }));
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /generate \(rule-based\)/i }));
     });
 
     await waitFor(() => {

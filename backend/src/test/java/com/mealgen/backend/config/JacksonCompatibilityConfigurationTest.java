@@ -9,7 +9,6 @@ import com.mealgen.backend.mealplan.model.GenerationRequestStatus;
 import com.mealgen.backend.mealplan.repository.MealPlanRepository;
 import com.mealgen.backend.mealplan.service.GenerationObservability;
 import com.mealgen.backend.mealplan.service.GenerationRequestService;
-import com.mealgen.backend.mealplan.service.MealPlanGenerateService;
 import com.mealgen.backend.mealplan.service.MealPlanPersistenceService;
 import com.mealgen.backend.mealplan.service.MealPlanService;
 import com.mealgen.backend.mealplan.service.ShoppingListService;
@@ -58,7 +57,6 @@ class JacksonCompatibilityConfigurationTest {
             context.register(
                     JacksonCompatibilityConfiguration.class,
                     MealPlanService.class,
-                    MealPlanGenerateService.class,
                     ShoppingListService.class,
                     SubscriptionService.class);
             register(context, "users", mock(UserRepository.class));
@@ -80,14 +78,10 @@ class JacksonCompatibilityConfigurationTest {
             ObjectMapper mapper = beans.values().iterator().next();
 
             MealPlanService mealPlanService = context.getBean(MealPlanService.class);
-            MealPlanGenerateService generateService =
-                    context.getBean(MealPlanGenerateService.class);
             ShoppingListService shoppingListService = context.getBean(ShoppingListService.class);
             SubscriptionService subscriptions = context.getBean(SubscriptionService.class);
 
             assertThat(ReflectionTestUtils.getField(mealPlanService, "objectMapper"))
-                    .isSameAs(mapper);
-            assertThat(ReflectionTestUtils.getField(generateService, "objectMapper"))
                     .isSameAs(mapper);
             assertThat(ReflectionTestUtils.getField(shoppingListService, "objectMapper"))
                     .isSameAs(mapper);

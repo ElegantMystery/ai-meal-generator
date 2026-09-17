@@ -2,8 +2,6 @@ package com.mealgen.backend.subscription;
 
 import com.mealgen.backend.auth.model.User;
 import com.mealgen.backend.auth.repository.UserRepository;
-import com.mealgen.backend.mealplan.service.MealPlanGenerateService;
-import com.mealgen.backend.mealplan.service.MealPlanService;
 import com.mealgen.backend.subscription.exception.QuotaExceededException;
 import com.mealgen.backend.subscription.model.SubscriptionTier;
 import com.mealgen.backend.subscription.service.SubscriptionService;
@@ -21,11 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 /**
- * Tests verifying that quota enforcement is correctly applied in the
- * MealPlanGenerateService and MealPlanService (generateAi) methods.
- *
- * These are unit tests using Mockito, testing the quota check logic
- * that is injected into the generate services.
+ * Tests quota service behavior shared by AI generation and subscription flows.
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
