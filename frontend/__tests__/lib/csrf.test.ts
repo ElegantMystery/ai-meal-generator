@@ -33,6 +33,6 @@ describe("CSRF browser integration", () => {
         }),
       })
     );
-    delete (global as typeof globalThis & { fetch?: typeof fetch }).fetch;
+    Reflect.deleteProperty(global, "fetch");
   });
 });
