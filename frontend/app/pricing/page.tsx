@@ -14,7 +14,7 @@ import { useToast } from "@/components/ui/Toast";
 
 const FREE_FEATURES = [
   "3 meal plans",
-  "AI & rule-based generation",
+  "AI meal plan generation",
   "Shopping list export",
 ];
 

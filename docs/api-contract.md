@@ -23,7 +23,6 @@ Quota exhaustion is consistently HTTP **429 Too Many Requests** with error code
 | `POST /api/mealplans` | Create a plan |
 | `GET /api/mealplans/{id}` | Get a plan |
 | `DELETE /api/mealplans/{id}` | Delete a plan |
-| `POST /api/mealplans/generate` | Rule-based generation |
 | `POST /api/mealplans/generate-ai` | Agentic SSE generation |
 | `GET /api/mealplans/generation-requests/{id}` | Generation status by request ID |
 | `GET /api/mealplans/generation-requests` | Generation status by idempotency key |
@@ -42,10 +41,9 @@ Google login begins at `GET /oauth2/authorization/google`.
 `assistant_text`, `generation_status`, `complete`, `mealplan_saved`, and `error`
 SSE events.
 
-Both `POST /api/mealplans/generate` and `POST /api/mealplans/generate-ai` accept
-the query parameter `servings`. It is an integer from 1 through 12 and defaults
-to `1` when omitted. For AI generation, `servings` is part of the durable
-request fingerprint and is forwarded to RAG. Reusing an idempotency key with a
+`POST /api/mealplans/generate-ai` accepts the query parameter `servings`. It is
+an integer from 1 through 12 and defaults to `1` when omitted. `servings` is
+part of the durable request fingerprint and is forwarded to RAG. Reusing an idempotency key with a
 different serving count returns the existing idempotency-conflict response.
 
 New agent-generated plans store portions for the request's serving count. Every dish item contains both

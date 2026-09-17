@@ -113,6 +113,8 @@ describe("PricingPage — FREE user", () => {
   it("renders FREE plan features", () => {
     render(<PricingPage />);
     expect(screen.getByText(/3 meal plans/i)).toBeInTheDocument();
+    expect(screen.getByText("AI meal plan generation")).toBeInTheDocument();
+    expect(screen.queryByText(/rule-based/i)).not.toBeInTheDocument();
   });
 
   it("renders PRO plan features", () => {

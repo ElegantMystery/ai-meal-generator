@@ -3,7 +3,6 @@ package com.mealgen.backend.security;
 import com.mealgen.backend.auth.model.User;
 import com.mealgen.backend.auth.repository.UserRepository;
 import com.mealgen.backend.mealplan.controller.MealPlanController;
-import com.mealgen.backend.mealplan.service.MealPlanGenerateService;
 import com.mealgen.backend.mealplan.service.MealPlanService;
 import com.mealgen.backend.mealplan.service.ShoppingListService;
 import com.mealgen.backend.preferences.controller.UserPreferencesController;
@@ -46,7 +45,6 @@ class ControllerPrincipalValidationTest {
         userRepository = mock(UserRepository.class);
         mealPlanController = new MealPlanController(
                 mealPlanService,
-                mock(MealPlanGenerateService.class),
                 mock(ShoppingListService.class));
         preferencesController = new UserPreferencesController(preferencesService);
         subscriptionController = new SubscriptionController(
