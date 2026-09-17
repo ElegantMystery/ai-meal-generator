@@ -10,7 +10,13 @@
  * 5. refetch() is called after successful plan generation
  */
 
-import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  waitFor,
+} from "@testing-library/react";
 
 // ---- Next.js mocks ----
 const mockRouterReplace = jest.fn();
@@ -48,8 +54,12 @@ jest.mock("next/image", () => ({
 
 // ---- Auth store mock ----
 jest.mock("@/lib/authStore", () => ({
-  useAuthStore: (selector: (s: { user: { name: string }; preferencesVersion: number }) => unknown) =>
-    selector({ user: { name: "Test User" }, preferencesVersion: 0 }),
+  useAuthStore: (
+    selector: (s: {
+      user: { name: string };
+      preferencesVersion: number;
+    }) => unknown,
+  ) => selector({ user: { name: "Test User" }, preferencesVersion: 0 }),
 }));
 
 // ---- API mock — use jest.fn() directly inside factory ----
@@ -77,7 +87,9 @@ jest.mock("@/lib/sse", () => ({
 // ---- Toast mock ----
 jest.mock("@/components/ui/Toast", () => ({
   useToast: jest.fn(() => ({ toast: jest.fn() })),
-  ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  ToastProvider: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
 }));
 
 // ---- Import mocked modules AFTER jest.mock calls ----
@@ -167,8 +179,9 @@ describe("Dashboard — durable generation recovery", () => {
 
   it("keeps the selected servings in recovery state after receiving a request id", async () => {
     mockStreamMealPlan.mockImplementationOnce(async ({ onEvent }) => {
-      expect(JSON.parse(localStorage.getItem("activeMealPlanGeneration") ?? "{}"))
-        .toEqual(expect.objectContaining({ servings: 4 }));
+      expect(
+        JSON.parse(localStorage.getItem("activeMealPlanGeneration") ?? "{}"),
+      ).toEqual(expect.objectContaining({ servings: 4 }));
       onEvent({
         event: "generation_status",
         data: {
@@ -178,11 +191,14 @@ describe("Dashboard — durable generation recovery", () => {
           mealPlanId: null,
         },
       });
-      expect(JSON.parse(localStorage.getItem("activeMealPlanGeneration") ?? "{}"))
-        .toEqual(expect.objectContaining({
+      expect(
+        JSON.parse(localStorage.getItem("activeMealPlanGeneration") ?? "{}"),
+      ).toEqual(
+        expect.objectContaining({
           requestId: "00000000-0000-0000-0000-000000000004",
           servings: 4,
-        }));
+        }),
+      );
     });
     render(<DashboardPage />);
     fireEvent.change(await screen.findByLabelText("Servings"), {
@@ -190,7 +206,9 @@ describe("Dashboard — durable generation recovery", () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /generate with ai/i }));
+      fireEvent.click(
+        screen.getByRole("button", { name: /generate with ai/i }),
+      );
     });
 
     await waitFor(() => expect(mockStreamMealPlan).toHaveBeenCalled());
@@ -208,7 +226,10 @@ describe("Dashboard — durable generation recovery", () => {
     mockApi.get.mockImplementation((url: string) => {
       if (url === "/api/preferences/me") return Promise.resolve({ data: null });
       if (url === "/api/mealplans") return Promise.resolve({ data: [] });
-      if (url === "/api/mealplans/generation-requests/00000000-0000-0000-0000-000000000014") {
+      if (
+        url ===
+        "/api/mealplans/generation-requests/00000000-0000-0000-0000-000000000014"
+      ) {
         return Promise.resolve({
           data: {
             id: "00000000-0000-0000-0000-000000000014",
@@ -223,7 +244,9 @@ describe("Dashboard — durable generation recovery", () => {
 
     render(<DashboardPage />);
 
-    await waitFor(() => expect(screen.getByLabelText("Servings")).toHaveValue("4"));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Servings")).toHaveValue("4"),
+    );
   });
 
   it("defaults legacy recovery state without servings to one", async () => {
@@ -237,7 +260,10 @@ describe("Dashboard — durable generation recovery", () => {
     mockApi.get.mockImplementation((url: string) => {
       if (url === "/api/preferences/me") return Promise.resolve({ data: null });
       if (url === "/api/mealplans") return Promise.resolve({ data: [] });
-      if (url === "/api/mealplans/generation-requests/00000000-0000-0000-0000-000000000015") {
+      if (
+        url ===
+        "/api/mealplans/generation-requests/00000000-0000-0000-0000-000000000015"
+      ) {
         return Promise.resolve({
           data: {
             id: "00000000-0000-0000-0000-000000000015",
@@ -252,7 +278,9 @@ describe("Dashboard — durable generation recovery", () => {
 
     render(<DashboardPage />);
 
-    await waitFor(() => expect(screen.getByLabelText("Servings")).toHaveValue("1"));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Servings")).toHaveValue("1"),
+    );
   });
 
   it.each([0, 13, 2.5, "4", null])(
@@ -267,9 +295,13 @@ describe("Dashboard — durable generation recovery", () => {
         }),
       );
       mockApi.get.mockImplementation((url: string) => {
-        if (url === "/api/preferences/me") return Promise.resolve({ data: null });
+        if (url === "/api/preferences/me")
+          return Promise.resolve({ data: null });
         if (url === "/api/mealplans") return Promise.resolve({ data: [] });
-        if (url === "/api/mealplans/generation-requests/00000000-0000-0000-0000-000000000016") {
+        if (
+          url ===
+          "/api/mealplans/generation-requests/00000000-0000-0000-0000-000000000016"
+        ) {
           return Promise.resolve({
             data: {
               id: "00000000-0000-0000-0000-000000000016",
@@ -284,7 +316,9 @@ describe("Dashboard — durable generation recovery", () => {
 
       render(<DashboardPage />);
 
-      await waitFor(() => expect(screen.getByLabelText("Servings")).toHaveValue("1"));
+      await waitFor(() =>
+        expect(screen.getByLabelText("Servings")).toHaveValue("1"),
+      );
     },
   );
 });
@@ -298,7 +332,9 @@ describe("Dashboard — servings", () => {
   it("offers accessible integer servings from 1 through 12 and defaults to one", async () => {
     render(<DashboardPage />);
 
-    const control = await screen.findByLabelText("Servings") as HTMLSelectElement;
+    const control = (await screen.findByLabelText(
+      "Servings",
+    )) as HTMLSelectElement;
     expect(control).toHaveValue("1");
     expect(Array.from(control.options).map((option) => option.value)).toEqual(
       Array.from({ length: 12 }, (_, index) => String(index + 1)),
@@ -325,7 +361,9 @@ describe("Dashboard — servings", () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /generate with ai/i }));
+      fireEvent.click(
+        screen.getByRole("button", { name: /generate with ai/i }),
+      );
     });
 
     expect(mockStreamMealPlan).toHaveBeenCalledWith(
@@ -339,13 +377,21 @@ describe("Dashboard — servings", () => {
       target: { value: "3" },
     });
 
-    expect(screen.getByRole("button", { name: /generate with ai/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /rule-based/i })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /generate with ai/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /rule-based/i }),
+    ).not.toBeInTheDocument();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /generate with ai/i }));
+      fireEvent.click(
+        screen.getByRole("button", { name: /generate with ai/i }),
+      );
     });
 
-    expect(mockStreamMealPlan).toHaveBeenCalledWith(expect.objectContaining({ servings: 3 }));
+    expect(mockStreamMealPlan).toHaveBeenCalledWith(
+      expect.objectContaining({ servings: 3 }),
+    );
     expect(mockApi.post).not.toHaveBeenCalled();
   });
 
@@ -355,20 +401,31 @@ describe("Dashboard — servings", () => {
     const servingsControl = await screen.findByLabelText("Servings");
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /generate with ai/i }));
+      fireEvent.click(
+        screen.getByRole("button", { name: /generate with ai/i }),
+      );
     });
     const firstKey = mockStreamMealPlan.mock.calls[0][0].idempotencyKey;
-    await waitFor(() => expect(screen.getByRole("button", { name: /generate with ai/i })).toBeEnabled());
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /generate with ai/i }),
+      ).toBeEnabled(),
+    );
     fireEvent.change(servingsControl, { target: { value: "2" } });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /generate with ai/i }));
+      fireEvent.click(
+        screen.getByRole("button", { name: /generate with ai/i }),
+      );
     });
 
     const secondKey = mockStreamMealPlan.mock.calls[1][0].idempotencyKey;
     expect(secondKey).not.toBe(firstKey);
-    expect(JSON.parse(localStorage.getItem("activeMealPlanGeneration") ?? "{}"))
-      .toEqual(expect.objectContaining({ idempotencyKey: secondKey, servings: 2 }));
+    expect(
+      JSON.parse(localStorage.getItem("activeMealPlanGeneration") ?? "{}"),
+    ).toEqual(
+      expect.objectContaining({ idempotencyKey: secondKey, servings: 2 }),
+    );
   });
 
   it("reuses the idempotency key when retrying with the same selection", async () => {
@@ -377,13 +434,21 @@ describe("Dashboard — servings", () => {
     await screen.findByLabelText("Servings");
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /generate with ai/i }));
+      fireEvent.click(
+        screen.getByRole("button", { name: /generate with ai/i }),
+      );
     });
     const firstKey = mockStreamMealPlan.mock.calls[0][0].idempotencyKey;
-    await waitFor(() => expect(screen.getByRole("button", { name: /generate with ai/i })).toBeEnabled());
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /generate with ai/i }),
+      ).toBeEnabled(),
+    );
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /generate with ai/i }));
+      fireEvent.click(
+        screen.getByRole("button", { name: /generate with ai/i }),
+      );
     });
 
     expect(mockStreamMealPlan.mock.calls[1][0].idempotencyKey).toBe(firstKey);
@@ -405,7 +470,12 @@ describe("Dashboard — QuotaBadge integration", () => {
 
   it("renders QuotaBadge with PRO status", async () => {
     mockUseSubscription.mockReturnValue({
-      status: { tier: "PRO", remainingQuota: -1, cancelAtPeriodEnd: false, currentPeriodEnd: null },
+      status: {
+        tier: "PRO",
+        remainingQuota: -1,
+        cancelAtPeriodEnd: false,
+        currentPeriodEnd: null,
+      },
       loading: false,
       refetch: mockRefetch,
     });
@@ -416,10 +486,18 @@ describe("Dashboard — QuotaBadge integration", () => {
   });
 
   it("does not crash when subscription status is null", async () => {
-    mockUseSubscription.mockReturnValue({ status: null, loading: true, refetch: mockRefetch });
+    mockUseSubscription.mockReturnValue({
+      status: null,
+      loading: true,
+      refetch: mockRefetch,
+    });
     render(<DashboardPage />);
     await waitFor(() => {
-      expect(screen.getByText(/dashboard/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", {
+          name: "A little planning. Better meals.",
+        }),
+      ).toBeInTheDocument();
     });
   });
 });
@@ -436,15 +514,19 @@ describe("Dashboard — UpgradeModal on 429 QUOTA_EXCEEDED", () => {
     };
     mockStreamMealPlan.mockRejectedValueOnce(quotaError);
     render(<DashboardPage />);
-    await waitFor(() => screen.getByRole("button", { name: /generate with ai/i }));
+    await waitFor(() =>
+      screen.getByRole("button", { name: /generate with ai/i }),
+    );
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /generate with ai/i }));
+      fireEvent.click(
+        screen.getByRole("button", { name: /generate with ai/i }),
+      );
     });
 
     await waitFor(() => {
       expect(
-        screen.getByText(/you've reached your free plan limit/i)
+        screen.getByText(/you've reached your free plan limit/i),
       ).toBeInTheDocument();
     });
   });
@@ -452,15 +534,19 @@ describe("Dashboard — UpgradeModal on 429 QUOTA_EXCEEDED", () => {
   it("shows generic error (not upgrade modal) for non-403 errors", async () => {
     mockStreamMealPlan.mockRejectedValueOnce(new Error("Server Error"));
     render(<DashboardPage />);
-    await waitFor(() => screen.getByRole("button", { name: /generate with ai/i }));
+    await waitFor(() =>
+      screen.getByRole("button", { name: /generate with ai/i }),
+    );
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /generate with ai/i }));
+      fireEvent.click(
+        screen.getByRole("button", { name: /generate with ai/i }),
+      );
     });
 
     await waitFor(() => {
       expect(
-        screen.queryByText(/you've reached your free plan limit/i)
+        screen.queryByText(/you've reached your free plan limit/i),
       ).toBeNull();
     });
   });
@@ -470,10 +556,15 @@ describe("Dashboard — upgrade=success query param", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSearchParamsGet.mockImplementation((key: string) =>
-      key === "upgrade" ? "success" : null
+      key === "upgrade" ? "success" : null,
     );
     mockUseSubscription.mockReturnValue({
-      status: { tier: "PRO", remainingQuota: -1, cancelAtPeriodEnd: false, currentPeriodEnd: null },
+      status: {
+        tier: "PRO",
+        remainingQuota: -1,
+        cancelAtPeriodEnd: false,
+        currentPeriodEnd: null,
+      },
       loading: false,
       refetch: mockRefetch,
     });
@@ -490,7 +581,7 @@ describe("Dashboard — upgrade=success query param", () => {
     await waitFor(() => {
       expect(mockToast).toHaveBeenCalledWith(
         expect.stringMatching(/welcome to pro/i),
-        "success"
+        "success",
       );
     });
   });
@@ -521,24 +612,157 @@ describe("Dashboard — refetch after successful generation", () => {
       onEvent({
         event: "mealplan_saved",
         data: {
-        id: 42,
-        title: "Test Plan",
-        startDate: null,
-        endDate: null,
-        planJson: null,
-        createdAt: null,
+          id: 42,
+          title: "Test Plan",
+          startDate: null,
+          endDate: null,
+          planJson: null,
+          createdAt: null,
         },
       });
     });
     render(<DashboardPage />);
-    await waitFor(() => screen.getByRole("button", { name: /generate with ai/i }));
+    await waitFor(() =>
+      screen.getByRole("button", { name: /generate with ai/i }),
+    );
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /generate with ai/i }));
+      fireEvent.click(
+        screen.getByRole("button", { name: /generate with ai/i }),
+      );
     });
 
     await waitFor(() => {
       expect(mockRefetch).toHaveBeenCalled();
     });
   });
+});
+
+describe("Grocery Concierge integration", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    setupDefaultMocks();
+  });
+  const savedPlan = {
+    id: 51,
+    title: "Saved summer meals",
+    startDate: "2026-09-01",
+    endDate: "2026-09-03",
+    createdAt: "2026-09-01T12:00:00Z",
+    planJson: JSON.stringify({ plan: [{ date: "2026-09-01", meals: [] }] }),
+  };
+  it("reveals the composer inline for returning users and preserves their choices", async () => {
+    mockApi.get.mockImplementation((url: string) =>
+      Promise.resolve({
+        data:
+          url === "/api/mealplans"
+            ? [savedPlan]
+            : url.endsWith("/shopping-list")
+              ? { estimatedTotal: 25 }
+              : null,
+      }),
+    );
+    render(<DashboardPage />);
+    await screen.findByText("Saved summer meals");
+    expect(screen.queryByLabelText("Store")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "New plan" }));
+    fireEvent.change(screen.getByLabelText("Servings"), {
+      target: { value: "4" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Hide composer" }));
+    fireEvent.click(screen.getByRole("button", { name: "New plan" }));
+    expect(screen.getByLabelText("Servings")).toHaveValue("4");
+    expect(screen.getByText("$25.00")).toBeInTheDocument();
+    expect(
+      mockApi.get.mock.calls.filter(([url]) => url.endsWith("/shopping-list")),
+    ).toHaveLength(1);
+  });
+  it("distinguishes failed preferences and plan loading from an empty account", async () => {
+    mockApi.get.mockRejectedValue(new Error("Unavailable"));
+    render(<DashboardPage />);
+    expect(
+      await screen.findByText(
+        "Preferences unavailable. Check your settings before generating.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Unable to load saved plans. Please refresh to try again.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/No meal plans yet/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Allergies not set")).not.toBeInTheDocument();
+  });
+});
+
+it("ignores an old basket response after a newly generated plan becomes featured", async () => {
+  jest.clearAllMocks();
+  setupDefaultMocks();
+  const old = {
+    id: 80,
+    title: "Old plan",
+    startDate: null,
+    endDate: null,
+    createdAt: "2025-01-01T00:00:00Z",
+    planJson: null,
+  };
+  const next = {
+    ...old,
+    id: 81,
+    title: "New plan",
+    createdAt: "2026-01-01T00:00:00Z",
+  };
+  let resolveOld!: (value: unknown) => void;
+  mockApi.get.mockImplementation((url: string) => {
+    if (url === "/api/mealplans") return Promise.resolve({ data: [old] });
+    if (url === "/api/mealplans/80/shopping-list")
+      return new Promise((resolve) => {
+        resolveOld = resolve;
+      });
+    if (url === "/api/mealplans/81/shopping-list")
+      return Promise.resolve({ data: { estimatedTotal: 50 } });
+    return Promise.resolve({ data: null });
+  });
+  mockStreamMealPlan.mockImplementationOnce(async ({ onEvent }) =>
+    onEvent({ event: "mealplan_saved", data: next }),
+  );
+  render(<DashboardPage />);
+  await screen.findByText("Old plan");
+  fireEvent.click(screen.getByRole("button", { name: "New plan" }));
+  fireEvent.click(screen.getByRole("button", { name: "Generate with AI" }));
+  await screen.findByText("$50.00");
+  await act(async () => resolveOld({ data: { estimatedTotal: 999 } }));
+  expect(screen.getByText("$50.00")).toBeInTheDocument();
+  expect(screen.queryByText("$999.00")).not.toBeInTheDocument();
+});
+
+it("preserves a generated plan when the initial saved-plan list arrives late", async () => {
+  jest.clearAllMocks();
+  setupDefaultMocks();
+  let resolvePlans!: (value: unknown) => void;
+  mockApi.get.mockImplementation((url: string) =>
+    url === "/api/mealplans"
+      ? new Promise((resolve) => {
+          resolvePlans = resolve;
+        })
+      : Promise.resolve({ data: null }),
+  );
+  mockStreamMealPlan.mockImplementationOnce(async ({ onEvent }) =>
+    onEvent({
+      event: "mealplan_saved",
+      data: {
+        id: 90,
+        title: "Just generated",
+        startDate: null,
+        endDate: null,
+        createdAt: null,
+        planJson: null,
+      },
+    }),
+  );
+  render(<DashboardPage />);
+  fireEvent.click(screen.getByRole("button", { name: "Generate with AI" }));
+  await screen.findByText("Just generated");
+  await act(async () => resolvePlans({ data: [] }));
+  expect(screen.getByText("Just generated")).toBeInTheDocument();
 });

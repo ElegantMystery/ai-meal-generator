@@ -1,24 +1,26 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthStore } from "@/lib/authStore";
 import { api } from "@/lib/api";
 import { streamMealPlan } from "@/lib/sse";
 import { Button } from "@/components/ui/Button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/Card";
-import { Select } from "@/components/ui/Select";
-import { SkeletonCard, SkeletonText } from "@/components/ui/Skeleton";
+import { SkeletonCard } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
-import { CalendarDaysIcon, SparklesIcon } from "@heroicons/react/24/outline";
-import { formatDateRange, formatCreatedAt } from "@/lib/formatters";
+import { PlusIcon } from "@heroicons/react/24/outline";
+import { DashboardPreferences } from "@/components/dashboard/DashboardPreferences";
+import { PlanComposer } from "@/components/dashboard/PlanComposer";
+import {
+  FeaturedPlan,
+  PlanHistory,
+  type BasketState,
+} from "@/components/dashboard/DashboardPlans";
+import {
+  featuredPlan,
+  sortedPlans,
+  localDateKey,
+} from "@/lib/dashboard-plan-utils";
 import { useSubscription } from "@/hooks/useSubscription";
 import QuotaBadge from "@/components/QuotaBadge";
 import UpgradeModal from "@/components/UpgradeModal";
@@ -147,6 +149,13 @@ export default function DashboardPage() {
 
   const [prefs, setPrefs] = useState<PreferencesDto>(null);
   const [loadingPrefs, setLoadingPrefs] = useState(true);
+  const [prefsError, setPrefsError] = useState(false);
+  const [plansError, setPlansError] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [basket, setBasket] = useState<{
+    planId: number;
+    value: BasketState;
+  } | null>(null);
 
   const [mealplans, setMealplans] = useState<MealPlan[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
@@ -209,7 +218,9 @@ export default function DashboardPage() {
             ? initial
             : await waitForGeneration(requestId, controller.signal);
         if (status.status === "SUCCEEDED" && status.mealPlanId) {
-          const plan = (await api.get<MealPlan>(`/api/mealplans/${status.mealPlanId}`)).data;
+          const plan = (
+            await api.get<MealPlan>(`/api/mealplans/${status.mealPlanId}`)
+          ).data;
           setMealplans((previous) =>
             previous.some((candidate) => candidate.id === plan.id)
               ? previous
@@ -222,7 +233,12 @@ export default function DashboardPage() {
         generationKeyRef.current = null;
         localStorage.removeItem("activeMealPlanGeneration");
       } catch (recoveryError) {
-        if (!(recoveryError instanceof Error && recoveryError.name === "AbortError")) {
+        if (
+          !(
+            recoveryError instanceof Error &&
+            recoveryError.name === "AbortError"
+          )
+        ) {
           setError("Unable to recover the previous AI meal-plan generation.");
         }
       } finally {
@@ -282,51 +298,94 @@ export default function DashboardPage() {
     }
   }, [subscriptionStatus, toast]);
 
-  const prefsSummary = useMemo(() => {
-    if (!prefs) return null;
-    const parts: string[] = [];
-    if (prefs.targetCaloriesPerDay != null)
-      parts.push(`🎯 ${prefs.targetCaloriesPerDay} cal/day`);
-    if (prefs.dietaryRestrictions) {
-      const style = prefs.dietaryRestrictions
-        .split("-")
-        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-        .join("-");
-      parts.push(`🥗 ${style}`);
-    }
-    if (prefs.allergies) {
-      const list = prefs.allergies
-        .split(";")
-        .map((a) => a.trim())
-        .join(", ");
-      parts.push(`⚠️ Allergies: ${list}`);
-    }
-    return parts.length ? parts.join(" · ") : null;
-  }, [prefs]);
+  const today = localDateKey();
+  const featured = useMemo(
+    () => featuredPlan(mealplans, today),
+    [mealplans, today],
+  );
+  const history = useMemo(
+    () => sortedPlans(mealplans).filter((plan) => plan.id !== featured?.id),
+    [mealplans, featured?.id],
+  );
+  const featuredId = featured?.id;
+  const showComposer = !featured || composerOpen;
+  const preferences = (
+    <DashboardPreferences
+      prefs={prefs}
+      state={loadingPrefs ? "loading" : prefsError ? "error" : "ready"}
+    />
+  );
 
   useEffect(() => {
+    const controller = new AbortController();
     setLoadingPrefs(true);
+    setPrefsError(false);
     api
-      .get<PreferencesDto>("/api/preferences/me")
-      .then((res) => setPrefs(res.data))
-      .catch((err) => {
-        console.error("Failed to load preferences:", err);
-        setError((prev) => prev ?? "Failed to load preferences.");
+      .get<PreferencesDto>("/api/preferences/me", { signal: controller.signal })
+      .then((res) => {
+        if (!controller.signal.aborted) setPrefs(res.data);
       })
-      .finally(() => setLoadingPrefs(false));
+      .catch(() => {
+        if (!controller.signal.aborted) setPrefsError(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingPrefs(false);
+      });
+    return () => controller.abort();
   }, [preferencesVersion]);
 
   useEffect(() => {
-    setLoadingPlans(true);
+    const controller = new AbortController();
     api
-      .get<MealPlan[]>("/api/mealplans")
-      .then((res) => setMealplans(res.data || []))
-      .catch((err) => {
-        console.error("Failed to load meal plans:", err);
-        setError((prev) => prev ?? "Failed to load meal plans.");
+      .get<MealPlan[]>("/api/mealplans", { signal: controller.signal })
+      .then((res) => {
+        if (controller.signal.aborted) return;
+        // Preserve a plan recovered or generated while this request was in flight.
+        setMealplans((previous) => [
+          ...previous,
+          ...(res.data || []).filter(
+            (plan) => !previous.some((existing) => existing.id === plan.id),
+          ),
+        ]);
       })
-      .finally(() => setLoadingPlans(false));
+      .catch(() => {
+        if (!controller.signal.aborted) setPlansError(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingPlans(false);
+      });
+    return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    if (featuredId === undefined) return;
+    const controller = new AbortController();
+    const planId = featuredId;
+    api
+      .get<{ estimatedTotal?: number }>(
+        `/api/mealplans/${planId}/shopping-list`,
+        { signal: controller.signal },
+      )
+      .then((res) => {
+        if (controller.signal.aborted) return;
+        const total = res.data?.estimatedTotal;
+        setBasket({
+          planId,
+          value: {
+            state: "ready",
+            total:
+              typeof total === "number" && Number.isFinite(total) && total >= 0
+                ? total
+                : null,
+          },
+        });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted)
+          setBasket({ planId, value: { state: "error" } });
+      });
+    return () => controller.abort();
+  }, [featuredId]);
 
   const generateMealPlanAi = async () => {
     const controller = new AbortController();
@@ -349,9 +408,7 @@ export default function DashboardPage() {
       durableGeneration.store === store &&
       durableGeneration.days === days &&
       durableGeneration.servings === servings;
-    const idempotencyKey = canReuseKey
-      ? reusableKey
-      : crypto.randomUUID();
+    const idempotencyKey = canReuseKey ? reusableKey : crypto.randomUUID();
     generationKeyRef.current = idempotencyKey;
     localStorage.setItem(
       "activeMealPlanGeneration",
@@ -423,12 +480,18 @@ export default function DashboardPage() {
       // because TypeScript cannot infer callback side effects across the await.
       const generation = generationStatusRef.current as GenerationStatus | null;
       if (!saved && generation) {
-        const recovered = await waitForGeneration(generation.id, controller.signal);
+        const recovered = await waitForGeneration(
+          generation.id,
+          controller.signal,
+        );
         if (recovered.status === "SUCCEEDED" && recovered.mealPlanId) {
           saved = (
             await api.get<MealPlan>(`/api/mealplans/${recovered.mealPlanId}`)
           ).data;
-        } else if (recovered.status === "FAILED" || recovered.status === "ABANDONED") {
+        } else if (
+          recovered.status === "FAILED" ||
+          recovered.status === "ABANDONED"
+        ) {
           generationKeyRef.current = null;
           localStorage.removeItem("activeMealPlanGeneration");
           throw new Error(recovered.failureCode ?? "Generation failed");
@@ -460,197 +523,95 @@ export default function DashboardPage() {
 
   return (
     <main className="max-w-6xl mx-auto py-8 px-4 space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-500 text-sm mt-1">
-          Welcome back,{" "}
-          <span className="font-medium text-gray-700">
-            {user?.name || user?.email || "friend"}
-          </span>
-        </p>
-      </div>
-
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-sm text-gray-500">
+            Welcome back, {user?.name || "friend"}
+          </p>
+          <h1 className="mt-1 font-brand text-3xl text-brand-900">
+            A little planning. Better meals.
+          </h1>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {subscriptionStatus && (
+            <QuotaBadge
+              tier={subscriptionStatus.tier}
+              remainingQuota={subscriptionStatus.remainingQuota}
+            />
+          )}
+          {featured && (
+            <Button
+              variant="secondary"
+              className="min-h-11"
+              aria-expanded={showComposer}
+              aria-controls="new-plan-composer"
+              onClick={() => setComposerOpen(!composerOpen)}
+            >
+              <PlusIcon aria-hidden="true" className="h-4 w-4" />
+              {showComposer ? "Hide composer" : "New plan"}
+            </Button>
+          )}
+        </div>
+      </header>
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">
+        <div
+          role="alert"
+          className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3"
+        >
           {error}
         </div>
       )}
-
-      {/* Row 1: Preferences + Generate */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Preferences card */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <div className="flex items-start justify-between">
-              <div>
-                <CardTitle>Your Preferences</CardTitle>
-                <CardDescription>
-                  Used to personalize your meal plans.
-                </CardDescription>
-              </div>
-              <Link
-                href="/settings"
-                className="text-sm font-medium text-brand-600 hover:text-brand-700 transition"
-              >
-                Edit
-              </Link>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loadingPrefs ? (
-              <SkeletonText lines={2} />
-            ) : prefsSummary ? (
-              <p className="text-sm text-gray-700">{prefsSummary}</p>
-            ) : (
-              <p className="text-sm text-gray-400">
-                No preferences set.{" "}
-                <Link
-                  href="/settings"
-                  className="text-brand-600 hover:underline"
-                >
-                  Add them in Settings.
-                </Link>
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Generate card */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <CardTitle>Generate Plan</CardTitle>
-                <CardDescription>
-                  Pick a store, duration, and servings.
-                </CardDescription>
-              </div>
-              {subscriptionStatus && (
-                <QuotaBadge
-                  tier={subscriptionStatus.tier}
-                  remainingQuota={subscriptionStatus.remainingQuota}
-                />
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <Select
-                id="store"
-                label="Store"
-                value={store}
-                onChange={(e) => setStore(e.target.value as StoreOption)}
-                disabled={creatingAi}
-              >
-                <option value="TRADER_JOES">Trader Joe&apos;s</option>
-                <option value="WHOLE_FOODS">Whole Foods</option>
-              </Select>
-
-              <Select
-                id="days"
-                label="Duration"
-                value={days}
-                onChange={(e) => setDays(Number(e.target.value))}
-                disabled={creatingAi}
-              >
-                <option value={3}>3 days</option>
-                <option value={5}>5 days</option>
-                <option value={7}>7 days</option>
-                <option value={14}>14 days</option>
-              </Select>
-
-              <Select
-                id="servings"
-                label="Servings"
-                value={servings}
-                onChange={(e) => setServings(Number(e.target.value))}
-                disabled={creatingAi}
-              >
-                {Array.from({ length: 12 }, (_, index) => index + 1).map(
-                  (value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ),
-                )}
-              </Select>
-
-              <div className="pt-1 space-y-2">
-                <Button
-                  variant="primary"
-                  className="w-full"
-                  onClick={generateMealPlanAi}
-                  disabled={creatingAi}
-                  loading={creatingAi}
-                >
-                  <SparklesIcon className="h-4 w-4" />
-                  {creatingAi ? "Generating…" : "Generate with AI"}
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </section>
-
-      {/* Meal plans list */}
-      <Card>
-        <CardHeader>
-          <CardTitle>My Meal Plans</CardTitle>
-          <CardDescription>Your saved plans, latest first.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loadingPlans ? (
-            <SkeletonCard className="border-0 shadow-none p-0" />
-          ) : mealplans.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center gap-3">
-              <CalendarDaysIcon className="h-10 w-10 text-gray-300" />
-              <p className="text-sm text-gray-500">
-                No meal plans yet. Generate your first one above.
-              </p>
-            </div>
-          ) : (
-            <ul className="divide-y divide-gray-100">
-              {mealplans.map((p) => (
-                <li key={p.id} className="py-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Link
-                          href={`/mealplans/${p.id}`}
-                          className="text-sm font-semibold text-gray-900 hover:text-brand-600 transition"
-                        >
-                          {p.title}
-                        </Link>
-                      </div>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        {formatDateRange(p.startDate, p.endDate)}
-                        {p.createdAt
-                          ? ` · ${formatCreatedAt(p.createdAt)}`
-                          : ""}
-                      </p>
-                    </div>
-                    <Link
-                      href={`/mealplans/${p.id}`}
-                      className="text-sm font-medium text-brand-600 hover:text-brand-700 transition shrink-0"
-                    >
-                      View →
-                    </Link>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Upgrade Modal */}
+      {plansError && (
+        <p
+          role="alert"
+          className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+        >
+          Unable to load saved plans. Please refresh to try again.
+        </p>
+      )}
+      {showComposer && (
+        <PlanComposer
+          store={store}
+          days={days}
+          servings={servings}
+          busy={creatingAi}
+          onStoreChange={setStore}
+          onDaysChange={setDays}
+          onServingsChange={setServings}
+          onGenerate={generateMealPlanAi}
+          preferences={preferences}
+        />
+      )}
+      {!showComposer && (
+        <div className="rounded-xl border border-surface-200 bg-white px-5 py-3">
+          {preferences}
+        </div>
+      )}
+      {loadingPlans && !featured ? (
+        <div role="status" aria-label="Loading saved plans">
+          <SkeletonCard />
+        </div>
+      ) : featured ? (
+        <FeaturedPlan
+          key={featured.id}
+          plan={featured}
+          today={today}
+          basket={
+            basket?.planId === featured.id ? basket.value : { state: "loading" }
+          }
+        />
+      ) : (
+        !plansError && (
+          <p className="text-center text-sm text-gray-500">
+            No meal plans yet. Your first haul starts here.
+          </p>
+        )
+      )}
+      <PlanHistory plans={history} />
       <UpgradeModal
         open={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
       />
-
-      {/* AI Generation Progress Modal */}
       <GeneratingModal
         isOpen={creatingAi}
         status={aiStatus}
