@@ -362,19 +362,40 @@ export default function DashboardPage() {
     const controller = new AbortController();
     const planId = featuredId;
     api
-      .get<{ estimatedTotal?: number }>(
-        `/api/mealplans/${planId}/shopping-list`,
-        { signal: controller.signal },
-      )
+      .get<{
+        estimatedTotal?: number;
+        items?: { price?: number | null; lineTotal?: number | null }[];
+      }>(`/api/mealplans/${planId}/shopping-list`, {
+        signal: controller.signal,
+      })
       .then((res) => {
         if (controller.signal.aborted) return;
         const total = res.data?.estimatedTotal;
+        const items = res.data?.items;
+        // The API total omits unpriced lines and returns zero for empty plans.
+        // Only describe it as a full-plan estimate when every line is priced.
+        const fullyPriced =
+          Array.isArray(items) &&
+          items.length > 0 &&
+          items.every(
+            (item) =>
+              item != null &&
+              typeof item.price === "number" &&
+              Number.isFinite(item.price) &&
+              item.price >= 0 &&
+              typeof item.lineTotal === "number" &&
+              Number.isFinite(item.lineTotal) &&
+              item.lineTotal >= 0,
+          );
         setBasket({
           planId,
           value: {
             state: "ready",
             total:
-              typeof total === "number" && Number.isFinite(total) && total >= 0
+              fullyPriced &&
+              typeof total === "number" &&
+              Number.isFinite(total) &&
+              total >= 0
                 ? total
                 : null,
           },

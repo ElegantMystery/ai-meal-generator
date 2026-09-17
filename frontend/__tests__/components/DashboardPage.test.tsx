@@ -638,6 +638,23 @@ describe("Dashboard — refetch after successful generation", () => {
   });
 });
 
+function pricedBasket(total: number) {
+  return {
+    mealplanId: 51,
+    estimatedTotal: total,
+    items: [
+      {
+        id: 101,
+        name: "Pasta",
+        qty: 1,
+        price: total,
+        lineTotal: total,
+        quantityEstimated: false,
+      },
+    ],
+  };
+}
+
 describe("Grocery Concierge integration", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -651,6 +668,72 @@ describe("Grocery Concierge integration", () => {
     createdAt: "2026-09-01T12:00:00Z",
     planJson: JSON.stringify({ plan: [{ date: "2026-09-01", meals: [] }] }),
   };
+  it.each([
+    ["empty", { items: [], estimatedTotal: 0 }, null],
+    ["missing items", { estimatedTotal: 25 }, null],
+    ["missing response", null, null],
+    [
+      "entirely unpriced",
+      {
+        items: [
+          { id: 101, name: "Pasta", qty: 1, price: null, lineTotal: null },
+        ],
+        estimatedTotal: 0,
+      },
+      null,
+    ],
+    [
+      "partially priced",
+      {
+        items: [
+          ...pricedBasket(25).items,
+          {
+            id: 102,
+            name: "Unknown Item",
+            qty: 1,
+            price: null,
+            lineTotal: null,
+          },
+        ],
+        estimatedTotal: 25,
+      },
+      null,
+    ],
+    ["fully priced", pricedBasket(25), "$25.00"],
+    ["known zero prices", pricedBasket(0), "$0.00"],
+  ])(
+    "handles %s baskets without presenting missing prices as a full total",
+    async (_label, basket, amount) => {
+      mockApi.get.mockImplementation((url: string) =>
+        Promise.resolve({
+          data:
+            url === "/api/mealplans"
+              ? [savedPlan]
+              : url.endsWith("/shopping-list")
+                ? basket
+                : null,
+        }),
+      );
+      render(<DashboardPage />);
+      if (amount) {
+        expect(await screen.findByText(amount)).toBeInTheDocument();
+        expect(
+          screen.getByText("For the full plan · prices may vary"),
+        ).toBeInTheDocument();
+      } else {
+        expect(
+          await screen.findByText("Basket estimate unavailable"),
+        ).toBeInTheDocument();
+        expect(screen.queryByText("Estimated basket")).not.toBeInTheDocument();
+        expect(
+          screen.queryByText("For the full plan · prices may vary"),
+        ).not.toBeInTheDocument();
+      }
+      expect(
+        screen.getByRole("link", { name: "Shopping list" }),
+      ).toHaveAttribute("href", "/mealplans/51");
+    },
+  );
   it("reveals the composer inline for returning users and preserves their choices", async () => {
     mockApi.get.mockImplementation((url: string) =>
       Promise.resolve({
@@ -658,7 +741,7 @@ describe("Grocery Concierge integration", () => {
           url === "/api/mealplans"
             ? [savedPlan]
             : url.endsWith("/shopping-list")
-              ? { estimatedTotal: 25 }
+              ? pricedBasket(25)
               : null,
       }),
     );
@@ -720,7 +803,7 @@ it("ignores an old basket response after a newly generated plan becomes featured
         resolveOld = resolve;
       });
     if (url === "/api/mealplans/81/shopping-list")
-      return Promise.resolve({ data: { estimatedTotal: 50 } });
+      return Promise.resolve({ data: pricedBasket(50) });
     return Promise.resolve({ data: null });
   });
   mockStreamMealPlan.mockImplementationOnce(async ({ onEvent }) =>
@@ -731,7 +814,7 @@ it("ignores an old basket response after a newly generated plan becomes featured
   fireEvent.click(screen.getByRole("button", { name: "New plan" }));
   fireEvent.click(screen.getByRole("button", { name: "Generate with AI" }));
   await screen.findByText("$50.00");
-  await act(async () => resolveOld({ data: { estimatedTotal: 999 } }));
+  await act(async () => resolveOld({ data: pricedBasket(999) }));
   expect(screen.getByText("$50.00")).toBeInTheDocument();
   expect(screen.queryByText("$999.00")).not.toBeInTheDocument();
 });
