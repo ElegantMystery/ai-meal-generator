@@ -1,6 +1,5 @@
 package com.mealgen.backend.mealplan.controller;
 
-import com.mealgen.backend.mealplan.service.MealPlanGenerateService;
 import com.mealgen.backend.mealplan.service.MealPlanService;
 import com.mealgen.backend.mealplan.service.ShoppingListService;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,13 +18,11 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 
 class MealPlanControllerTest {
 
     private MealPlanService mealPlanService;
-    private MealPlanGenerateService generateService;
     private MealPlanController controller;
     private Authentication authentication;
     private MockMvc mockMvc;
@@ -33,9 +30,8 @@ class MealPlanControllerTest {
     @BeforeEach
     void setUp() {
         mealPlanService = mock(MealPlanService.class);
-        generateService = mock(MealPlanGenerateService.class);
         controller = new MealPlanController(
-                mealPlanService, generateService, mock(ShoppingListService.class));
+                mealPlanService, mock(ShoppingListService.class));
         authentication = mock(Authentication.class);
         when(authentication.isAuthenticated()).thenReturn(true);
         when(authentication.getPrincipal()).thenReturn("person@example.com");
@@ -43,10 +39,12 @@ class MealPlanControllerTest {
     }
 
     @Test
-    void generatePassesRequestedServingsToRuleBasedService() {
-        controller.generate(authentication, "TRADER_JOES", 3, 12);
+    void retiredGenerateRouteCannotCreatePlanOrConsumeQuota() throws Exception {
+        mockMvc.perform(post("/api/mealplans/generate")
+                        .principal(authentication))
+                .andExpect(status().isMethodNotAllowed());
 
-        verify(generateService).generate("person@example.com", "TRADER_JOES", 3, 12);
+        verifyNoInteractions(mealPlanService);
     }
 
     @Test
@@ -55,18 +53,6 @@ class MealPlanControllerTest {
 
         verify(mealPlanService).streamGenerateAi(
                 "person@example.com", "TRADER_JOES", 3, 7, "key", null);
-    }
-
-    @Test
-    void generateRejectsServingsBelowMinimumAsBadRequest() {
-        assertThatThrownBy(() -> controller.generate(authentication, "TRADER_JOES", 3, 0))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(error -> org.assertj.core.api.Assertions.assertThat(
-                                ((ResponseStatusException) error).getStatusCode().value())
-                        .isEqualTo(400))
-                .hasMessageContaining("servings must be an integer between 1 and 12");
-
-        verifyNoInteractions(generateService);
     }
 
     @Test
@@ -83,40 +69,22 @@ class MealPlanControllerTest {
     }
 
     @Test
-    void omittedServingsBindsToOneForBothGenerationEndpoints() throws Exception {
+    void omittedServingsBindsToOneForAiGeneration() throws Exception {
         when(mealPlanService.streamGenerateAi(
                 "person@example.com", "TRADER_JOES", 7, 1, "key", null))
                 .thenReturn(Flux.empty());
 
-        mockMvc.perform(post("/api/mealplans/generate")
-                        .principal(authentication))
-                .andExpect(status().isOk());
         mockMvc.perform(post("/api/mealplans/generate-ai")
                         .principal(authentication)
                         .header("Idempotency-Key", "key"))
                 .andExpect(status().isOk());
 
-        verify(generateService).generate("person@example.com", "TRADER_JOES", 7, 1);
         verify(mealPlanService).streamGenerateAi(
                 "person@example.com", "TRADER_JOES", 7, 1, "key", null);
     }
 
     @Test
-    void invalidAndNonIntegerServingsReturnBadRequestForBothEndpoints() throws Exception {
-        mockMvc.perform(post("/api/mealplans/generate")
-                        .principal(authentication)
-                        .param("servings", "0"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("INVALID_SERVINGS"))
-                .andExpect(jsonPath("$.message")
-                        .value("servings must be an integer between 1 and 12"));
-        mockMvc.perform(post("/api/mealplans/generate")
-                        .principal(authentication)
-                        .param("servings", "people"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("INVALID_SERVINGS"))
-                .andExpect(jsonPath("$.message")
-                        .value("servings must be an integer between 1 and 12"));
+    void invalidAndNonIntegerServingsReturnBadRequestForAiGeneration() throws Exception {
         mockMvc.perform(post("/api/mealplans/generate-ai")
                         .principal(authentication)
                         .header("Idempotency-Key", "key")
@@ -140,6 +108,6 @@ class MealPlanControllerTest {
                         "message":"servings must be an integer between 1 and 12"}
                         """));
 
-        verifyNoInteractions(generateService, mealPlanService);
+        verifyNoInteractions(mealPlanService);
     }
 }

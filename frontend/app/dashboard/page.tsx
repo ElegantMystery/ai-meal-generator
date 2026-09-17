@@ -151,7 +151,6 @@ export default function DashboardPage() {
   const [mealplans, setMealplans] = useState<MealPlan[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
 
-  const [creating, setCreating] = useState(false);
   const [creatingAi, setCreatingAi] = useState(false);
   const [aiStatus, setAiStatus] = useState<string>("");
   const [aiProgress, setAiProgress] = useState<number>(0);
@@ -328,27 +327,6 @@ export default function DashboardPage() {
       })
       .finally(() => setLoadingPlans(false));
   }, []);
-
-  const generateMealPlan = async () => {
-    setCreating(true);
-    setError(null);
-    try {
-      const res = await api.post<MealPlan>("/api/mealplans/generate", null, {
-        params: { store, days, servings },
-      });
-      setMealplans((prev) => [res.data, ...prev]);
-      await refetchSubscription();
-    } catch (err) {
-      console.error("Failed to generate meal plan:", err);
-      if (isQuotaExceeded(err)) {
-        setShowUpgradeModal(true);
-      } else {
-        setError("Failed to generate meal plan.");
-      }
-    } finally {
-      setCreating(false);
-    }
-  };
 
   const generateMealPlanAi = async () => {
     const controller = new AbortController();
@@ -563,7 +541,7 @@ export default function DashboardPage() {
                 label="Store"
                 value={store}
                 onChange={(e) => setStore(e.target.value as StoreOption)}
-                disabled={creating || creatingAi}
+                disabled={creatingAi}
               >
                 <option value="TRADER_JOES">Trader Joe&apos;s</option>
                 <option value="WHOLE_FOODS">Whole Foods</option>
@@ -574,7 +552,7 @@ export default function DashboardPage() {
                 label="Duration"
                 value={days}
                 onChange={(e) => setDays(Number(e.target.value))}
-                disabled={creating || creatingAi}
+                disabled={creatingAi}
               >
                 <option value={3}>3 days</option>
                 <option value={5}>5 days</option>
@@ -587,7 +565,7 @@ export default function DashboardPage() {
                 label="Servings"
                 value={servings}
                 onChange={(e) => setServings(Number(e.target.value))}
-                disabled={creating || creatingAi}
+                disabled={creatingAi}
               >
                 {Array.from({ length: 12 }, (_, index) => index + 1).map(
                   (value) => (
@@ -603,20 +581,11 @@ export default function DashboardPage() {
                   variant="primary"
                   className="w-full"
                   onClick={generateMealPlanAi}
-                  disabled={creatingAi || creating}
+                  disabled={creatingAi}
                   loading={creatingAi}
                 >
                   <SparklesIcon className="h-4 w-4" />
                   {creatingAi ? "Generating…" : "Generate with AI"}
-                </Button>
-                <Button
-                  variant="secondary"
-                  className="w-full"
-                  onClick={generateMealPlan}
-                  disabled={creating || creatingAi}
-                  loading={creating}
-                >
-                  {creating ? "Generating…" : "Generate (Rule-based)"}
                 </Button>
               </div>
             </div>

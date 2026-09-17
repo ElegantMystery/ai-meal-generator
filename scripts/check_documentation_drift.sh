@@ -24,7 +24,6 @@ endpoints=(
   "POST /api/mealplans"
   "GET /api/mealplans/{id}"
   "DELETE /api/mealplans/{id}"
-  "POST /api/mealplans/generate"
   "POST /api/mealplans/generate-ai"
   "GET /api/mealplans/generation-requests/{id}"
   "GET /api/mealplans/generation-requests"
@@ -50,7 +49,7 @@ done
 backend_route_count="$(rg '@(Get|Post|Put|Delete|Patch)Mapping' \
   backend/src/main/java/com/mealgen/backend/{auth,items,mealplan,preferences,subscription} \
   | wc -l | tr -d ' ')"
-[[ "$backend_route_count" == "23" ]] || fail "backend route count changed; reconcile $contract"
+[[ "$backend_route_count" == "22" ]] || fail "backend route count changed; reconcile $contract"
 
 rag_route_count="$(rg '@(router|app)\.(get|post|put|delete|patch)' rag/app | wc -l | tr -d ' ')"
 [[ "$rag_route_count" == "6" ]] || fail "RAG route count changed; reconcile $contract"

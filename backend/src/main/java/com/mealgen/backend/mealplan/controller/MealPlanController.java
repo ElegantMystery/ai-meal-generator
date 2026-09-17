@@ -4,7 +4,6 @@ import com.mealgen.backend.mealplan.dto.MealPlanCreateRequest;
 import com.mealgen.backend.mealplan.dto.MealPlanResponse;
 import com.mealgen.backend.mealplan.dto.GenerationRequestResponse;
 import com.mealgen.backend.mealplan.dto.ShoppingListResponse;
-import com.mealgen.backend.mealplan.service.MealPlanGenerateService;
 import com.mealgen.backend.mealplan.service.MealPlanService;
 import com.mealgen.backend.mealplan.service.ShoppingListService;
 import lombok.RequiredArgsConstructor;
@@ -37,7 +36,6 @@ public class MealPlanController {
                     + INVALID_SERVINGS_MESSAGE + "\"}";
 
     private final MealPlanService mealPlanService;
-    private final MealPlanGenerateService mealPlanGenerateService;
     private final ShoppingListService shoppingListService;
 
     @GetMapping
@@ -68,20 +66,6 @@ public class MealPlanController {
     ) {
         mealPlanService.deleteMine(email(authentication), id);
         return ResponseEntity.noContent().build();
-    }
-
-    @PostMapping("/generate")
-    public MealPlanResponse generate(
-            Authentication authentication,
-            @RequestParam(defaultValue = "TRADER_JOES") String store,
-            @RequestParam(defaultValue = "7") int days,
-            @RequestParam(defaultValue = "1") int servings
-    ) {
-        if (days < 1 || days > 14) {
-            throw new IllegalArgumentException("days must be between 1 and 14");
-        }
-        validateServings(servings);
-        return mealPlanGenerateService.generate(email(authentication), store, days, servings);
     }
 
     @PostMapping(value = "/generate-ai", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
