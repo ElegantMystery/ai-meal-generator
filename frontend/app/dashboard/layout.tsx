@@ -109,7 +109,7 @@ export default function DashboardLayout({
         onComplete={handleOnboardingComplete}
       />
       <Navbar
-        userName={user.name || user.email}
+        userName={user.name}
         onLogout={handleLogout}
         loggingOut={loggingOut}
         subscriptionTier={subscriptionStatus?.tier}
