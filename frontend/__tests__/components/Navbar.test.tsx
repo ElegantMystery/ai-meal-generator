@@ -1,37 +1,9 @@
-/**
- * TDD tests for Navbar subscription integration.
- * Written BEFORE navbar modifications (RED phase).
- *
- * Covers:
- * 1. FREE users see a "Pricing" nav link
- * 2. PRO users see a "Billing" nav link (calls createPortalSession)
- * 3. PRO users see a "PRO" badge
- * 4. Subscription status null → no badge crash
- */
-
 import { render, screen, fireEvent, act } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import Navbar from "@/components/Navbar";
 
-jest.mock("next/navigation", () => ({
-  usePathname: () => "/dashboard",
-}));
-
-jest.mock("next/link", () => ({
-  __esModule: true,
-  default: ({
-    href,
-    children,
-    ...rest
-  }: {
-    href: string;
-    children: React.ReactNode;
-    [key: string]: unknown;
-  }) => (
-    <a href={href} {...rest}>
-      {children}
-    </a>
-  ),
-}));
-
+let mockPathname = "/dashboard";
+jest.mock("next/navigation", () => ({ usePathname: () => mockPathname }));
 jest.mock("next/image", () => ({
   __esModule: true,
   default: (props: React.ImgHTMLAttributes<HTMLImageElement>) => (
@@ -39,166 +11,152 @@ jest.mock("next/image", () => ({
     <img {...props} />
   ),
 }));
-
-const mockCreatePortalSession = jest.fn();
-jest.mock("@/lib/api", () => ({
-  createPortalSession: (...args: unknown[]) => mockCreatePortalSession(...args),
-}));
-
-const mockNavigateTo = jest.fn();
-jest.mock("@/lib/navigate", () => ({
-  navigateTo: (...args: unknown[]) => mockNavigateTo(...args),
-}));
-
-import Navbar from "@/components/Navbar";
-
-const defaultProps = {
-  userName: "Test User",
+const props = {
+  userName: "Alex Morgan",
   onLogout: jest.fn(),
   loggingOut: false,
 };
-
-describe("Navbar — FREE tier user", () => {
-  beforeEach(() => jest.clearAllMocks());
-
-  it("shows 'Pricing' nav link for FREE users", () => {
-    render(
-      <Navbar
-        {...defaultProps}
-        subscriptionTier="FREE"
-        subscriptionStatus={null}
-      />
-    );
-    expect(screen.getByRole("link", { name: /pricing/i })).toBeInTheDocument();
-  });
-
-  it("'Pricing' link points to /pricing", () => {
-    render(
-      <Navbar
-        {...defaultProps}
-        subscriptionTier="FREE"
-        subscriptionStatus={null}
-      />
-    );
-    expect(screen.getByRole("link", { name: /pricing/i })).toHaveAttribute("href", "/pricing");
-  });
-
-  it("does not show a 'Billing' button for FREE users", () => {
-    render(
-      <Navbar
-        {...defaultProps}
-        subscriptionTier="FREE"
-        subscriptionStatus={null}
-      />
-    );
-    expect(screen.queryByRole("button", { name: /billing/i })).toBeNull();
-  });
-
-  it("does not show 'PRO' badge for FREE users", () => {
-    render(
-      <Navbar
-        {...defaultProps}
-        subscriptionTier="FREE"
-        subscriptionStatus={null}
-      />
-    );
-    // PRO badge should not be present
-    expect(screen.queryByText("PRO")).toBeNull();
-  });
+const trigger = () => screen.getByRole("button", { name: "Account menu" });
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockPathname = "/dashboard";
 });
 
-describe("Navbar — PRO tier user", () => {
-  beforeEach(() => jest.clearAllMocks());
-
-  it("shows a 'PRO' badge for PRO users", () => {
-    render(
-      <Navbar
-        {...defaultProps}
-        subscriptionTier="PRO"
-        subscriptionStatus={null}
-      />
-    );
-    expect(screen.getByText("PRO")).toBeInTheDocument();
-  });
-
-  it("shows a 'Billing' button for PRO users", () => {
-    render(
-      <Navbar
-        {...defaultProps}
-        subscriptionTier="PRO"
-        subscriptionStatus={null}
-      />
-    );
-    expect(screen.getByRole("button", { name: /billing/i })).toBeInTheDocument();
-  });
-
-  it("does not show 'Pricing' nav link for PRO users", () => {
-    render(
-      <Navbar
-        {...defaultProps}
-        subscriptionTier="PRO"
-        subscriptionStatus={null}
-      />
-    );
-    expect(screen.queryByRole("link", { name: /pricing/i })).toBeNull();
-  });
-
-  it("clicking 'Billing' calls createPortalSession", async () => {
-    mockCreatePortalSession.mockResolvedValueOnce({ url: "https://billing.stripe.com/p" });
-    render(
-      <Navbar
-        {...defaultProps}
-        subscriptionTier="PRO"
-        subscriptionStatus={null}
-      />
-    );
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /billing/i }));
-    });
-
-    expect(mockCreatePortalSession).toHaveBeenCalledTimes(1);
-  });
-
-  it("clicking 'Billing' redirects to portal url", async () => {
-    mockCreatePortalSession.mockResolvedValueOnce({ url: "https://billing.stripe.com/portal/abc" });
-    render(
-      <Navbar
-        {...defaultProps}
-        subscriptionTier="PRO"
-        subscriptionStatus={null}
-      />
-    );
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /billing/i }));
-    });
-
-    expect(mockNavigateTo).toHaveBeenCalledWith("https://billing.stripe.com/portal/abc");
-  });
+it("keeps only a Home-linked recognizable brand and account trigger when closed", () => {
+  render(<Navbar {...props} />);
+  expect(screen.getByRole("link", { name: "Whole Haul home" })).toHaveAttribute(
+    "href",
+    "/dashboard",
+  );
+  expect(trigger()).toHaveAttribute("aria-expanded", "false");
+  expect(screen.getByText("Alex")).toBeInTheDocument();
+  expect(screen.queryByText("Alex Morgan")).not.toBeInTheDocument();
+  expect(screen.getAllByRole("link")).toHaveLength(1);
+  expect(screen.getAllByRole("button")).toHaveLength(1);
+  expect(
+    screen.queryByRole("button", { name: "Toggle menu" }),
+  ).not.toBeInTheDocument();
 });
-
-describe("Navbar — no subscription info (null tier)", () => {
-  it("renders without crashing when subscriptionTier is undefined", () => {
+it.each(["FREE", "PRO", undefined] as const)(
+  "offers the same destinations for %s without a direct portal action",
+  (tier) => {
     render(
-      <Navbar
-        {...defaultProps}
-        subscriptionTier={undefined}
-        subscriptionStatus={null}
-      />
+      <Navbar {...props} subscriptionTier={tier} subscriptionStatus={null} />,
     );
-    expect(screen.getByText(/test user/i)).toBeInTheDocument();
-  });
-
-  it("shows Pricing link when tier is undefined (defaults to free behavior)", () => {
-    render(
-      <Navbar
-        {...defaultProps}
-        subscriptionTier={undefined}
-        subscriptionStatus={null}
-      />
+    fireEvent.click(trigger());
+    expect(trigger()).toHaveAttribute("aria-expanded", "true");
+    const panel = document.getElementById(
+      trigger().getAttribute("aria-controls")!,
     );
-    // Should show Pricing for non-PRO users
-    expect(screen.getByRole("link", { name: /pricing/i })).toBeInTheDocument();
-  });
+    expect(panel).toBeVisible();
+    expect(screen.getByRole("link", { name: "Preferences" })).toHaveAttribute(
+      "href",
+      "/settings",
+    );
+    expect(
+      screen.getByRole("link", { name: "Plan & billing" }),
+    ).toHaveAttribute("href", "/pricing");
+    expect(panel?.querySelectorAll("a,button")).toHaveLength(3);
+    expect(
+      Array.from(panel!.querySelectorAll("a,button")).map(
+        (el) => el.textContent,
+      ),
+    ).toEqual(["Preferences", "Plan & billing", "Sign out"]);
+    expect(screen.queryByText("FREE")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /billing/i }),
+    ).not.toBeInTheDocument();
+  },
+);
+it("opens by keyboard, tabs through entries, and closes with Escape returning focus", async () => {
+  const user = userEvent.setup();
+  render(<Navbar {...props} />);
+  trigger().focus();
+  await user.keyboard("{Enter}");
+  await user.tab();
+  expect(screen.getByRole("link", { name: "Preferences" })).toHaveFocus();
+  await user.tab();
+  expect(screen.getByRole("link", { name: "Plan & billing" })).toHaveFocus();
+  await user.tab();
+  expect(screen.getByRole("button", { name: "Sign out" })).toHaveFocus();
+  await user.keyboard("{Escape}");
+  expect(trigger()).toHaveFocus();
+  expect(trigger()).toHaveAttribute("aria-expanded", "false");
+  expect(
+    screen.queryByRole("link", { name: "Preferences" }),
+  ).not.toBeInTheDocument();
+  await user.keyboard(" ");
+  expect(trigger()).toHaveAttribute("aria-expanded", "true");
+});
+it("closes on outside pointer interaction and when Tab moves outside without trapping focus", async () => {
+  const user = userEvent.setup();
+  render(
+    <>
+      <Navbar {...props} />
+      <button>Page action</button>
+    </>,
+  );
+  await user.click(trigger());
+  await user.click(screen.getByRole("button", { name: "Page action" }));
+  expect(trigger()).toHaveAttribute("aria-expanded", "false");
+  await user.click(trigger());
+  await user.tab();
+  await user.tab();
+  await user.tab();
+  await user.tab();
+  expect(screen.getByRole("button", { name: "Page action" })).toHaveFocus();
+  expect(trigger()).toHaveAttribute("aria-expanded", "false");
+});
+it("closes after destination selection and route changes", () => {
+  const { rerender } = render(<Navbar {...props} />);
+  fireEvent.click(trigger());
+  fireEvent.click(screen.getByRole("link", { name: "Preferences" }));
+  expect(trigger()).toHaveAttribute("aria-expanded", "false");
+  fireEvent.click(trigger());
+  mockPathname = "/settings";
+  rerender(<Navbar {...props} />);
+  expect(
+    screen.queryByRole("link", { name: "Preferences" }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(trigger());
+  expect(screen.getByRole("link", { name: "Preferences" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+});
+it.each([undefined, "   ", "private@example.test"])(
+  "uses a neutral fallback for a missing or email-like name: %s",
+  (userName) => {
+    render(<Navbar {...props} userName={userName} />);
+    expect(screen.getByText("Account")).toBeInTheDocument();
+    expect(screen.queryByText(/private@/)).not.toBeInTheDocument();
+  },
+);
+it("bounds a long first name and renders initials without a profile image", () => {
+  render(<Navbar {...props} userName={"Alexandria".repeat(20) + " Morgan"} />);
+  expect(screen.getByText("AM")).toBeInTheDocument();
+  expect(screen.getByText("Alexandria".repeat(20))).toHaveClass("truncate");
+});
+it("disables sign out while the parent logout is pending", () => {
+  render(<Navbar {...props} loggingOut />);
+  fireEvent.click(trigger());
+  const logout = screen.getByRole("button", { name: "Signing out…" });
+  expect(logout).toBeDisabled();
+  fireEvent.click(logout);
+  expect(props.onLogout).not.toHaveBeenCalled();
+});
+it("prevents duplicate submissions while the logout callback is pending", async () => {
+  let resolve!: () => void;
+  const onLogout = jest.fn(
+    () =>
+      new Promise<void>((r) => {
+        resolve = r;
+      }),
+  );
+  render(<Navbar {...props} onLogout={onLogout} />);
+  fireEvent.click(trigger());
+  fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+  fireEvent.click(screen.getByRole("button", { name: "Signing out…" }));
+  expect(onLogout).toHaveBeenCalledTimes(1);
+  await act(async () => resolve());
 });
