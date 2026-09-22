@@ -127,7 +127,7 @@ export default function Navbar({
           <button
             ref={triggerRef}
             type="button"
-            aria-label="Account menu"
+            aria-label={parts.length ? `${firstName} account menu` : "Account menu"}
             aria-expanded={menuOpen}
             aria-controls={menuId}
             onClick={() => setMenuOpen((open) => !open)}

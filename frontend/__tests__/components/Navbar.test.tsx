@@ -16,7 +16,7 @@ const props = {
   onLogout: jest.fn(),
   loggingOut: false,
 };
-const trigger = () => screen.getByRole("button", { name: "Account menu" });
+const trigger = () => screen.getByRole("button", { name: /account menu/i });
 beforeEach(() => {
   jest.clearAllMocks();
   mockPathname = "/dashboard";
@@ -30,6 +30,7 @@ it("keeps only a Home-linked recognizable brand and account trigger when closed"
   );
   expect(trigger()).toHaveAttribute("aria-expanded", "false");
   expect(screen.getByText("Alex")).toBeInTheDocument();
+  expect(trigger()).toHaveAccessibleName("Alex account menu");
   expect(screen.queryByText("Alex Morgan")).not.toBeInTheDocument();
   expect(screen.getAllByRole("link")).toHaveLength(1);
   expect(screen.getAllByRole("button")).toHaveLength(1);
@@ -129,6 +130,7 @@ it.each([undefined, "   ", "private@example.test"])(
   (userName) => {
     render(<Navbar {...props} userName={userName} />);
     expect(screen.getByText("Account")).toBeInTheDocument();
+    expect(trigger()).toHaveAccessibleName("Account menu");
     expect(screen.queryByText(/private@/)).not.toBeInTheDocument();
   },
 );
