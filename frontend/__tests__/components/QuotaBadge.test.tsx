@@ -1,13 +1,6 @@
-/**
- * TDD tests for QuotaBadge component.
- * Written BEFORE the component implementation (RED phase).
- *
- * Note on window.location: jsdom makes window.location properties non-writable.
- * We test redirect behavior by mocking the navigate utility from @/lib/navigate
- * which wraps window.location.assign and is injected/imported by the component.
- */
+/** TDD tests for the FREE quota indicator and hidden PRO state. */
 
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 
 // Mock next/link
 jest.mock("next/link", () => ({
@@ -25,24 +18,6 @@ jest.mock("next/link", () => ({
       {children}
     </a>
   ),
-}));
-
-// Mock API for portal session redirect
-const mockCreatePortalSession = jest.fn();
-jest.mock("@/lib/api", () => ({
-  createPortalSession: (...args: unknown[]) => mockCreatePortalSession(...args),
-}));
-
-// Mock the navigate helper so we don't touch window.location in tests
-const mockNavigateTo = jest.fn();
-jest.mock("@/lib/navigate", () => ({
-  navigateTo: (...args: unknown[]) => mockNavigateTo(...args),
-}));
-
-// Mock Toast so component can call useToast without a Provider
-const mockToast = jest.fn();
-jest.mock("@/components/ui/Toast", () => ({
-  useToast: () => ({ toast: mockToast }),
 }));
 
 import QuotaBadge from "@/components/QuotaBadge";
@@ -104,60 +79,8 @@ describe("QuotaBadge — FREE tier", () => {
 describe("QuotaBadge — PRO tier", () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it("renders 'PRO · Unlimited' with success variant", () => {
-    render(<QuotaBadge tier="PRO" remainingQuota={-1} />);
-    expect(screen.getByText(/PRO/i)).toBeInTheDocument();
-    expect(screen.getByText(/unlimited/i)).toBeInTheDocument();
-  });
-
-  it("applies success variant classes for PRO", () => {
+  it("renders nothing", () => {
     const { container } = render(<QuotaBadge tier="PRO" remainingQuota={-1} />);
-    const outerBadge = container.querySelector("span");
-    expect(outerBadge?.className).toMatch(/bg-brand-100|text-brand-700/);
-  });
-
-  it("shows a Manage button for PRO that calls createPortalSession", async () => {
-    mockCreatePortalSession.mockResolvedValueOnce({
-      url: "https://billing.stripe.com/p",
-    });
-    render(<QuotaBadge tier="PRO" remainingQuota={-1} />);
-    const manageBtn = screen.getByRole("button", { name: /manage/i });
-    expect(manageBtn).toBeInTheDocument();
-    fireEvent.click(manageBtn);
-    expect(mockCreatePortalSession).toHaveBeenCalledTimes(1);
-  });
-
-  it("redirects to portal url via navigateTo after clicking Manage", async () => {
-    mockCreatePortalSession.mockResolvedValueOnce({
-      url: "https://billing.stripe.com/portal/abc",
-    });
-    render(<QuotaBadge tier="PRO" remainingQuota={-1} />);
-    const manageBtn = screen.getByRole("button", { name: /manage/i });
-
-    await act(async () => {
-      fireEvent.click(manageBtn);
-    });
-
-    expect(mockNavigateTo).toHaveBeenCalledWith(
-      "https://billing.stripe.com/portal/abc",
-    );
-  });
-
-  it("does not crash if createPortalSession fails", async () => {
-    const consoleSpy = jest
-      .spyOn(console, "error")
-      .mockImplementation(() => {});
-    mockCreatePortalSession.mockRejectedValueOnce(
-      new Error("portal unavailable"),
-    );
-    render(<QuotaBadge tier="PRO" remainingQuota={-1} />);
-    const manageBtn = screen.getByRole("button", { name: /manage/i });
-
-    await act(async () => {
-      fireEvent.click(manageBtn);
-    });
-
-    expect(mockNavigateTo).not.toHaveBeenCalled();
-    consoleSpy.mockRestore();
+    expect(container).toBeEmptyDOMElement();
   });
 });
