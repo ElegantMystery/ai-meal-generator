@@ -3,7 +3,7 @@
  * Written BEFORE dashboard modifications (RED phase).
  *
  * Focuses on:
- * 1. QuotaBadge is rendered with tier/remainingQuota from useSubscription
+ * 1. FREE quota feedback is shown while the redundant PRO badge stays hidden
  * 2. 429 QUOTA_EXCEEDED → showUpgradeModal
  * 3. UpgradeModal is rendered in the page
  * 4. ?upgrade=success query param → success toast + refetch
@@ -468,7 +468,7 @@ describe("Dashboard — QuotaBadge integration", () => {
     });
   });
 
-  it("renders QuotaBadge with PRO status", async () => {
+  it("does not render the redundant PRO subscription badge", async () => {
     mockUseSubscription.mockReturnValue({
       status: {
         tier: "PRO",
@@ -481,8 +481,15 @@ describe("Dashboard — QuotaBadge integration", () => {
     });
     render(<DashboardPage />);
     await waitFor(() => {
-      expect(screen.getByText(/PRO/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", {
+          name: "A little planning. Better meals.",
+        }),
+      ).toBeInTheDocument();
     });
+    expect(screen.queryByText("PRO")).not.toBeInTheDocument();
+    expect(screen.queryByText("Unlimited")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Manage" })).not.toBeInTheDocument();
   });
 
   it("does not crash when subscription status is null", async () => {

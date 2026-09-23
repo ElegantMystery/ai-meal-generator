@@ -553,26 +553,28 @@ export default function DashboardPage() {
             A little planning. Better meals.
           </h1>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {subscriptionStatus && (
-            <QuotaBadge
-              tier={subscriptionStatus.tier}
-              remainingQuota={subscriptionStatus.remainingQuota}
-            />
-          )}
-          {featured && (
-            <Button
-              variant="secondary"
-              className="min-h-11"
-              aria-expanded={showComposer}
-              aria-controls="new-plan-composer"
-              onClick={() => setComposerOpen(!composerOpen)}
-            >
-              <PlusIcon aria-hidden="true" className="h-4 w-4" />
-              {showComposer ? "Hide composer" : "New plan"}
-            </Button>
-          )}
-        </div>
+        {(subscriptionStatus?.tier === "FREE" || featured) && (
+          <div className="flex flex-wrap items-center gap-3">
+            {subscriptionStatus?.tier === "FREE" && (
+              <QuotaBadge
+                tier={subscriptionStatus.tier}
+                remainingQuota={subscriptionStatus.remainingQuota}
+              />
+            )}
+            {featured && (
+              <Button
+                variant="secondary"
+                className="min-h-11"
+                aria-expanded={showComposer}
+                aria-controls="new-plan-composer"
+                onClick={() => setComposerOpen(!composerOpen)}
+              >
+                <PlusIcon aria-hidden="true" className="h-4 w-4" />
+                {showComposer ? "Hide composer" : "New plan"}
+              </Button>
+            )}
+          </div>
+        )}
       </header>
       {error && (
         <div
