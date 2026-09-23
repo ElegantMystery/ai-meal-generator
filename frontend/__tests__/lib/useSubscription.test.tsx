@@ -13,16 +13,17 @@ jest.mock("@/lib/api", () => ({
 }));
 
 import { useSubscription } from "@/hooks/useSubscription";
+import type { SubscriptionStatus } from "@/lib/api";
 
-const freeStatus = {
-  tier: "FREE" as const,
+const freeStatus: SubscriptionStatus = {
+  tier: "FREE",
   remainingQuota: 3,
   cancelAtPeriodEnd: false,
   currentPeriodEnd: null,
 };
 
-const proStatus = {
-  tier: "PRO" as const,
+const proStatus: SubscriptionStatus = {
+  tier: "PRO",
   remainingQuota: -1,
   cancelAtPeriodEnd: false,
   currentPeriodEnd: "2026-04-08T00:00:00Z",
@@ -112,8 +113,8 @@ describe("useSubscription", () => {
   });
 
   it("sets loading=true during refetch", async () => {
-    let resolveSecond: (v: typeof freeStatus) => void;
-    const secondPromise = new Promise<typeof freeStatus>((res) => {
+    let resolveSecond: (v: SubscriptionStatus) => void;
+    const secondPromise = new Promise<SubscriptionStatus>((res) => {
       resolveSecond = res;
     });
 

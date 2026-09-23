@@ -100,7 +100,7 @@ import * as sseModule from "@/lib/sse";
 import DashboardPage from "@/app/dashboard/page";
 
 // Type helpers
-const mockApi = apiModule.api as { get: jest.Mock; post: jest.Mock };
+const mockApi = apiModule.api as unknown as { get: jest.Mock; post: jest.Mock };
 const mockUseSubscription = subscriptionHook.useSubscription as jest.Mock;
 const mockUseToast = toastModule.useToast as jest.Mock;
 const mockStreamMealPlan = sseModule.streamMealPlan as jest.Mock;
