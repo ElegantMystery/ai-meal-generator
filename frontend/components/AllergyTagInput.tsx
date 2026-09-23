@@ -3,6 +3,7 @@
 import { useState, KeyboardEvent, ChangeEvent, useRef, useEffect } from "react";
 
 interface AllergyTagInputProps {
+  id?: string;
   value: string[];
   onChange: (tags: string[]) => void;
   placeholder?: string;
@@ -44,6 +45,7 @@ const COMMON_ALLERGIES = [
 ];
 
 export default function AllergyTagInput({
+  id,
   value,
   onChange,
   placeholder = "Type an allergy and press Enter",
@@ -59,7 +61,7 @@ export default function AllergyTagInput({
   const suggestions = COMMON_ALLERGIES.filter(
     (allergy) =>
       allergy.toLowerCase().includes(inputValue.toLowerCase().trim()) &&
-      !value.includes(allergy.toLowerCase())
+      !value.includes(allergy.toLowerCase()),
   ).slice(0, 8); // Limit to 8 suggestions
 
   useEffect(() => {
@@ -112,7 +114,7 @@ export default function AllergyTagInput({
       e.preventDefault();
       setShowSuggestions(true);
       setSelectedIndex((prev) =>
-        prev < suggestions.length - 1 ? prev + 1 : prev
+        prev < suggestions.length - 1 ? prev + 1 : prev,
       );
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
@@ -138,20 +140,21 @@ export default function AllergyTagInput({
   return (
     <div className={`mt-1 relative ${className}`} ref={containerRef}>
       {/* Input container with tags inside */}
-      <div className="w-full min-h-[42px] rounded-md border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 flex flex-wrap items-center gap-1.5 px-2 py-1.5">
+      <div className="w-full min-h-11 rounded-md border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-brand-500 focus-within:border-brand-500 flex flex-wrap items-center gap-1.5 px-2 py-1.5">
         {/* Tags displayed inside */}
         {value.map((tag) => (
           <span
             key={tag}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200"
+            className="inline-flex max-w-full items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-brand-100 text-brand-800 border border-brand-200"
           >
-            {tag}
+            <span className="min-w-0 break-words [overflow-wrap:anywhere]">
+              {tag}
+            </span>
             <button
               type="button"
               onClick={() => removeTag(tag)}
-              className="ml-0.5 text-blue-600 hover:text-blue-800 focus:outline-none rounded-sm hover:bg-blue-200 px-0.5"
+              className="min-h-11 min-w-11 shrink-0 ml-0.5 text-brand-600 hover:text-brand-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 rounded-sm hover:bg-brand-200 px-0.5"
               aria-label={`Remove ${tag}`}
-              tabIndex={-1}
             >
               ×
             </button>
@@ -161,13 +164,14 @@ export default function AllergyTagInput({
         {/* Input field */}
         <input
           ref={inputRef}
+          id={id}
           type="text"
           value={inputValue}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           onFocus={handleInputFocus}
           placeholder={value.length === 0 ? placeholder : ""}
-          className="flex-1 min-w-[120px] border-0 outline-0 text-sm bg-transparent focus:ring-0 p-0"
+          className="flex-1 min-w-[120px] w-full min-h-11 border-0 outline-0 text-sm bg-transparent focus:ring-0 p-0"
         />
       </div>
 
@@ -179,8 +183,8 @@ export default function AllergyTagInput({
               key={suggestion}
               type="button"
               onClick={() => addTag(suggestion)}
-              className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 focus:bg-blue-50 focus:outline-none ${
-                index === selectedIndex ? "bg-blue-50" : ""
+              className={`w-full min-h-11 text-left px-3 py-2 text-sm hover:bg-brand-50 focus:bg-brand-50 focus:outline-none ${
+                index === selectedIndex ? "bg-brand-50" : ""
               }`}
             >
               {suggestion}
